@@ -1,8 +1,6 @@
 FROM openjdk:21-jdk
 
-RUN dnf install -y unzip
-
-
+RUN yum install -y dnf
 
 
 
