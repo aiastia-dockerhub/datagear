@@ -4,7 +4,9 @@ services:
   datagear:
     image: aiastia/datagear:docker
     container_name: datagear
+    command: bash -c "cd /opt/datagear-4.5.1 && ls && ./startup.sh && tail -f /dev/null"
     ports:
       - '50401:50401'
     volumes:
       - ./datagear:/root/.datagear
+~                                         
