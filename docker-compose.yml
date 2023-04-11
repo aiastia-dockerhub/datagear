@@ -9,4 +9,3 @@ services:
       - '50401:50401'
     volumes:
       - ./datagear:/root/.datagear
-~                                         
