@@ -2,7 +2,7 @@ version: "3"
 
 services:
   datagear:
-    image: aiastia/datagear
+    image: aiastia/datagear:docker
     container_name: datagear
     ports:
       - '50401:50401'
