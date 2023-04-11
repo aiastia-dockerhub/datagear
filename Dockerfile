@@ -1,6 +1,6 @@
 FROM openjdk:21-jdk
 
-RUN yum install -y unzip
+RUN uname
 
 
 WORKDIR /opt
