@@ -1,6 +1,7 @@
 FROM openjdk:21-jdk
 
-RUN cat /etc/redhat-release
+RUN dnf install -y unzip
+
 
 
 
