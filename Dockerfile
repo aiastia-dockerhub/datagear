@@ -1,7 +1,7 @@
 FROM openjdk:21-jdk
 
-RUN apt-get update && \
-    apt-get install -y unzip && \
+RUN apt update && \
+    apt install -y unzip && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
