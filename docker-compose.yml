@@ -2,9 +2,7 @@ version: "3"
 
 services:
   datagear:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: aiastia/datagear
     container_name: datagear
     ports:
       - '50401:50401'
