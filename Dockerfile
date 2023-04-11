@@ -8,7 +8,7 @@ ENV PACKAGE=datagear-${VERSION}
 ENV ZIP_FILE=${PACKAGE}.zip
 
 #RUN curl -O http://www.datagear.tech/download/version/${VERSION}/${ZIP_FILE}
-RUN curl -O https://gitee.com/datagear/datagear/releases/download/v${VERSION}/${ZIP_FILE}
+RUN curl -O https://gitee.com/datagear/datagear/releases/download/v4.5.1/${ZIP_FILE}
 
 RUN unzip ${ZIP_FILE}
 
