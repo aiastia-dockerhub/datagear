@@ -1,6 +1,7 @@
 FROM openjdk:21-jdk
 
-RUN lsb_release -a
+RUN cat /etc/redhat-release
+
 
 
 
