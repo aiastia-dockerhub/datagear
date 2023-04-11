@@ -12,4 +12,6 @@ RUN unzip ${ZIP_FILE}
 RUN chmod +x /opt/${PACKAGE}/startup.sh
 RUN chmod +x /opt/${PACKAGE}/shutdown.sh
 
-#RUN echo "export PATH=$PATH:/opt/${PACKAGE}" >> ~/.bashrc
+ENV PATH="$PATH:/opt/${PACKAGE}"
+
+CMD ["/opt/datagear-4.5.1/startup.sh"]
