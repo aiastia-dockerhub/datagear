@@ -1,5 +1,9 @@
 FROM openjdk:21-jdk
 
+RUN apt-get update && \
+    apt-get install -y unzip && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt
 ENV VERSION=4.5.1
 ENV PACKAGE=datagear-${VERSION}
