@@ -10,7 +10,7 @@ ENV ZIP_FILE=${PACKAGE}.zip
 #RUN curl -O http://www.datagear.tech/download/version/${VERSION}/${ZIP_FILE}
 RUN curl -O https://gitee.com/datagear/datagear/releases/download/v${VERSION}/${ZIP_FILE}
 
-RUN jar -xvf ${ZIP_FILE}
+RUN unzip ${ZIP_FILE}
 
 RUN chmod +x /opt/${PACKAGE}/startup.sh
 RUN chmod +x /opt/${PACKAGE}/shutdown.sh
