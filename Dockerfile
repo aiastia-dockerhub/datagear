@@ -1,6 +1,7 @@
 FROM openjdk:21-jdk
 
-RUN uname
+RUN lsb_release -a
+
 
 
 WORKDIR /opt
