@@ -1,0 +1,12 @@
+version: "3"
+
+services:
+  datagear:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: datagear
+    ports:
+      - '50401:50401'
+    volumes:
+      - ./datagear:/root/.datagear
