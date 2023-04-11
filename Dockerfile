@@ -1,4 +1,4 @@
-FROM openjdk:8u275-jdk
+FROM openjdk:21-jdk
 
 WORKDIR /opt
 ENV VERSION=4.5.1
