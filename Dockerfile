@@ -1,8 +1,7 @@
 FROM openjdk:21-jdk
 
-RUN apt update && \
-    apt install -y unzip && \
-    rm -rf /var/lib/apt/lists/*
+RUN yum install -y unzip
+
 
 WORKDIR /opt
 ENV VERSION=4.5.1
