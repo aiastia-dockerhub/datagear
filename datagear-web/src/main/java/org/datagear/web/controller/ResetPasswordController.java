@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,9 +28,11 @@ import org.datagear.management.domain.User;
 import org.datagear.management.service.UserService;
 import org.datagear.util.FileUtil;
 import org.datagear.util.IDUtil;
+import org.datagear.web.config.ApplicationProperties;
+import org.datagear.web.util.DetectNewVersionScriptResolver;
 import org.datagear.web.util.OperationMessage;
-import org.datagear.web.util.WebUtils;
 import org.datagear.web.util.accesslatch.UsernameLoginLatch;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -54,9 +56,12 @@ public class ResetPasswordController extends AbstractController
 	public static final String MESSAGE_KEY_BASENAME = "resetPassword";
 	
 	public static final String STEP_FILL_USER_INFO = "fillUserInfo";
-	public static final String STEP_CHECK_USER = "checkUser";
+	public static final String STEP_CHECK_USER_INFO = "checkUserInfo";
 	public static final String STEP_SET_NEW_PASSWORD = "setNewPassword";
 	public static final String STEP_FINISH = "finish";
+
+	@Autowired
+	private ApplicationProperties applicationProperties;
 
 	@Autowired
 	private UserService userService;
@@ -67,9 +72,22 @@ public class ResetPasswordController extends AbstractController
 	@Autowired
 	private UsernameLoginLatch usernameLoginLatch;
 
+	@Autowired
+	private DetectNewVersionScriptResolver detectNewVersionScriptResolver;
+
 	public ResetPasswordController()
 	{
 		super();
+	}
+
+	public ApplicationProperties getApplicationProperties()
+	{
+		return applicationProperties;
+	}
+
+	public void setApplicationProperties(ApplicationProperties applicationProperties)
+	{
+		this.applicationProperties = applicationProperties;
 	}
 
 	public UserService getUserService()
@@ -102,28 +120,35 @@ public class ResetPasswordController extends AbstractController
 		this.usernameLoginLatch = usernameLoginLatch;
 	}
 
+	public DetectNewVersionScriptResolver getDetectNewVersionScriptResolver()
+	{
+		return detectNewVersionScriptResolver;
+	}
+
+	public void setDetectNewVersionScriptResolver(DetectNewVersionScriptResolver detectNewVersionScriptResolver)
+	{
+		this.detectNewVersionScriptResolver = detectNewVersionScriptResolver;
+	}
+
 	@RequestMapping
 	public String resetPassword(HttpServletRequest request, HttpServletResponse response, Model model)
 	{
-		HttpSession session = request.getSession();
-
-		ResetPasswordStep resetPasswordStep = (ResetPasswordStep) session.getAttribute(KEY_STEP);
+		ResetPasswordStep resetPasswordStep = getSessionResetPasswordStep(request);
 
 		if (resetPasswordStep == null || request.getParameter("step") == null)
 		{
-			resetPasswordStep = new ResetPasswordStep(4);
-			resetPasswordStep.setStep(1, STEP_FILL_USER_INFO);
-
-			session.setAttribute(KEY_STEP, resetPasswordStep);
+			resetPasswordStep = createInitResetPasswordStep(request, response);
+			setSessionResetPasswordStep(request, resetPasswordStep);
 		}
 
-		model.addAttribute("step", resetPasswordStep);
-		WebUtils.setEnableDetectNewVersionRequest(request);
+		model.addAttribute("step", toResetPasswordStepView(request, response, resetPasswordStep));
+		this.detectNewVersionScriptResolver.enableIf(request);
+		setUserPasswordStrengthInfo(model);
 
 		return "/reset_password";
 	}
 
-	@RequestMapping(value = "/fillUserInfo", produces = CONTENT_TYPE_JSON)
+	@RequestMapping(value = "/" + STEP_FILL_USER_INFO, produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> fillUserInfo(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestBody FillUserInfoForm form)
@@ -133,7 +158,7 @@ public class ResetPasswordController extends AbstractController
 		if (isEmpty(username))
 			throw new IllegalInputException();
 
-		ResetPasswordStep resetPasswordStep = getResetPasswordStep(request);
+		ResetPasswordStep resetPasswordStep = getSessionResetPasswordStep(request);
 
 		if (isEmpty(resetPasswordStep))
 			return optStepNotInSessionResponseEntity(request);
@@ -145,36 +170,67 @@ public class ResetPasswordController extends AbstractController
 
 		resetPasswordStep.setUsername(username);
 		resetPasswordStep.setCheckFileName(IDUtil.uuid());
-		resetPasswordStep.setCheckFileTip(getMessage(request, "resetPassword.pleaseCreateCheckFile",
-				this.resetPasswordCheckFileDirectory.getAbsolutePath(), resetPasswordStep.getCheckFileName()));
-		resetPasswordStep.setStep(2, STEP_CHECK_USER);
+		resetPasswordStep.setCheckFileTip(
+				getMessage(request, "resetPassword.pleaseCreateCheckFile", resetPasswordStep.getCheckFileName()));
+		resetPasswordStep.setStep(2, STEP_CHECK_USER_INFO);
+
+		setSessionResetPasswordStep(request, resetPasswordStep);
 
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping(value = "/checkUser", produces = CONTENT_TYPE_JSON)
+	@RequestMapping(value = "/" + STEP_CHECK_USER_INFO, produces = CONTENT_TYPE_JSON)
 	@ResponseBody
-	public ResponseEntity<OperationMessage> checkUser(HttpServletRequest request, HttpServletResponse response, Model model)
+	public ResponseEntity<OperationMessage> checkUserInfo(HttpServletRequest request, HttpServletResponse response,
+			Model model)
 	{
-		ResetPasswordStep resetPasswordStep = getResetPasswordStep(request);
+		ResetPasswordStep resetPasswordStep = getSessionResetPasswordStep(request);
 
 		if (isEmpty(resetPasswordStep) || isEmpty(resetPasswordStep.getUsername())
 				|| isEmpty(resetPasswordStep.getCheckFileName()))
 			return optStepNotInSessionResponseEntity(request);
 
-		File checkFile = FileUtil.getFile(this.resetPasswordCheckFileDirectory, resetPasswordStep.getCheckFileName(),
-				false);
-
-		if (!checkFile.exists())
-			return optFailDataResponseEntity(request, "resetPassword.checkFileNotExists");
+		if (!hasCheckFile(resetPasswordStep.getCheckFileName()))
+			return optFailResponseEntity(request, "resetPassword.checkFileNotExists");
 
 		resetPasswordStep.setCheckOk(true);
 		resetPasswordStep.setStep(3, STEP_SET_NEW_PASSWORD);
 
+		setSessionResetPasswordStep(request, resetPasswordStep);
+
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping(value = "/setNewPassword", produces = CONTENT_TYPE_JSON)
+	protected boolean hasCheckFile(String fileName)
+	{
+		File dir = this.resetPasswordCheckFileDirectory;
+
+		if (!dir.exists() || !dir.isDirectory())
+			return false;
+
+		File[] files = dir.listFiles();
+
+		if (files == null || files.length == 0)
+			return false;
+
+		for (File file : files)
+		{
+			String name = file.getName();
+
+			if (name.equalsIgnoreCase(fileName))
+				return true;
+
+			// 忽略扩展名后再校验
+			name = FileUtil.deleteExtension(name);
+
+			if (name.equalsIgnoreCase(fileName))
+				return true;
+		}
+
+		return false;
+	}
+
+	@RequestMapping(value = "/" + STEP_SET_NEW_PASSWORD, produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> setNewPassword(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestBody SetNewPasswordForm form)
@@ -184,10 +240,9 @@ public class ResetPasswordController extends AbstractController
 		if (isEmpty(password))
 			throw new IllegalInputException();
 
-		ResetPasswordStep resetPasswordStep = getResetPasswordStep(request);
+		ResetPasswordStep resetPasswordStep = getSessionResetPasswordStep(request);
 
-		if (isEmpty(resetPasswordStep) || isEmpty(resetPasswordStep.getUsername())
-				|| isEmpty(resetPasswordStep.getCheckFileName()) || !resetPasswordStep.isCheckOk())
+		if (isEmpty(resetPasswordStep) || isEmpty(resetPasswordStep.getUsername()) || !resetPasswordStep.isCheckOk())
 			return optStepNotInSessionResponseEntity(request);
 
 		String username = resetPasswordStep.getUsername();
@@ -200,6 +255,8 @@ public class ResetPasswordController extends AbstractController
 		resetPasswordStep.setStep(4, STEP_FINISH);
 		this.usernameLoginLatch.clear(user.getName());
 
+		setSessionResetPasswordStep(request, resetPasswordStep);
+
 		return optSuccessResponseEntity(request);
 	}
 
@@ -208,13 +265,78 @@ public class ResetPasswordController extends AbstractController
 		return optFailDataResponseEntity(request, "resetPassword.stepNotInSession");
 	}
 
-	protected ResetPasswordStep getResetPasswordStep(HttpServletRequest request)
+	/**
+	 * 获取会话中的{@linkplain ResetPasswordStep}。
+	 * <p>
+	 * 如果修改了获取的{@linkplain ResetPasswordStep}的状态，应在修改之后调用{@linkplain #setSessionResetPasswordStep(HttpServletRequest, ResetPasswordStep)}，
+	 * 以为可能扩展的分布式会话提供支持。
+	 * </p>
+	 * 
+	 * @param request
+	 * @return 没有则返回{@code null}
+	 */
+	protected ResetPasswordStep getSessionResetPasswordStep(HttpServletRequest request)
 	{
 		HttpSession session = request.getSession();
-
 		ResetPasswordStep resetPasswordStep = (ResetPasswordStep) session.getAttribute(KEY_STEP);
 
 		return resetPasswordStep;
+	}
+
+	/**
+	 * 设置会话中的{@linkplain ResetPasswordStep}。
+	 * 
+	 * @param request
+	 * @param step
+	 */
+	protected void setSessionResetPasswordStep(HttpServletRequest request, ResetPasswordStep step)
+	{
+		HttpSession session = request.getSession();
+		session.setAttribute(KEY_STEP, step);
+	}
+
+	/**
+	 * 创建初始{@linkplain ResetPasswordStep}。
+	 * 
+	 * @param request
+	 * @param response
+	 * @return
+	 */
+	protected ResetPasswordStep createInitResetPasswordStep(HttpServletRequest request, HttpServletResponse response)
+	{
+		int totalStep = 4;
+
+		ResetPasswordStep step = new ResetPasswordStep(totalStep);
+		step.setStep(1, STEP_FILL_USER_INFO);
+
+		return step;
+	}
+
+	/**
+	 * 转换为页面展示信息。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param step
+	 * @return
+	 */
+	protected ResetPasswordStep toResetPasswordStepView(HttpServletRequest request, HttpServletResponse response,
+			ResetPasswordStep step)
+	{
+		ResetPasswordStep re = new ResetPasswordStep(step.getStep());
+		BeanUtils.copyProperties(step, re);
+
+		re.setPassword(null);
+
+		return re;
+	}
+
+	protected void setUserPasswordStrengthInfo(org.springframework.ui.Model model)
+	{
+		ApplicationProperties properties = getApplicationProperties();
+
+		model.addAttribute("userPasswordStrengthRegex", properties.getUserPasswordStrengthRegex());
+		model.addAttribute("userPasswordStrengthTip", properties.getUserPasswordStrengthTip());
 	}
 
 	/**
@@ -438,8 +560,6 @@ public class ResetPasswordController extends AbstractController
 
 		private String password;
 
-		private String confirmPassword;
-
 		public SetNewPasswordForm()
 		{
 			super();
@@ -453,16 +573,6 @@ public class ResetPasswordController extends AbstractController
 		public void setPassword(String password)
 		{
 			this.password = password;
-		}
-
-		public String getConfirmPassword()
-		{
-			return confirmPassword;
-		}
-
-		public void setConfirmPassword(String confirmPassword)
-		{
-			this.confirmPassword = confirmPassword;
 		}
 	}
 }

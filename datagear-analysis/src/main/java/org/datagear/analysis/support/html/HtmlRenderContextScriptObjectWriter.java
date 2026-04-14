@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -33,6 +33,8 @@ import org.datagear.analysis.RenderContext;
  */
 public class HtmlRenderContextScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 {
+	public static final HtmlRenderContextScriptObjectWriter INSTANCE = new HtmlRenderContextScriptObjectWriter();
+
 	public HtmlRenderContextScriptObjectWriter()
 	{
 		super();
@@ -138,6 +140,8 @@ public class HtmlRenderContextScriptObjectWriter extends AbstractHtmlScriptObjec
 	 */
 	protected static class RenderContextJson extends DefaultRenderContext
 	{
+		private static final long serialVersionUID = 1L;
+
 		public RenderContextJson(RenderContext renderContext)
 		{
 			this(renderContext, null);
@@ -164,6 +168,8 @@ public class HtmlRenderContextScriptObjectWriter extends AbstractHtmlScriptObjec
 	 */
 	protected static class NoAttributesRenderContextJson extends DefaultRenderContext
 	{
+		private static final long serialVersionUID = 1L;
+
 		public NoAttributesRenderContextJson(RenderContext renderContext)
 		{
 			super();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -82,14 +82,17 @@ public abstract class HtmlTplDashboardWidgetRenderer
 
 	public static final String DASHBOARD_ELEMENT_ATTR_PREFIX = "dg-";
 
-	public static final String DASHBOARD_IMPORT_ITEM_NAME_ATTR = DASHBOARD_ELEMENT_ATTR_PREFIX + "import-name";
+	/** {@code dg-lib-name} */
+	public static final String DASHBOARD_LIB_NAME_ATTR = DASHBOARD_ELEMENT_ATTR_PREFIX + "lib-name";
 
 	public static final String DEFAULT_DASHBOARD_FACTORY_VAR = "dashboardFactory";
 
 	public static final String DEFAULT_THEME_IMPORT_NAME = "dashboardThemeStyle";
 
+	/** {@code dg-dashboard} */
 	public static final String DEFAULT_DASHBOARD_STYLE_NAME = DASHBOARD_ELEMENT_ATTR_PREFIX + "dashboard";
 
+	/** {@code dg-chart} */
 	public static final String DEFAULT_CHART_STYLE_NAME = DASHBOARD_ELEMENT_ATTR_PREFIX + "chart";
 
 	public static final String DEFAULT_DASHBOARD_VAR = "dashboard";
@@ -104,7 +107,8 @@ public abstract class HtmlTplDashboardWidgetRenderer
 
 	private AttributeValueHtmlChartPlugin htmlChartPluginForGetWidgetException = new AttributeValueHtmlChartPlugin(
 			Global.PRODUCT_NAME_EN_LC + "HtmlChartPluginForGetWidgetException",
-			ChartDefinition.BUILTIN_ATTR_PREFIX + "EXCEPTION_MESSAGE");
+			ChartDefinition.BUILTIN_ATTR_PREFIX + "EXCEPTION_MESSAGE", HtmlChartPluginScriptObjectWriter.INSTANCE,
+			HtmlRenderContextScriptObjectWriter.INSTANCE, HtmlChartScriptObjectWriter.INSTANCE);
 
 	/** 默认JS看板工厂变量名 */
 	private String defaultDashboardFactoryVar = DEFAULT_DASHBOARD_FACTORY_VAR;
@@ -427,13 +431,12 @@ public abstract class HtmlTplDashboardWidgetRenderer
 	public abstract HtmlTplDashboard render(HtmlTplDashboardWidget dashboardWidget, HtmlTplDashboardRenderContext renderContext) throws RenderException;
 	
 	/**
-	 * 生成基本的模板内容。
+	 * 生成简单HTML模板。
 	 * 
-	 * @param htmlCharset
-	 * @param chartWidgetId
+	 * @param option
 	 * @return
 	 */
-	public abstract String simpleTemplateContent(String htmlCharset, String... chartWidgetId);
+	public abstract String simpleTemplate(SimpleHtmlTplOption option);
 
 	/**
 	 * 获取用于渲染指定ID图表的{@linkplain ChartWidget}。
@@ -481,14 +484,14 @@ public abstract class HtmlTplDashboardWidgetRenderer
 	protected HtmlChartWidget createHtmlChartWidgetForGetException(String exceptionWidgetId, Throwable t)
 	{
 		HtmlChartWidget widget = new HtmlChartWidget(this.htmlChartWidgetIdForGetException, "HtmlChartWidgetForWidgetException",
-				ChartDefinition.EMPTY_CHART_DATA_SET, this.htmlChartPluginForGetWidgetException);
+				ChartDefinition.EMPTY_DATA_SET_BINDS, this.htmlChartPluginForGetWidgetException);
 
 		widget.setAttrValue(this.htmlChartPluginForGetWidgetException.getAttrName(), "Chart widget '"
 				+ (exceptionWidgetId == null ? "" : exceptionWidgetId) + "' exception : " + t.getMessage());
 
 		if (LOGGER.isDebugEnabled())
 			LOGGER.debug("Create placeholder chart widget [" + widget.getId() + "] for [" + exceptionWidgetId
-					+ "] on exception : " + t.getMessage());
+					+ "] on exception", t);
 
 		return widget;
 	}
@@ -496,7 +499,7 @@ public abstract class HtmlTplDashboardWidgetRenderer
 	protected HtmlChartWidget createHtmlChartWidgetForNotFound(String notFoundWidgetId)
 	{
 		HtmlChartWidget widget = new HtmlChartWidget(this.HtmlChartWidgetIdForNotFound, "HtmlChartWidgetForWidgetNotFound",
-				ChartDefinition.EMPTY_CHART_DATA_SET, this.htmlChartPluginForGetWidgetException);
+				ChartDefinition.EMPTY_DATA_SET_BINDS, this.htmlChartPluginForGetWidgetException);
 
 		widget.setAttrValue(this.htmlChartPluginForGetWidgetException.getAttrName(),
 				"Chart widget '" + (notFoundWidgetId == null ? "" : notFoundWidgetId) + "' not found");
@@ -511,7 +514,7 @@ public abstract class HtmlTplDashboardWidgetRenderer
 	protected HtmlChartWidget createHtmlChartWidgetForPluginNull(ChartWidget chartWidget)
 	{
 		HtmlChartWidget widget = new HtmlChartWidget(this.HtmlChartWidgetIdForPluginNull, "HtmlChartWidgetForWidgetPluginNull",
-				ChartDefinition.EMPTY_CHART_DATA_SET, this.htmlChartPluginForGetWidgetException);
+				ChartDefinition.EMPTY_DATA_SET_BINDS, this.htmlChartPluginForGetWidgetException);
 
 		widget.setAttrValue(this.htmlChartPluginForGetWidgetException.getAttrName(), "Chart plugin is null");
 
@@ -723,7 +726,8 @@ public abstract class HtmlTplDashboardWidgetRenderer
 			writeDashboardThemeStyle(renderContext, dashboard);
 		}
 
-		List<HtmlTplDashboardImport> importList = renderContext.getImportList();
+		HtmlTplDashboardImportBuilder builder = renderContext.getImportBuilder();
+		List<HtmlTplDashboardImport> importList = (builder == null ? null : builder.build(renderContext, dashboard));
 
 		if (importList != null)
 		{
@@ -847,7 +851,7 @@ public abstract class HtmlTplDashboardWidgetRenderer
 			return false;
 
 		out.write(
-				"<style type=\"text/css\" " + DASHBOARD_IMPORT_ITEM_NAME_ATTR + "=\"" + this.themeImportName + "\">");
+				"<style type=\"text/css\" " + DASHBOARD_LIB_NAME_ATTR + "=\"" + this.themeImportName + "\">");
 		writeNewLine(out);
 		out.write("." + this.dashboardStyleName + "{");
 		writeNewLine(out);
@@ -945,7 +949,7 @@ public abstract class HtmlTplDashboardWidgetRenderer
 	 * @param template
 	 * @return
 	 */
-	protected static HtmlTplDashboard createDashboard(HtmlTplDashboardWidget dashboardWidget, RenderContext renderContext,
+	protected HtmlTplDashboard createDashboard(HtmlTplDashboardWidget dashboardWidget, RenderContext renderContext,
 			String dashboardId, String template)
 	{
 		HtmlTplDashboard dashboard = new HtmlTplDashboard();
@@ -955,6 +959,7 @@ public abstract class HtmlTplDashboardWidgetRenderer
 		dashboard.setWidget(dashboardWidget);
 		dashboard.setRenderContext(renderContext);
 		dashboard.setCharts(new ArrayList<Chart>());
+		dashboard.setVersion(dashboardWidget.getVersion());
 
 		return dashboard;
 	}

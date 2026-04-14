@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -34,13 +34,13 @@ import org.datagear.analysis.Dashboard;
 import org.datagear.analysis.RenderException;
 import org.datagear.analysis.support.ChartWidget;
 import org.datagear.analysis.support.ChartWidgetSource;
-import org.datagear.util.CacheService;
 import org.datagear.util.Global;
 import org.datagear.util.IDUtil;
 import org.datagear.util.StringUtil;
 import org.datagear.util.html.CopyWriter;
 import org.datagear.util.html.DefaultFilterHandler;
 import org.datagear.util.html.HeadBodyAwareFilterHandler;
+import org.springframework.cache.Cache;
 import org.springframework.cache.Cache.ValueWrapper;
 
 /**
@@ -121,14 +121,18 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 
 	public static final String HTML_TAG_TITLE_CLOSE = "</title>";
 
+	/** {@code dg-dashboard-var} */
 	public static final String DEFAULT_ATTR_NAME_DASHBOARD_VAR = DASHBOARD_ELEMENT_ATTR_PREFIX + "dashboard-var";
 
+	/** {@code dg-dashboard-factory} */
 	public static final String DEFAULT_ATTR_NAME_DASHBOARD_FACTORY = DASHBOARD_ELEMENT_ATTR_PREFIX
 			+ "dashboard-factory";
 
+	/** {@code dg-dashboard-unimport} */
 	public static final String DEFAULT_ATTR_NAME_DASHBOARD_UNIMPORT = DASHBOARD_ELEMENT_ATTR_PREFIX
 			+ "dashboard-unimport";
 
+	/** {@code dg-loadable-chart-widgets} */
 	public static final String DEFAULT_ATTR_NAME_LOADABLE_CHART_WIDGETS = DASHBOARD_ELEMENT_ATTR_PREFIX
 			+ "loadable-chart-widgets";
 
@@ -139,11 +143,14 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 	public static final String DEFAULT_ATTR_NAME_DASHBOARD_AUTO_RENDER = DASHBOARD_ELEMENT_ATTR_PREFIX
 			+ "dashboard-auto-render";
 
+	/** {@code dg-dashboard-code} */
 	public static final String DEFAULT_ATTR_NAME_DASHBOARD_CODE = DASHBOARD_ELEMENT_ATTR_PREFIX
 			+ "dashboard-code";
 
+	/** {@code dg-chart-widget} */
 	public static final String DEFAULT_ATTR_NAME_CHART_WIDGET = DASHBOARD_ELEMENT_ATTR_PREFIX + "chart-widget";
 
+	/** {@code dg-chart-auto-resize} */
 	public static final String ATTR_NAME_CHART_AUTO_RESIZE = DASHBOARD_ELEMENT_ATTR_PREFIX + "chart-auto-resize";
 
 	public static final String DASHBOARD_CODE_ATTR_VALUE_INSTANCE = "instance";
@@ -184,7 +191,7 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 	/**全局JS对象（通常是：window）的局部变量名*/
 	private String localGlobalVarName = Global.PRODUCT_NAME_EN_LC + "Global" + IDUtil.toStringOfMaxRadix();
 	
-	private CacheService cacheService = null;
+	private Cache cache = null;
 
 	public HtmlTplDashboardWidgetHtmlRenderer()
 	{
@@ -296,61 +303,69 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 		this.localGlobalVarName = localGlobalVarName;
 	}
 
-	public CacheService getCacheService()
+	public Cache getCache()
 	{
-		return cacheService;
-	}
-
-	public void setCacheService(CacheService cacheService)
-	{
-		this.cacheService = cacheService;
-	}
-
-	@Override
-	public String simpleTemplateContent(String htmlCharset, String... chartWidgetId)
-	{
-		return simpleTemplateContent(chartWidgetId, "", htmlCharset, "", "", "", "", "");
+		return cache;
 	}
 
 	/**
-	 * 获取简单模板内容。
+	 * 设置缓存。
+	 * <p>
+	 * 无论应用是否处于分布式运行环境，这里都可以使用进程内缓存以提高性能，因为此类的缓存策略会根据底层资源的上次修改时间校验和操作缓存。
+	 * </p>
 	 * 
-	 * @param chartWidgetIds
-	 * @param htmlAttr
-	 *            {@code html}元素属性，允许为{@code null}
-	 * @param htmlCharset
-	 * @param htmlTitle
-	 *            HTML标题名，允许为{@code null}
-	 * @param bodyStyleName
-	 *            {@code body}元素的样式类名，允许为{@code null}
-	 * @param bodyAttr
-	 *            {@code body}元素属性，允许为{@code null}
-	 * @param chartEleStyleName
-	 *            图表元素样式类名，允许为{@code null}
-	 * @param chartEleAttr
-	 *            图表元素属性，允许为{@code null}
-	 * @return
+	 * @param cache
 	 */
-	public String simpleTemplateContent(String[] chartWidgetIds, String htmlAttr, String htmlCharset, String htmlTitle,
-			String bodyStyleName, String bodyAttr, String chartEleStyleName, String chartEleAttr)
+	public void setCache(Cache cache)
+	{
+		this.cache = cache;
+	}
+
+	@Override
+	public String simpleTemplate(SimpleHtmlTplOption option)
 	{
 		StringBuilder sb = new StringBuilder();
 
 		sb.append("<!DOCTYPE html>\n");
-		sb.append("<html" + (StringUtil.isEmpty(htmlAttr) ? "" : " " + htmlAttr) + ">\n");
+		sb.append("<html" + (StringUtil.isEmpty(option.getHtmlAttr()) ? "" : " " + option.getHtmlAttr()) + ">\n");
 		sb.append("<head>\n");
-		sb.append("<meta charset=\"" + htmlCharset + "\">\n");
-		sb.append("<title>" + (StringUtil.isEmpty(htmlTitle) ? "" : htmlTitle) + "</title>\n");
+
+		if (!StringUtil.isEmpty(option.getCharset()))
+			sb.append("<meta charset=\"" + option.getCharset() + "\">\n");
+
+		if (!StringUtil.isEmpty(option.getViewport()))
+			sb.append("<meta name=\"viewport\" content=\"" + option.getViewport() + "\">\n");
+
+		sb.append("<title>" + (StringUtil.isEmpty(option.getTitle()) ? "" : option.getTitle()) + "</title>\n");
+
+		if (!StringUtil.isEmpty(option.getStyle()))
+		{
+			sb.append("<style  type=\"text/css\">\n");
+			sb.append(option.getStyle());
+			sb.append("</style>\n");
+		}
+
 		sb.append("</head>\n");
-		sb.append("<body" + (StringUtil.isEmpty(bodyStyleName) ? "" : " class=\""+bodyStyleName+"\"")
-						+ (StringUtil.isEmpty(bodyAttr) ? "" : " "+bodyAttr)
-						+ " " + ATTR_NAME_CHART_AUTO_RESIZE + "=\"true\">\n");
+		sb.append("<body"
+				+ (StringUtil.isEmpty(option.getBodyStyleName()) ? "" : " class=\"" + option.getBodyStyleName() + "\"")
+				+ (StringUtil.isEmpty(option.getBodyAttr()) ? "" : " " + option.getBodyAttr()) //
+				+ " " + ATTR_NAME_CHART_AUTO_RESIZE + "=\"true\"");//
+		sb.append(">\n");
 		sb.append("\n");
 
-		for (String cwi : chartWidgetIds)
-			sb.append("  <div class=\"" + (StringUtil.isEmpty(chartEleStyleName) ? "" : chartEleStyleName)
-					+ "\" " + getAttrNameChartWidget() + "=\"" + cwi + "\" "
-					+ (StringUtil.isEmpty(chartEleAttr) ? "" : chartEleAttr) + "></div>\n");
+		if (option.getChartWidgetIds() != null)
+		{
+			for (String cwi : option.getChartWidgetIds())
+			{
+				sb.append("  ");
+				sb.append("<div"
+						+ " " + getAttrNameChartWidget() + "=\"" + cwi + "\""
+						+ (StringUtil.isEmpty(option.getChartEleStyleName()) ? ""
+								: " class=\"" + option.getChartEleStyleName() + "\"")
+						+ (StringUtil.isEmpty(option.getChartEleAttr()) ? "" : " " + option.getChartEleAttr()) //
+						+ "></div>\n");
+			}
+		}
 
 		sb.append("</body>\n");
 		sb.append("</html>");
@@ -392,7 +407,7 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 	protected TplDashboardMeta getTplDashboardMetaCache(HtmlTplDashboardWidget dashboardWidget,
 			HtmlTplDashboardRenderContext renderContext)
 	{
-		if (this.cacheService == null)
+		if (this.cache == null)
 			return null;
 
 		// 没有上次修改时间的不应返回缓存
@@ -401,7 +416,7 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 
 		TplDashboardMetaCacheKey key = new TplDashboardMetaCacheKey(dashboardWidget.getId(),
 				renderContext.getTemplate());
-		ValueWrapper valueWrapper = this.cacheService.get(key);
+		ValueWrapper valueWrapper = this.cache.get(key);
 		TplDashboardMetaCacheValue value = (valueWrapper == null ? null
 				: (TplDashboardMetaCacheValue) valueWrapper.get());
 
@@ -414,7 +429,7 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 	protected boolean setTplDashboardMetaCache(HtmlTplDashboardWidget dashboardWidget,
 			HtmlTplDashboardRenderContext renderContext, TplDashboardMeta dashboardMeta)
 	{
-		if (this.cacheService == null)
+		if (this.cache == null)
 			return false;
 
 		// 没有上次修改时间的不应设置缓存
@@ -426,7 +441,7 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 		TplDashboardMetaCacheValue value = new TplDashboardMetaCacheValue(dashboardMeta,
 				renderContext.getTemplateLastModified());
 
-		this.cacheService.put(key, value);
+		this.cache.put(key, value);
 
 		return true;
 	}
@@ -434,7 +449,9 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 	protected DashboardFilterContext doRenderDashboard(HtmlTplDashboardWidget dashboardWidget,
 			HtmlTplDashboardRenderContext renderContext) throws RenderException, IOException
 	{
-		DashboardFilterContext context = new DashboardFilterContext(dashboardWidget, renderContext, nextDashboardId());
+		HtmlTplDashboard dashboard = createDashboard(dashboardWidget, renderContext, nextDashboardId(),
+				renderContext.getTemplate());
+		DashboardFilterContext context = new DashboardFilterContext(dashboardWidget, renderContext, dashboard);
 		DashboardFilterHandler filterHandler = new DashboardFilterHandler(context);
 		
 		getHtmlFilter().filter(renderContext.getTemplateReader(), filterHandler);
@@ -446,8 +463,10 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 			HtmlTplDashboardRenderContext renderContext, TplDashboardMeta dashboardMeta)
 			throws RenderException, IOException
 	{
+		HtmlTplDashboard dashboard = createDashboard(dashboardWidget, renderContext, nextDashboardId(),
+				renderContext.getTemplate());
 		DashboardFilterContext context = new DashboardFilterContext(dashboardWidget, renderContext, dashboardMeta,
-				nextDashboardId());
+				dashboard);
 		IndexedDashboardFilterHandler filterHandler = new IndexedDashboardFilterHandler(context);
 		
 		getHtmlFilter().filter(renderContext.getTemplateReader(), filterHandler);
@@ -1190,27 +1209,18 @@ public class HtmlTplDashboardWidgetHtmlRenderer extends HtmlTplDashboardWidgetRe
 		private final TplDashboardMeta dashboardMeta;
 		private final HtmlTplDashboard dashboard;
 		
-		public DashboardFilterContext(HtmlTplDashboardWidget dashboardWidget, HtmlTplDashboardRenderContext renderContext, String dashboardId)
+		public DashboardFilterContext(HtmlTplDashboardWidget dashboardWidget,
+				HtmlTplDashboardRenderContext renderContext, HtmlTplDashboard dashboard)
 		{
 			super();
 			this.dashboardWidget = dashboardWidget;
 			this.renderContext = renderContext;
-			this.dashboard = createDashboard(dashboardWidget, renderContext, dashboardId, renderContext.getTemplate());
 			this.dashboardMeta = new TplDashboardMeta();
+			this.dashboard = dashboard;
 		}
 
-		public DashboardFilterContext(HtmlTplDashboardWidget dashboardWidget, HtmlTplDashboardRenderContext renderContext,
-										TplDashboardMeta dashboardMeta, String dashboardId)
-		{
-			super();
-			this.dashboardWidget = dashboardWidget;
-			this.renderContext = renderContext;
-			this.dashboardMeta = dashboardMeta;
-			this.dashboard = createDashboard(dashboardWidget, renderContext, dashboardId, renderContext.getTemplate());
-		}
-
-		public DashboardFilterContext(HtmlTplDashboardWidget dashboardWidget, HtmlTplDashboardRenderContext renderContext, TplDashboardMeta dashboardMeta,
-				HtmlTplDashboard dashboard)
+		public DashboardFilterContext(HtmlTplDashboardWidget dashboardWidget,
+				HtmlTplDashboardRenderContext renderContext, TplDashboardMeta dashboardMeta, HtmlTplDashboard dashboard)
 		{
 			super();
 			this.dashboardWidget = dashboardWidget;

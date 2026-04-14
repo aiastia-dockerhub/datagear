@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,7 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
-<#assign ShowAuthCheckResponse=statics['org.datagear.web.controller.DashboardController$ShowAuthCheckResponse']>
+<#assign ShowAuthCheckResponse=statics['org.datagear.web.controller.DashboardVisualController$ShowAuthCheckResponse']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -43,7 +43,7 @@
 					<form id="${pid}form" class="flex flex-column">
 						<div class="page-form-content flex-grow-1 px-2 py-1 overflow-y-auto">
 							<div class="mb-4 text-center text-primary text-lg">
-								<a :href="fm.redirectPath" class="link">
+								<a :href="fm.redirectPath" class="link text-primary">
 									{{fm.dashboardNameMask}}
 								</a>
 							</div>
@@ -55,7 +55,7 @@
 						        <div class="field-input col-10">
 						        	<p-password id="${pid}password" v-model="fm.password" toggle-mask :feedback="false"
 						        		input-class="w-full" class="input w-full"
-						        		name="password" autocomplete="off" autofocus>
+						        		:pt="{input:{name:'password',maxlength:'50',autocomplete:'off',autofocus:'autofocus'}}">
 						        	</p-password>
 						        </div>
 							</div>
@@ -67,7 +67,7 @@
 							</#if>
 						</div>
 						<#if !authed>
-						<div class="page-form-foot flex-grow-0 pt-3 text-center">
+						<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 							<p-button type="submit" label="<@spring.message code='confirm' />"></p-button>
 						</div>
 						</#if>
@@ -82,7 +82,7 @@
 <script>
 (function(po)
 {
-	po.submitUrl = "/dashboard/"+po.submitAction;
+	po.submitUrl = "${submitPath}";
 	po.redirectPath = "${redirectPath}";
 	
 	po.beforeSubmitForm = function(action)
@@ -128,10 +128,9 @@
 	{
 		po.element(".loginLinkWrapper a").attr("href", "${contextPath}/login");
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

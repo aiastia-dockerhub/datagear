@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,6 +20,7 @@ package org.datagear.analysis.support.html;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
+import java.io.Serializable;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,6 +52,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  */
 public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 {
+	public static final HtmlChartPluginScriptObjectWriter INSTANCE = new HtmlChartPluginScriptObjectWriter();
+
 	private String localRendererVarNameForInvode = Global.PRODUCT_NAME_EN_LC + "Renderer" + IDUtil.toStringOfMaxRadix();
 
 	public HtmlChartPluginScriptObjectWriter()
@@ -122,6 +125,7 @@ public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectW
 		{
 			writeHtmlChartRendererCodeValue(out, renderer);
 			out.write(";");
+			writeNewLine(out);
 		}
 		else if (JsChartRenderer.CODE_TYPE_INVOKE.equals(codeType))
 		{
@@ -140,8 +144,6 @@ public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectW
 		}
 		else
 			throw new IOException("Unsupported JsChartRenderer code type : " + codeType);
-
-		writeNewLine(out);
 	}
 
 	protected void writeHtmlChartRendererCodeValue(Writer out, JsChartRenderer renderer) throws IOException
@@ -166,6 +168,8 @@ public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectW
 	 */
 	protected static class HtmlChartPluginJson extends AbstractChartPlugin
 	{
+		private static final long serialVersionUID = 1L;
+
 		public HtmlChartPluginJson(HtmlChartPlugin plugin, Locale locale)
 		{
 			super(plugin.getId(), plugin.getNameLabel());
@@ -179,6 +183,11 @@ public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectW
 			setOrder(plugin.getOrder());
 			setCategories(Category.clone(plugin.getCategories(), locale));
 			setCategoryOrders(plugin.getCategoryOrders());
+			setAuthor(plugin.getAuthor());
+			setContact(plugin.getContact());
+			setIssueDate(plugin.getIssueDate());
+			setPlatformVersion(plugin.getPlatformVersion());
+			setAdditions(plugin.getAdditions());
 		}
 
 		@JsonIgnore
@@ -189,8 +198,10 @@ public class HtmlChartPluginScriptObjectWriter extends AbstractHtmlScriptObjectW
 		}
 	}
 
-	protected static class ChartPluginResourceJson implements ChartPluginResource
+	protected static class ChartPluginResourceJson implements ChartPluginResource, Serializable
 	{
+		private static final long serialVersionUID = 1L;
+
 		private String name;
 
 		public ChartPluginResourceJson()

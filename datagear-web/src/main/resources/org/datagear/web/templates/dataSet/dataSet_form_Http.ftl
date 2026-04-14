@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DataSetEntity=statics['org.datagear.management.domain.DataSetEntity']>
 <#assign HttpDataSet=statics['org.datagear.analysis.support.HttpDataSet']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
@@ -35,13 +36,25 @@
 		<div class="page-form-content flex-grow-1 px-2 py-1 overflow-y-auto">
 			<#include "include/dataSet_form_name.ftl">
 			<div class="field grid">
-				<label for="${pid}uri" class="field-label col-12 mb-2 md:col-3 md:mb-0">
+				<label for="${pid}uri" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='httpDataSet.uri.desc' />">
 					<@spring.message code='requestURI' />
 				</label>
 				<div class="field-input col-12 md:col-9">
 					<p-inputtext id="${pid}uri" v-model="fm.uri" type="text" class="input w-full"
 		        		name="uri" required maxlength="1000">
 		        	</p-inputtext>
+				</div>
+			</div>
+			<div class="field grid">
+				<label for="${pid}encodeUri" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='httpDataSet.encodeUri.desc' />">
+					<@spring.message code='encodeRequestURI' />
+				</label>
+				<div class="field-input col-12 md:col-9">
+					<p-selectbutton v-model="fm.encodeUri" :options="pm.booleanOptions"
+						option-label="name" option-value="value" class="input w-full">
+					</p-selectbutton>
 				</div>
 			</div>
 			<div class="field grid">
@@ -113,25 +126,35 @@
 					</p-dropdown>
 				</div>
 			</div>
-			<div class="field grid">
-				<label for="${pid}responseDataJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
-					title="<@spring.message code='httpDataSet.responseDataJsonPath.desc' />">
-					<@spring.message code='responseJsonPath' />
+			<div class="field grid" v-if="fm.responseContentType == pm.responseContentTypeOptions[0].value">
+				<label for="${pid}resultJsonRuleDataJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='dataSet.resultJsonRule.dataJsonPath.desc' />">
+					<@spring.message code='responseDataJsonPath' />
 				</label>
 				<div class="field-input col-12 md:col-9">
-					<p-inputtext id="${pid}responseDataJsonPath" v-model="fm.responseDataJsonPath" type="text" class="input w-full"
-						name="responseDataJsonPath" maxlength="200">
+					<p-inputtext id="${pid}resultJsonRuleDataJsonPath" v-model="fm.resultJsonRule.dataJsonPath" type="text" class="input w-full"
+						name="resultJsonRule.dataJsonPath" maxlength="200">
 					</p-inputtext>
 				</div>
 			</div>
-			<#include "include/dataSet_form_param_property.ftl">
+			<div class="field grid" v-if="fm.responseContentType == pm.responseContentTypeOptions[0].value">
+				<label for="${pid}resultJsonRuleAdditionJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='dataSet.resultJsonRule.additionJsonPath.desc' />">
+					<@spring.message code='responseAdditionDataConfig' />
+				</label>
+				<div class="field-input col-12 md:col-9">
+					<p-inputtext id="resultJsonRuleAdditionJsonPath" v-model="fm.resultJsonRule.additionJsonPath" type="text" class="input w-full"
+						name="resultJsonRule.additionJsonPath" maxlength="500">
+					</p-inputtext>
+				</div>
+			</div>
+			<#include "include/dataSet_form_param_field.ftl">
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
-			<#include "include/dataSet_form_preview.ftl">
-			<p-button type="submit" label="<@spring.message code='save' />" class="hide-if-readonly"></p-button>
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
+			<#include "include/dataSet_form_submit_btn.ftl">
 		</div>
 	</form>
-	<#include "include/dataSet_form_param_property_form.ftl">
+	<#include "include/dataSet_form_param_field_form.ftl">
 </div>
 <#include "../include/page_form.ftl">
 <#include "../include/page_simple_form.ftl">
@@ -142,18 +165,19 @@
 (function(po)
 {
 	po.submitUrl = "/dataSet/"+po.submitAction;
-	po.previewUrl = "/dataSet/previewHttp";
+	po.previewUrl = "/dataSet/preview/${DataSetEntity.DATA_SET_TYPE_Http}";
 	
 	po.inflatePreviewFingerprint = function(fingerprint, dataSet)
 	{
 		fingerprint.uri = dataSet.uri;
+		fingerprint.encodeUri = dataSet.encodeUri;
 		fingerprint.requestMethod = dataSet.requestMethod;
 		fingerprint.requestContentType = dataSet.requestContentType;
 		fingerprint.requestContentCharset = dataSet.requestContentCharset;
 		fingerprint.requestContent = dataSet.requestContent;
 		fingerprint.headerContent = dataSet.headerContent;
 		fingerprint.responseContentType = dataSet.responseContentType;
-		fingerprint.responseDataJsonPath = dataSet.responseDataJsonPath;
+		fingerprint.resultJsonRuleJson = $.toJsonString(dataSet.resultJsonRule);
 	};
 	
 	po.beforeSubmitForm = function(action)
@@ -167,6 +191,7 @@
 	};
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
+	formModel.resultJsonRule = (formModel.resultJsonRule == null ? {} : formModel.resultJsonRule);
 	po.inflateDataSetModel(formModel);
 	
 	po.setupForm(formModel,
@@ -212,7 +237,9 @@
 		requestContentCharsetOptions: $.unescapeHtmlForJson(<@writeJson var=availableCharsetNames />),
 		responseContentTypeOptions:
 		[
-			{name: "<@spring.message code='httpDataSet.responseContentType.JSON' />", value: "${HttpDataSet.RESPONSE_CONTENT_TYPE_JSON}"}
+			{name: "<@spring.message code='httpDataSet.responseContentType.JSON' />", value: "${HttpDataSet.RESPONSE_CONTENT_TYPE_JSON}"},
+			{name: "<@spring.message code='httpDataSet.responseContentType.TEXT' />", value: "${HttpDataSet.RESPONSE_CONTENT_TYPE_TEXT}"},
+			{name: "<@spring.message code='httpDataSet.responseContentType.BASE64' />", value: "${HttpDataSet.RESPONSE_CONTENT_TYPE_BASE64}"}
 		]
 	});
 	
@@ -228,10 +255,9 @@
 									{mode: {name: "javascript", json: true}});
 		po.setCodeTextTimeout(po.headerContentEditor, fm.headerContent);
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

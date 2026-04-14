@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -459,6 +459,23 @@ public class IOUtil
 	}
 
 	/**
+	 * 获取输出流。
+	 * 
+	 * @param out
+	 * @param charset
+	 *            允许为{@code null}
+	 * @return
+	 * @throws UnsupportedEncodingException
+	 */
+	public static BufferedWriter getWriter(OutputStream out, Charset charset) throws UnsupportedEncodingException
+	{
+		if (charset == null)
+			return new BufferedWriter(new OutputStreamWriter(out));
+		else
+			return new BufferedWriter(new OutputStreamWriter(out, charset));
+	}
+
+	/**
 	 * 获取{@linkplain BufferedWriter}。
 	 * 
 	 * @param writer
@@ -824,7 +841,7 @@ public class IOUtil
 		}
 		catch(IllegalArgumentException e)
 		{
-			if("MALFORMED".equalsIgnoreCase(e.getMessage()))
+			if (MalformedZipException.isMalformedZipException(e))
 				throw new MalformedZipException(e);
 			else
 				throw e;
@@ -877,61 +894,101 @@ public class IOUtil
 	}
 
 	/**
-	 * 拷贝文件。
+	 * 拷贝文件至目录内。
 	 * 
-	 * @param src
-	 * @param dest
-	 * @param srcAsSubDirectory
+	 * @param from
+	 *            文件、目录
+	 * @param to
+	 *            目录，不存在时会自动创建
 	 * @return 目标文件
 	 * @throws IOException
 	 */
-	public static File copy(File src, File dest, boolean srcAsSubDirectory) throws IOException
+	public static File copyInto(File from, File to) throws IOException
 	{
-		if (src.isDirectory())
+		if (!to.exists())
+			to.mkdirs();
+
+		if (!to.isDirectory())
+			throw new IllegalArgumentException("[" + to + "] must be directory");
+
+		if (from.isDirectory())
+			to = FileUtil.getDirectory(to, from.getName());
+		else
+			to = FileUtil.getFile(to, from.getName());
+
+		copy(from, to, null);
+
+		return to;
+	}
+
+	/**
+	 * 拷贝文件。
+	 * 
+	 * @param from
+	 *            文件、目录
+	 * @param to
+	 *            文件、目录，不存在时会自动创建
+	 * @throws IOException
+	 */
+	public static File copy(File from, File to) throws IOException
+	{
+		return copy(from, to, null);
+	}
+
+	/**
+	 * 拷贝文件。
+	 * 
+	 * @param from
+	 *            文件、目录
+	 * @param to
+	 *            文件、目录，不存在时会自动创建
+	 * @param filter
+	 *            允许为{@code null}，仅拷贝接受的文件
+	 * @return 目标文件，{@code null}表示没有拷贝任何文件
+	 * @throws IOException
+	 */
+	public static File copy(File from, File to, CopyFileFilter filter) throws IOException
+	{
+		if (filter != null && !filter.accept(from, to))
+			return null;
+
+		if (from.isDirectory())
 		{
-			if (!dest.exists())
-				dest.mkdirs();
-			else if (!dest.isDirectory())
-				throw new IllegalArgumentException("[dest] must be directory");
+			if (!to.exists())
+				to.mkdirs();
 
-			File destFile = dest;
-			if (srcAsSubDirectory)
-				destFile = FileUtil.getDirectory(dest, src.getName());
+			if (!to.isDirectory())
+				throw new IllegalArgumentException("[" + to + "] must be directory");
 
-			File[] children = src.listFiles();
+			File[] children = from.listFiles();
+
 			if (children != null)
 			{
 				for (File child : children)
-					copy(child, FileUtil.getFile(destFile, child.getName()), false);
+					copy(child, FileUtil.getFile(to, child.getName()), filter);
 			}
-			
-			return destFile;
+
+			return to;
 		}
 		else
 		{
-			if (dest.isDirectory())
-			{
-				File destFile = FileUtil.getFile(dest, src.getName());
-				copy(src, destFile, false);
-				
-				return destFile;
-			}
-			else
-			{
-				OutputStream out = null;
+			// 如果目标时目录，应先删除
+			if (to.exists() && to.isDirectory())
+				FileUtil.deleteFile(to);
 
-				try
-				{
-					out = IOUtil.getOutputStream(dest);
-					IOUtil.write(src, out);
-				}
-				finally
-				{
-					IOUtil.close(out);
-				}
-				
-				return dest;
+			OutputStream out = null;
+
+			try
+			{
+				out = IOUtil.getOutputStream(to);
+				IOUtil.write(from, out);
 			}
+			finally
+			{
+				IOUtil.close(out);
+			}
+
+			return to;
 		}
 	}
 
@@ -942,6 +999,7 @@ public class IOUtil
 	 * </p>
 	 * 
 	 * @param closeable
+	 *            允许{@code null}
 	 */
 	public static void close(AutoCloseable closeable)
 	{
@@ -961,6 +1019,7 @@ public class IOUtil
 	 * 刷新{@linkplain Flushable}。
 	 * 
 	 * @param flushable
+	 *            允许{@code null}
 	 */
 	public static void flush(Flushable flushable)
 	{
@@ -983,6 +1042,7 @@ public class IOUtil
 	 * </p>
 	 * 
 	 * @param list
+	 *            允许{@code null}
 	 */
 	public static void closeIf(Collection<?> list)
 	{
@@ -1000,6 +1060,7 @@ public class IOUtil
 	 * </p>
 	 * 
 	 * @param objs
+	 *            允许{@code null}
 	 */
 	public static void closeIf(Object[] objs)
 	{
@@ -1017,6 +1078,7 @@ public class IOUtil
 	 * </p>
 	 * 
 	 * @param o
+	 *            允许{@code null}
 	 * @return
 	 */
 	public static boolean closeIf(Object o)

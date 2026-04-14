@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,8 @@
 
 package org.datagear.analysis.support.html;
 
+import java.io.Serializable;
+
 /**
  * HTML模板看板导入项。
  * <p>
@@ -26,8 +28,10 @@ package org.datagear.analysis.support.html;
  * @author datagear@163.com
  *
  */
-public class HtmlTplDashboardImport
+public class HtmlTplDashboardImport implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	/** 名称 */
 	private String name;
 
@@ -82,7 +86,7 @@ public class HtmlTplDashboardImport
 	public static HtmlTplDashboardImport valueOfLinkCss(String name, String href)
 	{
 		String content = "<link type=\"text/css\" href=\"" + href + "\" rel=\"stylesheet\" "
-				+ HtmlTplDashboardWidgetRenderer.DASHBOARD_IMPORT_ITEM_NAME_ATTR + "=\"" + name + "\" />";
+				+ HtmlTplDashboardWidgetRenderer.DASHBOARD_LIB_NAME_ATTR + "=\"" + name + "\" />";
 
 		return new HtmlTplDashboardImport(name, content);
 	}
@@ -97,7 +101,7 @@ public class HtmlTplDashboardImport
 	public static HtmlTplDashboardImport valueOfJavaScript(String name, String src)
 	{
 		String content = "<script type=\"text/javascript\" src=\"" + src + "\" "
-				+ HtmlTplDashboardWidgetRenderer.DASHBOARD_IMPORT_ITEM_NAME_ATTR + "=\"" + name + "\" ></script>";
+				+ HtmlTplDashboardWidgetRenderer.DASHBOARD_LIB_NAME_ATTR + "=\"" + name + "\" ></script>";
 
 		return new HtmlTplDashboardImport(name, content);
 	}

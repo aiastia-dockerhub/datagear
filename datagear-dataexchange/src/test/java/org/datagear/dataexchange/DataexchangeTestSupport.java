@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -32,6 +32,7 @@ import javax.sql.DataSource;
 
 import org.datagear.meta.resolver.DBMetaResolver;
 import org.datagear.meta.resolver.GenericDBMetaResolver;
+import org.datagear.util.IOUtil;
 import org.datagear.util.JdbcUtil;
 import org.datagear.util.resource.ClasspathInputStreamResourceFactory;
 import org.datagear.util.resource.ClasspathReaderResourceFactory;
@@ -160,7 +161,7 @@ public abstract class DataexchangeTestSupport extends DBTestSupport
 
 	protected ResourceFactory<Reader> getTestReaderResourceFactory(String resourceName) throws IOException
 	{
-		return ClasspathReaderResourceFactory.valueOf(getResourceClasspath(resourceName), "UTF-8");
+		return ClasspathReaderResourceFactory.valueOf(getResourceClasspath(resourceName), IOUtil.CHARSET_UTF_8);
 	}
 
 	protected ResourceFactory<InputStream> getTestInputStreamResourceFactory(String resourceName) throws IOException

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,7 +28,7 @@ import org.springframework.beans.BeanUtils;
  *
  */
 public class AnalysisProject extends AbstractStringIdEntity
-		implements CreateUserEntity<String>, DataPermissionEntity<String>, CloneableEntity
+		implements CreateUserEntity, DataPermissionEntity, CloneableEntity, DescriptionEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -39,13 +39,13 @@ public class AnalysisProject extends AbstractStringIdEntity
 	private String name;
 
 	/** 描述 */
-	private String desc = "";
+	private String description = "";
 
 	/** 创建用户 */
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime = new Date();
+	private Date createTime = null;
 
 	private int dataPermission = PERMISSION_NOT_LOADED;
 
@@ -71,14 +71,16 @@ public class AnalysisProject extends AbstractStringIdEntity
 		this.name = name;
 	}
 
-	public String getDesc()
+	@Override
+	public String getDescription()
 	{
-		return desc;
+		return description;
 	}
 
-	public void setDesc(String desc)
+	@Override
+	public void setDescription(String description)
 	{
-		this.desc = desc;
+		this.description = description;
 	}
 
 	@Override
@@ -93,11 +95,13 @@ public class AnalysisProject extends AbstractStringIdEntity
 		this.createUser = createUser;
 	}
 
+	@Override
 	public Date getCreateTime()
 	{
 		return createTime;
 	}
 
+	@Override
 	public void setCreateTime(Date createTime)
 	{
 		this.createTime = createTime;
@@ -118,8 +122,8 @@ public class AnalysisProject extends AbstractStringIdEntity
 	@Override
 	public String toString()
 	{
-		return getClass().getSimpleName() + " [name=" + name + ", desc=" + desc + ", createUser=" + createUser
-				+ ", createTime=" + createTime + ", dataPermission=" + dataPermission + "]";
+		return getClass().getSimpleName() + " [name=" + name + ", description=" + description + ", createUser="
+				+ createUser + ", createTime=" + createTime + ", dataPermission=" + dataPermission + "]";
 	}
 
 	@Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -60,7 +61,12 @@ import org.datagear.util.i18n.Label;
  *   categories: "..." 或者 {name: "...", ...} 或者 ["...", "...", ...] 或者 [ {name: "...", ...}, {name: "...", ...}, ... ],
  *   或者（兼容3.0.1版本格式）
  *   category: "..." 或者 {name: "...", ...} 或者 ["...", "...", ...] 或者 [ {name: "...", ...}, {name: "...", ...}, ... ],
- *   categoryOrders: 整数值 或者 [ 整数值, 整数值, ... ]
+ *   categoryOrders: 整数值 或者 [ 整数值, 整数值, ... ],
+ *   author: "...",
+ *   contact: "...",
+ *   issueDate: "...",
+ *   platformVersion: "...",
+ *   additions: { "...": ..., ... }
  * }
  * </pre>
  * </code>
@@ -83,7 +89,12 @@ public class JsonChartPluginPropertiesResolver
 	public static final String JSON_PROPERTY_ORDER = ChartPlugin.PROPERTY_ORDER;
 	public static final String JSON_PROPERTY_CATEGORIES = ChartPlugin.PROPERTY_CATEGORIES;
 	public static final String JSON_PROPERTY_CATEGORY_ORDERS = ChartPlugin.PROPERTY_CATEGORY_ORDERS;
+	public static final String JSON_PROPERTY_AUTHOR = ChartPlugin.PROPERTY_AUTHOR;
+	public static final String JSON_PROPERTY_CONTACT = ChartPlugin.PROPERTY_CONTACT;
+	public static final String JSON_PROPERTY_ISSUE_DATE = ChartPlugin.PROPERTY_ISSUE_DATE;
+	public static final String JSON_PROPERTY_PLATFORM_VERSION = ChartPlugin.PROPERTY_PLATFORM_VERSION;
 	public static final String JSON_PROPERTY_ICONS = "icons";
+	public static final String JSON_PROPERTY_ADDITIONS = ChartPlugin.PROPERTY_ADDITIONS;
 
 	/**
 	 * 3.0.1版本的单类别属性名，已在3.1.0版本中被{@linkplain #JSON_PROPERTY_CATEGORIES}代替。
@@ -109,14 +120,14 @@ public class JsonChartPluginPropertiesResolver
 	 */
 	public void resolveChartPluginProperties(AbstractChartPlugin chartPlugin, Map<String, ?> properties)
 	{
-		chartPlugin.setId((String) properties.get(JSON_PROPERTY_ID));
+		chartPlugin.setId(convertToString(properties.get(JSON_PROPERTY_ID)));
 		chartPlugin.setNameLabel(convertToLabel(properties.get(JSON_PROPERTY_NAME_LABEL)));
 		chartPlugin.setDescLabel(convertToLabel(properties.get(JSON_PROPERTY_DESC_LABEL)));
 		chartPlugin.setIconResourceNames(convertToIconResourceNames(properties.get(JSON_PROPERTY_ICONS)));
 		chartPlugin.setAttributes(convertToAttributes(properties.get(JSON_PROPERTY_ATTRIBUTES)));
-		chartPlugin.setDataSigns(convertToDataSigns(properties.get(JSON_PROPERTY_DATA_SIGNS)));
+		chartPlugin.setDataSigns(convertToDataSigns(properties.get(JSON_PROPERTY_DATA_SIGNS), null));
 		chartPlugin.setDataSetRange(convertToDataSetRange(properties.get(JSON_PROPERTY_DATA_SET_RANGE)));
-		chartPlugin.setVersion((String) properties.get(JSON_PROPERTY_VERSION));
+		chartPlugin.setVersion(convertToString(properties.get(JSON_PROPERTY_VERSION)));
 		chartPlugin.setOrder(convertToInt(properties.get(JSON_PROPERTY_ORDER), chartPlugin.getOrder()));
 
 		Object categoriesObj = properties.get(JSON_PROPERTY_CATEGORIES);
@@ -126,6 +137,12 @@ public class JsonChartPluginPropertiesResolver
 
 		chartPlugin.setCategoryOrders(
 				convertToCategoryOrders(properties.get(JSON_PROPERTY_CATEGORY_ORDERS), chartPlugin.getOrder()));
+
+		chartPlugin.setAuthor(convertToString(properties.get(JSON_PROPERTY_AUTHOR)));
+		chartPlugin.setContact(convertToString(properties.get(JSON_PROPERTY_CONTACT)));
+		chartPlugin.setIssueDate(convertToString(properties.get(JSON_PROPERTY_ISSUE_DATE)));
+		chartPlugin.setPlatformVersion(convertToString(properties.get(JSON_PROPERTY_PLATFORM_VERSION)));
+		chartPlugin.setAdditions(convertToAdditions(properties.get(JSON_PROPERTY_ADDITIONS)));
 	}
 
 	/**
@@ -225,7 +242,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException(
-					"Convert object of type [" + obj.getClass().getName() + "] to icon map is not supported");
+					"Convert object of type [" + obj.getClass().getName() + "] to icon map unsupported");
 	}
 
 	/**
@@ -241,9 +258,11 @@ public class JsonChartPluginPropertiesResolver
 	 * </p>
 	 * 
 	 * @param obj
+	 * @param parent
+	 *            允许{@code null}
 	 * @return
 	 */
-	protected List<DataSign> convertToDataSigns(Object obj)
+	protected List<DataSign> convertToDataSigns(Object obj, DataSign parent)
 	{
 		if (obj == null)
 			return null;
@@ -255,7 +274,7 @@ public class JsonChartPluginPropertiesResolver
 	
 			for (Object ele : array)
 			{
-				DataSign dataSign = convertToDataSign(ele);
+				DataSign dataSign = convertToDataSign(ele, parent);
 	
 				if (dataSign != null)
 					dataSigns.add(dataSign);
@@ -272,13 +291,12 @@ public class JsonChartPluginPropertiesResolver
 			Object[] array = new Object[collection.size()];
 			collection.toArray(array);
 	
-			return convertToDataSigns(array);
+			return convertToDataSigns(array, parent);
 		}
 		else
 		{
 			Object[] array = new Object[] { obj };
-	
-			return convertToDataSigns(array);
+			return convertToDataSigns(array, parent);
 		}
 	}
 
@@ -286,9 +304,11 @@ public class JsonChartPluginPropertiesResolver
 	 * 将对象转换为{@linkplain DataSign}。
 	 * 
 	 * @param obj
+	 * @param parent
+	 *            允许{@code null}
 	 * @return
 	 */
-	protected DataSign convertToDataSign(Object obj)
+	protected DataSign convertToDataSign(Object obj, DataSign parent)
 	{
 		if (obj == null)
 			return null;
@@ -304,18 +324,87 @@ public class JsonChartPluginPropertiesResolver
 				return null;
 	
 			DataSign dataSign = createDataSign();
+
 			dataSign.setName(name);
-	
+			dataSign.setTargets(convertToDataSignTargets(map.get(DataSign.PROPERTY_TARGETS), parent));
 			dataSign.setRequired(convertToDataSignRequired(map.get(DataSign.PROPERTY_REQUIRED)));
 			dataSign.setMultiple(convertToDataSignMultiple(map.get(DataSign.PROPERTY_MULTIPLE)));
 			dataSign.setNameLabel(convertToLabel(map.get(DataSign.PROPERTY_NAME_LABEL)));
 			dataSign.setDescLabel(convertToLabel(map.get(DataSign.PROPERTY_DESC_LABEL)));
+			dataSign.setAdditions(convertToDataSignAdditions(map.get(DataSign.PROPERTY_ADDITIONS)));
+
+			dataSign.setChildren(convertToDataSigns(map.get(DataSign.PROPERTY_CHILDREN), dataSign));
 	
 			return dataSign;
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ DataSign.class.getName() + "] is not supported");
+					+ DataSign.class.getName() + "] unsupported");
+	}
+
+	/**
+	 * 转换为{@linkplain DataSign#getTargets()}。
+	 * <p>
+	 * 支持格式：{@code "..."}、{@code [ "...", ... ]}
+	 * </p>
+	 * 
+	 * @param v
+	 * @param parent
+	 * @return
+	 */
+	protected String[] convertToDataSignTargets(Object v, DataSign parent)
+	{
+		String[] targets;
+
+		// 设为默认值，以兼容旧版逻辑
+		if(v == null)
+		{
+			targets = DataSign.TARGETS_FIELDS;
+		}
+		else if (v instanceof String)
+		{
+			targets = convertToDataSignTargets(Arrays.asList(v), parent);
+		}
+		else if (v instanceof Object[])
+		{
+			targets = convertToDataSignTargets(Arrays.asList((Object[]) v), parent);
+		}
+		else if (v instanceof Collection<?>)
+		{
+			Collection<?> collection = (Collection<?>) v;
+			targets = new String[collection.size()];
+
+			int idx = 0;
+			for (Object ele : collection)
+			{
+				if (ele instanceof String)
+				{
+					String eleStr = (String) ele;
+					String dsv;
+
+					if (DataSign.TARGET_DATASET.equalsIgnoreCase(eleStr))
+					{
+						dsv = DataSign.TARGET_DATASET;
+					}
+					else if (DataSign.TARGET_FIELD.equalsIgnoreCase(eleStr))
+					{
+						dsv = DataSign.TARGET_FIELD;
+					}
+					else
+					{
+						dsv = eleStr;
+					}
+
+					targets[idx] = dsv;
+					idx++;
+				}
+			}
+		}
+		else
+			throw new UnsupportedOperationException("Convert object of type [" + v.getClass().getName() + "] to ["
+					+ DataSign.class.getName() + ".targets] unsupported");
+
+		return targets;
 	}
 
 	protected boolean convertToDataSignRequired(Object v)
@@ -330,6 +419,18 @@ public class JsonChartPluginPropertiesResolver
 		// 不要修改这里的默认值，因为会影响插件规范
 		boolean dftValue = false;
 		return convertToBoolean(v, dftValue);
+	}
+
+	@SuppressWarnings("unchecked")
+	protected Map<String, ?> convertToDataSignAdditions(Object obj)
+	{
+		if (obj == null)
+			return null;
+		else if (obj instanceof Map<?, ?>)
+			return (Map<String, ?>) obj;
+		else
+			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
+					+ DataSign.class.getName() + ".additions] unsupported");
 	}
 
 	/**
@@ -415,14 +516,14 @@ public class JsonChartPluginPropertiesResolver
 			attribute.setRequired(convertToAttributeRequired(map.get(ChartPluginAttribute.PROPERTY_REQUIRED)));
 			attribute.setInputType(convertToAttributeInputType(map.get(ChartPluginAttribute.PROPERTY_INPUT_TYPE)));
 			attribute.setInputPayload(convertToAttributeInputPayload(map.get(ChartPluginAttribute.PROPERTY_INPUT_PAYLOAD)));
-			attribute.setGroup(convertToGroup(map.get(ChartPluginAttribute.PROPERTY_GROUP)));
+			attribute.setGroup(convertToAttributeGroup(map.get(ChartPluginAttribute.PROPERTY_GROUP)));
 			attribute.setAdditions(convertToAttributeAdditions(map.get(ChartPluginAttribute.PROPERTY_ADDITIONS)));
 
 			return attribute;
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ ChartPluginAttribute.class.getName() + "] is not supported");
+					+ ChartPluginAttribute.class.getName() + "] unsupported");
 	}
 
 	protected boolean convertToAttributeRequired(Object v)
@@ -479,7 +580,7 @@ public class JsonChartPluginPropertiesResolver
 		return obj;
 	}
 
-	protected Group convertToGroup(Object obj)
+	protected Group convertToAttributeGroup(Object obj)
 	{
 		if (obj == null)
 			return null;
@@ -511,7 +612,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ Group.class.getName() + "] is not supported");
+					+ Group.class.getName() + "] unsupported");
 	}
 
 	@SuppressWarnings("unchecked")
@@ -523,7 +624,7 @@ public class JsonChartPluginPropertiesResolver
 			return (Map<String, ?>) obj;
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ ChartPluginAttribute.class.getName() + ".additions] is not supported");
+					+ ChartPluginAttribute.class.getName() + ".additions] unsupported");
 	}
 
 	/**
@@ -629,7 +730,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ ChartPluginDataSetRange.class.getName() + "] is not supported");
+					+ ChartPluginDataSetRange.class.getName() + "] unsupported");
 	}
 
 	protected Range convertToRange(Map<String, ?> map)
@@ -720,7 +821,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ Category.class.getName() + "] is not supported");
+					+ Category.class.getName() + "] unsupported");
 	}
 
 	protected List<Integer> convertToCategoryOrders(Object obj, int defaultOrder)
@@ -749,6 +850,18 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			orders.add(convertToInt(obj, defaultOrder));
+	}
+
+	@SuppressWarnings("unchecked")
+	protected Map<String, ?> convertToAdditions(Object obj)
+	{
+		if (obj == null)
+			return null;
+		else if (obj instanceof Map<?, ?>)
+			return (Map<String, ?>) obj;
+		else
+			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
+					+ ChartPlugin.class.getName() + ".additions] unsupported");
 	}
 
 	/**
@@ -781,7 +894,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ enumType.getName() + "] is not supported");
+					+ enumType.getName() + "] unsupported");
 	}
 
 	/**
@@ -818,13 +931,13 @@ public class JsonChartPluginPropertiesResolver
 				label.setLocaleValues((Map<String, String>)localeValues);
 			else
 				throw new UnsupportedOperationException("Convert object of type [" + localeValues.getClass().getName() + "] to ["
-						+ Label.class.getName() + ".localeValues] is not supported");
+						+ Label.class.getName() + ".localeValues] unsupported");
 	
 			return label;
 		}
 		else
 			throw new UnsupportedOperationException("Convert object of type [" + obj.getClass().getName() + "] to ["
-					+ Label.class.getName() + "] is not supported");
+					+ Label.class.getName() + "] unsupported");
 	}
 
 	/**
@@ -847,7 +960,7 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException(
-					"Convert object [" + obj + "] to [" + boolean.class.getName() + "] is not supported");
+					"Convert object [" + obj + "] to [" + boolean.class.getName() + "] unsupported");
 	}
 
 	protected int convertToInt(Object obj, int defaultValue)
@@ -869,9 +982,19 @@ public class JsonChartPluginPropertiesResolver
 		}
 		else
 			throw new UnsupportedOperationException(
-					"Convert object [" + obj + "] to [" + Integer.class.getName() + "] is not supported");
+					"Convert object [" + obj + "] to [" + Integer.class.getName() + "] unsupported");
 	}
 	
+	protected String convertToString(Object obj)
+	{
+		if (obj == null)
+			return null;
+		else if (obj instanceof String)
+			return (String) obj;
+		else
+			return obj.toString();
+	}
+
 	protected Label createLabel()
 	{
 		return new Label();

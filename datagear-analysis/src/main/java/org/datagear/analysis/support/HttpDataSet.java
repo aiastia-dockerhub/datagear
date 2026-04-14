@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,8 +17,8 @@
 
 package org.datagear.analysis.support;
 
-import java.io.IOException;
-import java.io.Reader;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hc.client5.http.HttpResponseException;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpDelete;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -35,20 +34,18 @@ import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
 import org.apache.hc.core5.http.ClassicHttpRequest;
-import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.NameValuePair;
-import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicNameValuePair;
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
-import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.ResolvedDataSetResult;
-import org.datagear.analysis.support.AbstractJsonDataSet.JsonDataSetResource;
+import org.datagear.analysis.support.httpresult.AbstractHttpResultHandler;
+import org.datagear.analysis.support.httpresult.Base64HttpResultHandler;
+import org.datagear.analysis.support.httpresult.JsonHttpResultHandler;
+import org.datagear.analysis.support.httpresult.TextHttpResultHandler;
 import org.datagear.util.IOUtil;
 import org.datagear.util.StringUtil;
 import org.slf4j.Logger;
@@ -65,8 +62,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * @author datagear@163.com
  *
  */
-public class HttpDataSet extends AbstractResolvableDataSet
+public class HttpDataSet extends AbstractResolvableDataSet implements ResultJsonRuleAware
 {
+	private static final long serialVersionUID = 1L;
+
 	protected static final Logger LOGGER = LoggerFactory.getLogger(HttpDataSet.class);
 
 	public static final String REQUEST_METHOD_GET = "GET";
@@ -105,17 +104,40 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	public static final String REQUEST_CONTENT_TYPE_TEXT_XML = "TEXT_XML";
 
 	/**
-	 * 响应内容类型：JSON，对应的HTTP响应类型为：application/json
+	 * 响应内容类型：JSON
 	 */
 	public static final String RESPONSE_CONTENT_TYPE_JSON = "JSON";
+
+	/**
+	 * 响应内容类型：文本
+	 */
+	public static final String RESPONSE_CONTENT_TYPE_TEXT = "TEXT";
+
+	/**
+	 * 响应内容类型：Base64编码二进制
+	 */
+	public static final String RESPONSE_CONTENT_TYPE_BASE64 = "BASE64";
 
 	protected static final List<NameValuePair> NOT_NAME_VALUE_PAIR_OBJ_ARRAY_JSON = new ArrayList<>(0);
 
 	/** HTTP客户端 */
-	private HttpClient httpClient;
+	private transient HttpClient httpClient;
 
 	/** HTTP请求地址 */
 	private String uri;
+
+	/**
+	 * 是否编码uri。
+	 * <p>
+	 * 当uri中包含中文时，通常需要进行编码。
+	 * </p>
+	 * <p>
+	 * 注意：这个属性在{@code 4.7.0}版本之前是没有的，因此默认值应设为{@code false}，以兼容旧数据。
+	 * </p>
+	 * 
+	 * @since 4.7.0
+	 */
+	private boolean encodeUri = false;
 
 	/** 请求头JSON文本 */
 	private String headerContent = "";
@@ -135,8 +157,10 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	/** 响应类型 */
 	private String responseContentType = RESPONSE_CONTENT_TYPE_JSON;
 
-	/** 响应数据的JSON路径 */
-	private String responseDataJsonPath = "";
+	/**
+	 * 当{@code #responseContentType}是{@linkplain #RESPONSE_CONTENT_TYPE_JSON}时，响应数据的JSON规则
+	 */
+	private ResultJsonRule resultJsonRule = null;
 
 	public HttpDataSet()
 	{
@@ -150,9 +174,9 @@ public class HttpDataSet extends AbstractResolvableDataSet
 		this.uri = uri;
 	}
 
-	public HttpDataSet(String id, String name, List<DataSetProperty> properties, HttpClient httpClient, String uri)
+	public HttpDataSet(String id, String name, List<DataSetField> fields, HttpClient httpClient, String uri)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.httpClient = httpClient;
 		this.uri = uri;
 	}
@@ -183,6 +207,16 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	public void setUri(String uri)
 	{
 		this.uri = uri;
+	}
+
+	public boolean isEncodeUri()
+	{
+		return encodeUri;
+	}
+
+	public void setEncodeUri(boolean encodeUri)
+	{
+		this.encodeUri = encodeUri;
 	}
 
 	public String getHeaderContent()
@@ -309,7 +343,7 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	/**
 	 * 设置相应类型。
 	 * <p>
-	 * 目前仅支持{@linkplain #RESPONSE_CONTENT_TYPE_JSON}，且是默认值。
+	 * 目前支持参考{@code RESPONSE_CONTENT_TYPE_*}，{@linkplain #RESPONSE_CONTENT_TYPE_JSON}是默认值。
 	 * </p>
 	 * 
 	 * @param responseContentType
@@ -319,28 +353,16 @@ public class HttpDataSet extends AbstractResolvableDataSet
 		this.responseContentType = responseContentType;
 	}
 
-	public String getResponseDataJsonPath()
+	@Override
+	public ResultJsonRule getResultJsonRule()
 	{
-		return responseDataJsonPath;
+		return resultJsonRule;
 	}
 
-	/**
-	 * 设置响应数据的JSON路径。
-	 * <p>
-	 * 当希望返回的是响应原始JSON数据的指定JSON路径值时，可以设置此项。
-	 * </p>
-	 * <p>
-	 * 具体格式参考{@linkplain AbstractJsonDataSet#setDataJsonPath(String)}。
-	 * </p>
-	 * <p>
-	 * 默认无数据路径，将直接返回响应原始JSON数据。
-	 * </p>
-	 * 
-	 * @param responseDataJsonPath
-	 */
-	public void setResponseDataJsonPath(String responseDataJsonPath)
+	@Override
+	public void setResultJsonRule(ResultJsonRule resultJsonRule)
 	{
-		this.responseDataJsonPath = responseDataJsonPath;
+		this.resultJsonRule = resultJsonRule;
 	}
 
 	@Override
@@ -351,8 +373,8 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	}
 
 	@Override
-	protected TemplateResolvedDataSetResult resolveResult(DataSetQuery query, List<DataSetProperty> properties,
-			boolean resolveProperties) throws DataSetException
+	protected TemplateResolvedDataSetResult resolveResult(DataSetQuery query, boolean resolveFields)
+			throws DataSetException
 	{
 		String uri = null;
 		String headerContent = null;
@@ -361,19 +383,17 @@ public class HttpDataSet extends AbstractResolvableDataSet
 		try
 		{
 			uri = resolveTemplateUri(query);
-
+			uri = encodeUriIfRequired(uri);
 			ClassicHttpRequest request = createHttpRequest(uri);
-
 			headerContent = setHttpHeaders(request, query);
 			requestContent = setHttpEntity(request, query);
 
-			JsonResponseHandler responseHandler = new JsonResponseHandler(query, properties, resolveProperties,
-					getResponseDataJsonPath());
+			AbstractHttpResultHandler resultHandler = buildHttpResultHandler(query, resolveFields);
+			ResolvedDataSetResult result = this.httpClient.execute(request, resultHandler);
 
-			ResolvedDataSetResult result = this.httpClient.execute(request, responseHandler);
-
-			return new TemplateResolvedDataSetResult(result.getResult(), result.getProperties(),
-					buildResolvedTemplate(uri, headerContent, requestContent));
+			TemplateResolvedDataSetResult tplResult = buildTemplateResolvedDataSetResult(result, uri, resolveFields,
+					headerContent, requestContent);
+			return tplResult;
 		}
 		catch (DataSetException e)
 		{
@@ -381,12 +401,59 @@ public class HttpDataSet extends AbstractResolvableDataSet
 		}
 		catch (Throwable t)
 		{
-			throw new DataSetSourceParseException(t, buildResolvedTemplate(uri, headerContent, requestContent));
+			throw new DataSetSourceParseException(t,
+					buildResolvedTemplate(uri, resolveFields, headerContent, requestContent));
 		}
 	}
 
-	protected String buildResolvedTemplate(String uri, String headerContent, String requestContent)
+	protected TemplateResolvedDataSetResult buildTemplateResolvedDataSetResult(ResolvedDataSetResult result, String uri,
+			boolean buildDetail, String headerContent, String requestContent) throws Throwable
 	{
+		return new TemplateResolvedDataSetResult(result.getResult(), result.getFields(),
+				buildResolvedTemplate(uri, buildDetail, headerContent, requestContent));
+	}
+
+	protected AbstractHttpResultHandler buildHttpResultHandler(DataSetQuery query, boolean resolveFields)
+			throws Exception
+	{
+		AbstractHttpResultHandler resultHandler;
+
+		if (RESPONSE_CONTENT_TYPE_TEXT.equalsIgnoreCase(getResponseContentType()))
+		{
+			resultHandler = new TextHttpResultHandler(this, query, resolveFields);
+		}
+		else if (RESPONSE_CONTENT_TYPE_BASE64.equalsIgnoreCase(getResponseContentType()))
+		{
+			resultHandler = new Base64HttpResultHandler(this, query, resolveFields);
+		}
+		else
+		{
+			resultHandler = new JsonHttpResultHandler(this, query, resolveFields);
+		}
+
+		return resultHandler;
+	}
+
+	/**
+	 * 对URI进行编码，避免出现中文参数乱码问题。
+	 * 
+	 * @param uri
+	 * @return
+	 * @throws URISyntaxException
+	 */
+	protected String encodeUriIfRequired(String uri) throws URISyntaxException
+	{
+		if (!this.encodeUri)
+			return uri;
+
+		return new URI(uri).toASCIIString();
+	}
+
+	protected String buildResolvedTemplate(String uri, boolean buildDetail, String headerContent, String requestContent)
+	{
+		if (!buildDetail)
+			return (uri == null ? "" : uri);
+
 		StringBuilder sb = new StringBuilder();
 
 		if (!StringUtil.isEmpty(uri))
@@ -569,192 +636,5 @@ public class HttpDataSet extends AbstractResolvableDataSet
 	protected ObjectMapper getObjectMapperNonStardand()
 	{
 		return JsonSupport.getObjectMapperNonStardand();
-	}
-
-	protected static class JsonResponseHandler implements HttpClientResponseHandler<ResolvedDataSetResult>
-	{
-		private DataSetQuery dataSetQuery;
-
-		private List<DataSetProperty> properties;
-
-		private boolean resolveProperties;
-
-		private String responseDataJsonPath;
-
-		public JsonResponseHandler()
-		{
-			super();
-		}
-
-		public JsonResponseHandler(DataSetQuery dataSetQuery, List<DataSetProperty> properties,
-				boolean resolveProperties, String responseDataJsonPath)
-		{
-			super();
-			this.dataSetQuery = dataSetQuery;
-			this.properties = (properties == null ? Collections.emptyList() : properties);
-			this.resolveProperties = resolveProperties;
-			this.responseDataJsonPath = responseDataJsonPath;
-		}
-
-		public DataSetQuery getDataSetQuery()
-		{
-			return dataSetQuery;
-		}
-
-		public void setDataSetQuery(DataSetQuery dataSetQuery)
-		{
-			this.dataSetQuery = dataSetQuery;
-		}
-
-		public List<DataSetProperty> getProperties()
-		{
-			return properties;
-		}
-
-		public void setProperties(List<DataSetProperty> properties)
-		{
-			this.properties = properties;
-		}
-
-		public boolean isResolveProperties()
-		{
-			return resolveProperties;
-		}
-
-		public void setResolveProperties(boolean resolveProperties)
-		{
-			this.resolveProperties = resolveProperties;
-		}
-
-		public String getResponseDataJsonPath()
-		{
-			return responseDataJsonPath;
-		}
-
-		public void setResponseDataJsonPath(String responseDataJsonPath)
-		{
-			this.responseDataJsonPath = responseDataJsonPath;
-		}
-
-		@Override
-		public ResolvedDataSetResult handleResponse(ClassicHttpResponse response) throws HttpException, IOException
-		{
-			int code = response.getCode();
-			HttpEntity entity = response.getEntity();
-
-			if (code < 200 || code >= 300)
-				throw new HttpResponseException(code, response.getReasonPhrase());
-
-			Reader reader = null;
-
-			if (entity == null)
-				reader = IOUtil.getReader("");
-			else
-			{
-				Charset contentCharset = resolveCharset(entity, ContentType.APPLICATION_JSON.getCharset());
-				reader = IOUtil.getReader(entity.getContent(), contentCharset);
-			}
-
-			if (this.resolveProperties)
-			{
-				HttpResponseJsonDataSet jsonDataSet = new HttpResponseJsonDataSet(this.properties, reader,
-						this.responseDataJsonPath);
-				return jsonDataSet.resolve(this.dataSetQuery);
-			}
-			else
-			{
-				HttpResponseJsonDataSet jsonDataSet = new HttpResponseJsonDataSet(this.properties, reader,
-						this.responseDataJsonPath);
-
-				DataSetResult result = jsonDataSet.getResult(this.dataSetQuery);
-				return new ResolvedDataSetResult(result, this.properties);
-			}
-		}
-
-		protected Charset resolveCharset(HttpEntity entity, Charset defaultCharset)
-		{
-			Charset contentCharset = null;
-
-			String contentTypeStr = entity.getContentType();
-
-			if (!StringUtil.isEmpty(contentTypeStr))
-			{
-				try
-				{
-					ContentType contentType = ContentType.parse(contentTypeStr);
-					contentCharset = contentType.getCharset();
-				}
-				catch (Throwable t)
-				{
-					LOGGER.warn("Default charset [" + defaultCharset + "] will be used because parse error", t);
-
-					contentCharset = defaultCharset;
-				}
-			}
-
-			return (contentCharset != null ? contentCharset : defaultCharset);
-		}
-	}
-
-	protected static class HttpResponseJsonDataSet extends AbstractJsonDataSet<HttpResponseJsonDataSetResource>
-	{
-		private Reader responseJsonReader;
-
-		public HttpResponseJsonDataSet(Reader responseJsonReader, String responseDataJsonPath)
-		{
-			super(HttpResponseJsonDataSet.class.getName(), HttpResponseJsonDataSet.class.getName());
-			this.responseJsonReader = responseJsonReader;
-			super.setDataJsonPath(responseDataJsonPath);
-		}
-
-		public HttpResponseJsonDataSet(List<DataSetProperty> properties, Reader responseJsonReader,
-				String responseDataJsonPath)
-		{
-			super(HttpResponseJsonDataSet.class.getName(), HttpResponseJsonDataSet.class.getName(), properties);
-			this.responseJsonReader = responseJsonReader;
-			super.setDataJsonPath(responseDataJsonPath);
-		}
-
-		@Override
-		protected HttpResponseJsonDataSetResource getResource(DataSetQuery query, List<DataSetProperty> properties,
-				boolean resolveProperties) throws Throwable
-		{
-			return new HttpResponseJsonDataSetResource("", getDataJsonPath(), this.responseJsonReader);
-		}
-	}
-
-	protected static class HttpResponseJsonDataSetResource extends JsonDataSetResource
-	{
-		private static final long serialVersionUID = 1L;
-		
-		private transient Reader jsonReader;
-
-		public HttpResponseJsonDataSetResource()
-		{
-			super();
-		}
-
-		public HttpResponseJsonDataSetResource(String resolvedTemplate, String dataJsonPath, Reader jsonReader)
-		{
-			super(resolvedTemplate, dataJsonPath);
-			this.jsonReader = jsonReader;
-		}
-
-		public Reader getJsonReader()
-		{
-			return jsonReader;
-		}
-
-		@Override
-		public boolean isIdempotent()
-		{
-			return false;
-		}
-
-		@Override
-		public Reader getReader() throws Throwable
-		{
-			return this.jsonReader;
-		}
 	}
 }

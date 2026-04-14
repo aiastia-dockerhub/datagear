@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -38,7 +38,7 @@
 					<@spring.message code='savePath' />
 				</label>
 		        <div class="field-input col-12 md:col-9">
-		        	<p-inputtext id="${pid}savePath" v-model="fm.savePath" type="text" class="input w-full"
+		        	<p-inputtext id="${pid}savePath" v-model="fm.savePath" type="text" class="input w-full validate-normalizer"
 		        		name="savePath" required maxlength="200" autofocus>
 		        	</p-inputtext>
 		        </div>
@@ -54,7 +54,7 @@
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -65,6 +65,7 @@
 (function(po)
 {
 	po.submitUrl = "/dashboardGlobalRes/"+po.submitAction;
+	po.defaultDir = "${defaultDir!''}";
 	
 	po.beforeSubmitForm = function(action)
 	{
@@ -72,7 +73,17 @@
 	};
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
-	po.setupForm(formModel, { closeAfterSubmit: false });
+	po.setupForm(formModel, { closeAfterSubmit: false },
+	{
+		customNormalizers:
+		{
+			savePath: function()
+			{
+				var fm = po.vueFormModel();
+				return (fm.savePath == po.defaultDir ? "" : fm.savePath);
+			}
+		}
+	});
 	
 	po.vueMounted(function()
 	{
@@ -90,10 +101,9 @@
 		po.codeEditor = po.createCodeEditor(po.elementOfId("${pid}codeEditor"), resourceEditorOptions);
 		po.setCodeTextTimeout(po.codeEditor, fm.resourceContent);
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

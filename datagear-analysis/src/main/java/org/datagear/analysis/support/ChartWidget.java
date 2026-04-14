@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,11 +17,9 @@
 
 package org.datagear.analysis.support;
 
-import java.io.Serializable;
-
 import org.datagear.analysis.AbstractIdentifiable;
 import org.datagear.analysis.Chart;
-import org.datagear.analysis.ChartDataSet;
+import org.datagear.analysis.DataSetBind;
 import org.datagear.analysis.ChartDefinition;
 import org.datagear.analysis.ChartPlugin;
 import org.datagear.analysis.ChartPluginManager;
@@ -44,6 +42,8 @@ import org.datagear.util.StringUtil;
  */
 public class ChartWidget extends ChartDefinition
 {
+	private static final long serialVersionUID = 1L;
+
 	/** 图表部件渲染时的部件信息属性名 */
 	public static final String ATTR_CHART_WIDGET = BUILTIN_ATTR_PREFIX + "CHART_WIDGET";
 
@@ -54,9 +54,9 @@ public class ChartWidget extends ChartDefinition
 		super();
 	}
 
-	public ChartWidget(String id, String name, ChartDataSet[] chartDataSets, ChartPlugin plugin)
+	public ChartWidget(String id, String name, DataSetBind[] dataSetBinds, ChartPlugin plugin)
 	{
-		super(id, name, chartDataSets);
+		super(id, name, dataSetBinds);
 		this.plugin = plugin;
 	}
 
@@ -160,7 +160,7 @@ public class ChartWidget extends ChartDefinition
 	 * 
 	 * @author datagear@163.com
 	 */
-	public static class ChartWidgetId extends AbstractIdentifiable implements Serializable
+	public static class ChartWidgetId extends AbstractIdentifiable
 	{
 		private static final long serialVersionUID = 1L;
 

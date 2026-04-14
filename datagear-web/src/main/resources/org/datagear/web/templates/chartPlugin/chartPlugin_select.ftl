@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -27,18 +27,19 @@
 	<#include "../include/html_app_name_suffix.ftl">
 </title>
 </head>
-<body class="p-card no-border">
+<body class="p-card no-border h-screen m-0">
 <#include "../include/page_obj.ftl">
-<div id="${pid}" class="page page-manager page-chartPlugin-select">
-	<div class="page-header grid align-items-center">
+<div id="${pid}" class="page page-manager page-chartPlugin-select h-full flex flex-column overflow-auto">
+	<div class="page-header grid grid-nogutter align-items-center p-1 flex-grow-0">
 		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
 			<#include "../include/page_search_form.ftl">
 		</div>
-		<div class="h-opts col-12 text-right" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
+		<div class="operations col-12 flex gap-1 flex-wrap md:justify-content-end" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
 			<p-button label="<@spring.message code='confirm' />" @click="onSelect"></p-button>
+			<p-button label="<@spring.message code='view' />" @click="onView" class="p-button-secondary"></p-button>
 		</div>
 	</div>
-	<div class="page-content">
+	<div class="page-content flex-grow-1 overflow-auto">
 		<div class="grid grid-nogutter m-0 flex-nowrap h-full">
 			<div class="col-3 p-2 p-card">
 				<div class="flex flex-column h-full">
@@ -57,15 +58,15 @@
 				<div class="chart-plugins-scroller h-full overflow-auto">
 					<div class="chart-plugins-wrapper relative">
 						<div v-for="(ctrz, index) in pm.categorizations" :key="ctrz.category.name" :id="toCategorizationEleId(ctrz)" class="mb-3">
-							<p-dataview :value="pm.categorizations[index].chartPlugins" layout="grid">
+							<p-dataview :value="ctrz.chartPlugins" layout="grid">
 								<template #header>
 									{{formatCategoryNameLabel(ctrz)}}
 								</template>
 								<template #grid="slotProps">
-									<div class="col-12 md:col-4 p-3">
-										<div class="p-card p-3 cursor-pointer"
+									<div class="col-12 md:col-4 p-2">
+										<div class="p-card p-3 cursor-pointer hover:surface-50"
 											@click="onSelectChartPlugin(slotProps.data)"
-											:class="{'state-active': slotProps.data.id == pm.selectedChartPluginId }">
+											:class="{'state-active surface-50 text-color': slotProps.data.id == pm.selectedChartPluginId }">
 											<div v-html="formatChartPlugin(slotProps.data)"></div>
 										</div>
 									</div>
@@ -194,7 +195,7 @@
 		
 		formatChartPlugin: function(chartPlugin)
 		{
-			return $.toChartPluginHtml(chartPlugin, po.contextPath, {vertical:true});
+			return $.toChartPluginHtml(chartPlugin, po.contextPath, {vertical:true, showVersion:true, showAuthor:true});
 		},
 		
 		onCategoryMenuItemChange: function(e)
@@ -217,6 +218,11 @@
 		onSelect: function()
 		{
 			po.handleSelectAction();
+		},
+		
+		onView: function()
+		{
+			po.handleOpenOfAction("/chartPlugin/view");
 		}
 	});
 
@@ -226,9 +232,9 @@
 	});
 
 	po.setupAction();
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

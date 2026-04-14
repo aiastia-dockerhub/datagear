@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,8 @@
 
 package org.datagear.web.controller;
 
+import java.util.List;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -26,10 +28,10 @@ import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.util.IDUtil;
 import org.datagear.web.util.OperationMessage;
-import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -64,37 +66,46 @@ public class RoleController extends AbstractController
 	}
 
 	@RequestMapping("/add")
-	public String add(HttpServletRequest request, org.springframework.ui.Model model)
+	public String add(HttpServletRequest request, Model model)
 	{
-		Role role = new Role();
+		setFormAction(model, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
 
-		setFormModel(model, role, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
+		Role entity = createAdd(request, model);
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 
 		return "/role/role_form";
+	}
+
+	protected Role createAdd(HttpServletRequest request, Model model)
+	{
+		return createInstance();
 	}
 
 	@RequestMapping(value = "/saveAdd", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> saveAdd(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody Role role)
+			@RequestBody Role entity)
 	{
-		if (isBlank(role.getName()))
-			throw new IllegalInputException();
+		entity.setId(IDUtil.randomIdOnTime20());
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+		this.roleService.add(entity);
 
-		role.setId(IDUtil.randomIdOnTime20());
+		toFormResponseData(request, entity);
 
-		this.roleService.add(role);
-
-		return optSuccessDataResponseEntity(request, role);
+		return optSuccessDataResponseEntity(request, entity);
 	}
 
 	@RequestMapping("/edit")
-	public String edit(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+	public String edit(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestParam("id") String id)
 	{
-		Role role = getByIdForEdit(this.roleService, id);
+		setFormAction(model, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
 
-		setFormModel(model, role, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
+		Role entity = getByIdForEdit(this.roleService, id);
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 		
 		return "/role/role_form";
 	}
@@ -102,23 +113,26 @@ public class RoleController extends AbstractController
 	@RequestMapping(value = "/saveEdit", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> saveEdit(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody Role role)
+			@RequestBody Role entity)
 	{
-		if (isBlank(role.getName()))
-			throw new IllegalInputException();
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+		this.roleService.update(entity);
 
-		this.roleService.update(role);
+		toFormResponseData(request, entity);
 
-		return optSuccessDataResponseEntity(request, role);
+		return optSuccessDataResponseEntity(request, entity);
 	}
 
 	@RequestMapping("/view")
-	public String view(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+	public String view(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestParam("id") String id)
 	{
-		Role role = getByIdForView(this.roleService, id);
+		setFormAction(model, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
 
-		setFormModel(model, role, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
+		Role entity = getByIdForView(this.roleService, id);
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 		
 		return "/role/role_form";
 	}
@@ -133,17 +147,17 @@ public class RoleController extends AbstractController
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping(value = "/pagingQuery")
-	public String pagingQuery(HttpServletRequest request, HttpServletResponse response,
-			org.springframework.ui.Model model)
+	@RequestMapping(value = "/manage")
+	public String manage(HttpServletRequest request, HttpServletResponse response,
+			Model model)
 	{
-		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_QUERY);
-		setReadonlyActionByRole(model, WebUtils.getUser());
+		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_MANAGE);
+		setReadonlyAction(model);
 		return "/role/role_table";
 	}
 
 	@RequestMapping(value = "/select")
-	public String select(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
+	public String select(HttpServletRequest request, HttpServletResponse response, Model model)
 	{
 		setSelectAction(request, model);
 		return "/role/role_table";
@@ -154,9 +168,39 @@ public class RoleController extends AbstractController
 	public PagingData<Role> pagingQueryData(HttpServletRequest request, HttpServletResponse response,
 			@RequestBody(required = false) PagingQuery pagingQueryParam) throws Exception
 	{
-		final PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
+		PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
 
-		PagingData<Role> roles = this.roleService.pagingQuery(pagingQuery);
-		return roles;
+		PagingData<Role> pagingData = this.roleService.pagingQuery(pagingQuery);
+		toQueryResponseData(request, pagingData.getItems());
+
+		return pagingData;
+	}
+
+	protected void checkSaveEntity(HttpServletRequest request, Role entity)
+	{
+		if (isEmpty(entity.getId()) || isBlank(entity.getName()))
+			throw new IllegalInputException();
+	}
+
+	protected void setFormPageAttr(HttpServletRequest request, Model model, Role entity)
+	{
+		setFormModel(model, entity);
+	}
+
+	protected void inflateSaveEntity(HttpServletRequest request, Role entity)
+	{
+	}
+
+	protected void toFormResponseData(HttpServletRequest request, Role entity)
+	{
+	}
+
+	protected void toQueryResponseData(HttpServletRequest request, List<Role> items)
+	{
+	}
+
+	protected Role createInstance()
+	{
+		return new Role();
 	}
 }

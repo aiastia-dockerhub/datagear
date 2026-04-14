@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,6 +21,17 @@ import java.io.Serializable;
 
 /**
  * 版本号。
+ * <p>
+ * 示例：
+ * </p>
+ * <p>
+ * {@code 0.1}<br>
+ * {@code 1.2}<br>
+ * {@code 2.1.3}<br>
+ * {@code 3.2-A0}<br>
+ * {@code 3.3-B1}<br>
+ * {@code 3.5.2-B3}
+ * </p>
  * 
  * @author datagear@163.com
  *
@@ -89,6 +100,11 @@ public class Version implements Serializable, Comparable<Version>
 			this.revision = ZERO;
 		if (this.build == null)
 			this.build = "";
+	}
+
+	public Version(Version version)
+	{
+		this(version.major, version.minor, version.revision, version.build);
 	}
 
 	public String getMajor()
@@ -194,41 +210,33 @@ public class Version implements Serializable, Comparable<Version>
 	 */
 	public boolean isHigherThan(Version another)
 	{
-		return !isLowerThan(another) && !equals(another);
+		return !isLowerThan(another) && !isEqual(another);
 	}
 
-	@Override
-	public int compareTo(Version o)
-	{
-		if (this.isLowerThan(o))
-			return -1;
-		else if (this.equals(o))
-			return 0;
-		else
-			return 1;
-	}
-
-	@Override
-	public int hashCode()
-	{
-		final int prime = 31;
-		int result = 1;
-		result = prime * result + ((major == null) ? 0 : major.hashCode());
-		result = prime * result + ((minor == null) ? 0 : minor.hashCode());
-		result = prime * result + ((revision == null) ? 0 : revision.hashCode());
-		return result;
-	}
-
-	@Override
-	public boolean equals(Object obj)
+	/**
+	 * 是否相同版本号。
+	 * 
+	 * @param obj
+	 * @return
+	 */
+	public boolean isEqual(Object obj)
 	{
 		if (this == obj)
 			return true;
 		if (obj == null)
 			return false;
-		if (getClass() != obj.getClass())
+		if (!(obj instanceof Version))
 			return false;
+
 		Version other = (Version) obj;
+
+		if (build == null)
+		{
+			if (other.build != null)
+				return false;
+		}
+		else if (!build.equals(other.build))
+			return false;
 		if (major == null)
 		{
 			if (other.major != null)
@@ -250,16 +258,57 @@ public class Version implements Serializable, Comparable<Version>
 		}
 		else if (!revision.equals(other.revision))
 			return false;
-		if (build == null)
-		{
-			if (other.build != null)
-				return false;
-		}
-		else if (!build.equals(other.build))
-			return false;
 		return true;
 	}
 
+	/**
+	 * 返回字符串形式，仅包含版本信息。
+	 * 
+	 * @return
+	 */
+	public String stringOf()
+	{
+		StringBuilder sb = new StringBuilder();
+		sb.append(this.major).append(SPLITTER_D).append(this.minor).append(SPLITTER_D).append(this.revision);
+
+		if (!this.build.isEmpty())
+			sb.append(SPLITTER_L).append(this.build);
+
+		return sb.toString();
+	}
+
+	@Override
+	public int compareTo(Version o)
+	{
+		if (this.isLowerThan(o))
+			return -1;
+		else if (this.equals(o))
+			return 0;
+		else
+			return 1;
+	}
+
+	@Override
+	public int hashCode()
+	{
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((build == null) ? 0 : build.hashCode());
+		result = prime * result + ((major == null) ? 0 : major.hashCode());
+		result = prime * result + ((minor == null) ? 0 : minor.hashCode());
+		result = prime * result + ((revision == null) ? 0 : revision.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj)
+	{
+		return isEqual(obj);
+	}
+
+	/**
+	 * 要获取版本的字符串形式，应使用{@linkplain #stringOf()}。
+	 */
 	@Override
 	public String toString()
 	{
@@ -308,13 +357,7 @@ public class Version implements Serializable, Comparable<Version>
 	 */
 	public static String stringOf(Version version)
 	{
-		StringBuilder sb = new StringBuilder();
-		sb.append(version.major).append(SPLITTER_D).append(version.minor).append(SPLITTER_D).append(version.revision);
-
-		if (!version.build.isEmpty())
-			sb.append(SPLITTER_L).append(version.build);
-
-		return sb.toString();
+		return version.stringOf();
 	}
 
 	/**
@@ -329,7 +372,7 @@ public class Version implements Serializable, Comparable<Version>
 	 */
 	public static Version valueOf(String version) throws IllegalArgumentException
 	{
-		if (!isValidVersionString(version))
+		if (!isValidVersion(version))
 			throw new IllegalArgumentException("illegal version : " + version);
 
 		String[] vs = version.split(SPLITTER_D_REGEX);
@@ -365,12 +408,12 @@ public class Version implements Serializable, Comparable<Version>
 	}
 
 	/**
-	 * 字符串版本号是否合法。
+	 * 是否是合法的版本号。
 	 * 
 	 * @param version
 	 * @return
 	 */
-	public static boolean isValidVersionString(String version)
+	public static boolean isValidVersion(String version)
 	{
 		return (version != null && version.matches("\\d+(\\.\\d+){1,2}(\\-\\w+){0,1}"));
 	}

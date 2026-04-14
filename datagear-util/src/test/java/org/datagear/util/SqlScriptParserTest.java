@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -329,7 +329,7 @@ public class SqlScriptParserTest
 		InputStream inputStream = SqlScriptParserTest.class.getClassLoader()
 				.getResourceAsStream("org/datagear/util/SqlScriptParserTest.sql");
 
-		Reader reader = new InputStreamReader(inputStream, "UTF-8");
+		Reader reader = new InputStreamReader(inputStream, IOUtil.CHARSET_UTF_8);
 
 		SqlScriptParser parser = new SqlScriptParser(reader);
 
@@ -346,7 +346,7 @@ public class SqlScriptParserTest
 		InputStream inputStream = SqlScriptParserTest.class.getClassLoader()
 				.getResourceAsStream("org/datagear/util/SqlScriptParserTest.sql");
 
-		Reader reader = new InputStreamReader(inputStream, "UTF-8");
+		Reader reader = new InputStreamReader(inputStream, IOUtil.CHARSET_UTF_8);
 
 		SqlScriptParser parser = new SqlScriptParser(reader);
 
@@ -370,7 +370,7 @@ public class SqlScriptParserTest
 	 */
 	protected void assertForScriptFile(List<SqlStatement> sqlStatements) throws IOException
 	{
-		assertEquals(11, sqlStatements.size());
+		assertEquals(12, sqlStatements.size());
 
 		{
 			SqlStatement sqlStatement = sqlStatements.get(0);
@@ -486,6 +486,19 @@ public class SqlScriptParserTest
 			assertEquals(0, sqlStatement.getStartColumn());
 			assertEquals(40, sqlStatement.getEndRow());
 			assertEquals("--".length(), sqlStatement.getEndColumn());
+		}
+
+		{
+			SqlStatement sqlStatement = sqlStatements.get(11);
+
+			assertEquals(
+					"update a set n=3" + SqlScriptParser.LINE_SEPARATOR + "where ;" + SqlScriptParser.LINE_SEPARATOR
+							+ "name=2;",
+					sqlStatement.getSql());
+			assertEquals(43, sqlStatement.getStartRow());
+			assertEquals(0, sqlStatement.getStartColumn());
+			assertEquals(45, sqlStatement.getEndRow());
+			assertEquals("name=2;".length(), sqlStatement.getEndColumn());
 		}
 	}
 

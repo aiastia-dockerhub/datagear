@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -30,6 +30,7 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -49,30 +50,32 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.RemovalListener;
+import com.github.benmanes.caffeine.cache.Scheduler;
 
 /**
  * 默认{@linkplain ConnectionSource}实现。
  * <p>
- * 注意：此类实例不再使用后，应该调用。
+ * 注意：此类实例不再使用后，应该调用{@linkplain #close()}方法。
  * </p>
  * 
  * @author datagear@163.com
  *
  */
-public class DefaultConnectionSource implements ConnectionSource
+public class DefaultConnectionSource implements ConnectionSource, AutoCloseable
 {
 	private static Logger LOGGER = LoggerFactory.getLogger(DefaultConnectionSource.class);
 
 	private DriverEntityManager driverEntityManager;
 
+	private ConnectionSourceProperties conSrcProperties;
+
 	private DriverChecker driverChecker = new SimpleDriverChecker();
 
 	private PropertiesProcessor propertiesProcessor = null;
 
-	private Cache<ConnectionIdentity, InternalDataSourceHolder> internalDataSourceCache;
+	private Cache<InternalDataSourceKey, InternalDataSourceHolder> internalDataSourceCache;
 
-	private ConcurrentMap<String, PreferedDriverEntityResult> _urlPreferedDriverEntityMap = new ConcurrentHashMap<>();
-
+	private ConcurrentMap<String, PreferedDriverEntity> _urlPreferedDriverEntities = new ConcurrentHashMap<>();
 	private volatile long _driverEntityManagerLastModified = -1;
 
 	public DefaultConnectionSource()
@@ -82,10 +85,17 @@ public class DefaultConnectionSource implements ConnectionSource
 
 	public DefaultConnectionSource(DriverEntityManager driverEntityManager)
 	{
+		this(driverEntityManager, null);
+	}
+
+	public DefaultConnectionSource(DriverEntityManager driverEntityManager, ConnectionSourceProperties properties)
+	{
 		super();
 		this.driverEntityManager = driverEntityManager;
-		this.internalDataSourceCache = Caffeine.newBuilder().maximumSize(50)
-				.expireAfterAccess(60 * 24, TimeUnit.MINUTES)
+		this.conSrcProperties = (properties == null ? new ConnectionSourceProperties() : properties);
+		this.internalDataSourceCache = Caffeine.newBuilder().maximumSize(this.conSrcProperties.getCacheMaxSize())
+				.expireAfterAccess(this.conSrcProperties.getCacheExpiredSeconds(), TimeUnit.SECONDS)
+				.scheduler(Scheduler.forScheduledExecutorService(Executors.newScheduledThreadPool(1)))
 				.removalListener(new DriverBasicDataSourceRemovalListener()).build();
 	}
 
@@ -119,9 +129,19 @@ public class DefaultConnectionSource implements ConnectionSource
 		this.propertiesProcessor = propertiesProcessor;
 	}
 
-	protected Cache<ConnectionIdentity, InternalDataSourceHolder> getInternalDataSourceCache()
+	protected Cache<InternalDataSourceKey, InternalDataSourceHolder> getInternalDataSourceCache()
 	{
 		return this.internalDataSourceCache;
+	}
+
+	protected ConnectionSourceProperties getConSrcProperties()
+	{
+		return conSrcProperties;
+	}
+
+	protected void setConSrcProperties(ConnectionSourceProperties conSrcProperties)
+	{
+		this.conSrcProperties = conSrcProperties;
 	}
 
 	/**
@@ -133,9 +153,14 @@ public class DefaultConnectionSource implements ConnectionSource
 	 * @param driverBasicDataSourceCache
 	 */
 	protected void setInternalDataSourceCache(
-			Cache<ConnectionIdentity, InternalDataSourceHolder> internalDataSourceCache)
+			Cache<InternalDataSourceKey, InternalDataSourceHolder> internalDataSourceCache)
 	{
 		this.internalDataSourceCache = internalDataSourceCache;
+	}
+
+	protected ConcurrentMap<String, PreferedDriverEntity> getUrlPreferedDriverEntities()
+	{
+		return _urlPreferedDriverEntities;
 	}
 
 	@Override
@@ -159,6 +184,7 @@ public class DefaultConnectionSource implements ConnectionSource
 	/**
 	 * 关闭。
 	 */
+	@Override
 	public void close()
 	{
 		this.internalDataSourceCache.invalidateAll();
@@ -176,36 +202,42 @@ public class DefaultConnectionSource implements ConnectionSource
 	protected Connection getPreferredConnection(ConnectionOption connectionOption)
 			throws UnsupportedGetConnectionException, ConnectionSourceException
 	{
-		if (this.driverEntityManager.getLastModified() > this._driverEntityManagerLastModified)
+		if (this.driverEntityManager.getLastModified() != this._driverEntityManagerLastModified)
 		{
 			this._driverEntityManagerLastModified = this.driverEntityManager.getLastModified();
-			this._urlPreferedDriverEntityMap.clear();
+			this._urlPreferedDriverEntities.clear();
 		}
 
 		String url = connectionOption.getUrl();
 
-		PreferedDriverEntityResult preferedDriverEntityResult = this._urlPreferedDriverEntityMap.get(url);
+		PreferedDriverEntity preferedDriverEntity = this._urlPreferedDriverEntities.get(url);
 
-		if (preferedDriverEntityResult != null)
+		if (preferedDriverEntity != null)
 		{
-			if (preferedDriverEntityResult.hasDriverEntity())
+			if (preferedDriverEntity.hasDriverEntityDriver())
 			{
-				DriverEntity preferedDriverEntity = preferedDriverEntityResult.getDriverEntity();
+				DriverEntityDriver driverEntityDriver = preferedDriverEntity.getDriverEntityDriver();
+				DriverEntity driverEntity = driverEntityDriver.getDriverEntity();
+				long driverEntityLastModified = this.driverEntityManager.getLastModified(driverEntity);
 
-				Driver preferedDriver = this.driverEntityManager.getDriver(preferedDriverEntity);
-				Connection preferedConnection = getConnection(preferedDriver, connectionOption);
+				if (driverEntityLastModified > -1
+						&& driverEntityLastModified == preferedDriverEntity.getCreationModified())
+				{
+					Driver driver = driverEntityDriver.getDriver();
+					Connection preferedConnection = getConnection(driver, connectionOption);
 
-				if (LOGGER.isDebugEnabled())
-					LOGGER.debug("Get prefered connection by cached [" + preferedDriverEntity + "] for ["
-							+ connectionOption + "]");
+					if (LOGGER.isDebugEnabled())
+						LOGGER.debug("Get prefered connection by cached [" + preferedDriverEntity + "] for ["
+								+ connectionOption.copyOfPsdMask() + "]");
 
-				return preferedConnection;
+					return preferedConnection;
+				}
 			}
 			else
 			{
 				if (LOGGER.isDebugEnabled())
 					LOGGER.debug("Get null connection by cached no-prefered " + DriverEntity.class.getSimpleName()
-							+ " for [" + connectionOption + "]");
+							+ " for [" + connectionOption.copyOfPsdMask() + "]");
 
 				throw new UnsupportedGetConnectionException(connectionOption);
 			}
@@ -226,14 +258,13 @@ public class DefaultConnectionSource implements ConnectionSource
 		for (int i = 0, len = checked.size(); i < len; i++)
 		{
 			DriverEntityDriver driverEntityDriver = checked.get(i);
-			DriverEntity driverEntity = driverEntityDriver.getDriverEntity();
 
 			try
 			{
 				preferedConnection = getConnection(driverEntityDriver.getDriver(), connectionOption);
 
-				this._urlPreferedDriverEntityMap.put(connectionOption.getUrl(),
-						new PreferedDriverEntityResult(driverEntity));
+				this._urlPreferedDriverEntities.put(connectionOption.getUrl(),
+						createPreferedDriverEntity(driverEntityDriver));
 
 				break;
 			}
@@ -242,7 +273,7 @@ public class DefaultConnectionSource implements ConnectionSource
 				if (i == len - 1)
 				{
 					// 使用最后一个最为首选，这样下次获取时，可以使用缓存中的它，直接抛出异常供上层应用知晓，不用再查找一次
-					this._urlPreferedDriverEntityMap.put(url, new PreferedDriverEntityResult(driverEntity));
+					this._urlPreferedDriverEntities.put(url, createPreferedDriverEntity(driverEntityDriver));
 
 					// 抛出最后一个异常，供上层应用知晓
 					throw e;
@@ -250,16 +281,15 @@ public class DefaultConnectionSource implements ConnectionSource
 				else
 				{
 					if (LOGGER.isErrorEnabled())
-						LOGGER.error("Get connection with [" + driverEntity + "]  for [" + connectionOption + "] error",
-								e);
+						LOGGER.error("Get connection with [" + driverEntityDriver.getDriverEntity() + "]  for ["
+								+ connectionOption.copyOfPsdMask() + "] error", e);
 				}
 			}
 		}
 
 		if (preferedConnection == null)
 		{
-			this._urlPreferedDriverEntityMap.put(url, new PreferedDriverEntityResult());
-
+			this._urlPreferedDriverEntities.put(url, createPreferedDriverEntity(null));
 			throw new UnsupportedGetConnectionException(connectionOption);
 		}
 		else
@@ -293,7 +323,7 @@ public class DefaultConnectionSource implements ConnectionSource
 			{
 				if (LOGGER.isErrorEnabled())
 					LOGGER.error("Get Driver with [" + driverEntity + "] for getting prefered connection for ["
-							+ connectionOption + "] error", t);
+							+ connectionOption.copyOfPsdMask() + "] error", t);
 			}
 
 			if (driver != null)
@@ -308,7 +338,8 @@ public class DefaultConnectionSource implements ConnectionSource
 				{
 					if (LOGGER.isErrorEnabled())
 						LOGGER.error("Check if url accepted with [" + driverEntity
-								+ "] for getting prefered connection for [" + connectionOption + "] error", t);
+								+ "] for getting prefered connection for [" + connectionOption.copyOfPsdMask()
+								+ "] error", t);
 				}
 
 				if (accept)
@@ -326,7 +357,8 @@ public class DefaultConnectionSource implements ConnectionSource
 					{
 						if (LOGGER.isErrorEnabled())
 							LOGGER.error("Check if [" + driverEntity
-									+ "] 's driver checked for getting prefered connection for [" + connectionOption
+									+ "] 's driver checked for getting prefered connection for ["
+									+ connectionOption.copyOfPsdMask()
 									+ "] error", t);
 					}
 				}
@@ -403,20 +435,21 @@ public class DefaultConnectionSource implements ConnectionSource
 	protected Connection getConnection(Driver driver, String url, Properties properties)
 			throws ExecutionException, SQLException, Throwable
 	{
-		ConnectionIdentity connectionIdentity = ConnectionIdentity.valueOf(url, properties);
+		InternalDataSourceKey key = new InternalDataSourceKey(driver, url, properties);
 
 		Connection connection = null;
 		InternalDataSourceHolder dataSourceHolder = null;
 
 		try
 		{
-			dataSourceHolder = this.internalDataSourceCache.get(connectionIdentity,
-					new Function<ConnectionIdentity, InternalDataSourceHolder>()
+			dataSourceHolder = this.internalDataSourceCache.get(key,
+					new Function<InternalDataSourceKey, InternalDataSourceHolder>()
 					{
 						@Override
-						public InternalDataSourceHolder apply(ConnectionIdentity key)
+						public InternalDataSourceHolder apply(InternalDataSourceKey key)
 						{
-							DataSource dataSource = createInternalDataSource(driver, url, properties);
+							DataSource dataSource = createInternalDataSource(key.getDriver(), key.getUrl(),
+									key.getProperties());
 							InternalDataSourceHolder holder = new InternalDataSourceHolder();
 							holder.setDataSource(dataSource);
 
@@ -429,14 +462,18 @@ public class DefaultConnectionSource implements ConnectionSource
 			{
 				connection = getConnectionWithoutInternalDataSource(driver, url, properties);
 
-				LOGGER.debug("Got a connection without internal DataSource for {}, "
-						+ "because the internal DataSource can not support this driver", connectionIdentity);
+				if (LOGGER.isDebugEnabled())
+					LOGGER.debug(
+							"Got a connection without internal DataSource for {}, "
+									+ "because the internal DataSource can not support this driver",
+							key.copyOfPsdMask());
 			}
 			else
 			{
 				connection = dataSourceHolder.getDataSource().getConnection();
 
-				LOGGER.debug("Got a connection from the internal DataSource for {}", connectionIdentity);
+				if (LOGGER.isDebugEnabled())
+					LOGGER.debug("Got a connection from the internal DataSource for {}", key.copyOfPsdMask());
 			}
 		}
 		catch (Throwable t)
@@ -458,8 +495,11 @@ public class DefaultConnectionSource implements ConnectionSource
 			}
 			else
 			{
-				LOGGER.debug("Get connection from the internal DataSource failed for {}, "
-						+ "now try without internal DataSource", connectionIdentity, t);
+				if (LOGGER.isDebugEnabled())
+				{
+					LOGGER.debug("Get connection from the internal DataSource failed for {}, "
+							+ "now try without internal DataSource", key.copyOfPsdMask(), t);
+				}
 
 				JdbcUtil.closeConnection(connection);
 
@@ -469,20 +509,26 @@ public class DefaultConnectionSource implements ConnectionSource
 
 					InternalDataSourceHolder nonDataSourceHolder = new InternalDataSourceHolder();
 					nonDataSourceHolder.setDataSource(null);
-					this.internalDataSourceCache.invalidate(connectionIdentity);
-					this.internalDataSourceCache.put(connectionIdentity, nonDataSourceHolder);
+					this.internalDataSourceCache.invalidate(key);
+					this.internalDataSourceCache.put(key, nonDataSourceHolder);
 
-					LOGGER.debug(
-							"Get connection success without internal DataSource for {}, "
-									+ "the internal DataSource does exactly not support this driver",
-							connectionIdentity);
+					if (LOGGER.isDebugEnabled())
+					{
+						LOGGER.debug(
+								"Get connection success without internal DataSource for {}, "
+										+ "the internal DataSource does exactly not support this driver",
+								key.copyOfPsdMask());
+					}
 				}
 				catch (Throwable e)
 				{
-					LOGGER.debug(
-							"Get connection fail without internal DataSource for {}, "
-									+ "the internal DataSource is not sure if support this driver",
-							connectionIdentity, e);
+					if (LOGGER.isDebugEnabled())
+					{
+						LOGGER.debug(
+								"Get connection fail without internal DataSource for {}, "
+										+ "the internal DataSource is not sure if support this driver",
+								key.copyOfPsdMask(), e);
+					}
 
 					JdbcUtil.closeConnection(connection);
 
@@ -528,9 +574,38 @@ public class DefaultConnectionSource implements ConnectionSource
 	{
 		DriverBasicDataSource re = new DriverBasicDataSource(driver, url, properties);
 
-		LOGGER.debug("Create internal data source for {}", ConnectionIdentity.valueOf(url, properties));
+		if (this.conSrcProperties.getInternalMaxTotal() != null)
+			re.setMaxTotal(this.conSrcProperties.getInternalMaxTotal());
+
+		if (this.conSrcProperties.getInternalMaxIdle() != null)
+			re.setMaxIdle(this.conSrcProperties.getInternalMaxIdle());
+
+		if (this.conSrcProperties.getInternalMinIdle() != null)
+			re.setMinIdle(this.conSrcProperties.getInternalMinIdle());
+
+		if (this.conSrcProperties.getInternalInitialSize() != null)
+			re.setInitialSize(this.conSrcProperties.getInternalInitialSize());
+
+		if (this.conSrcProperties.getInternalMaxWaitMillis() != null)
+			re.setMaxWaitMillis(this.conSrcProperties.getInternalMaxWaitMillis());
+
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("Create internal data source for {}", new ConnectionOption(url, properties).copyOfPsdMask());
 
 		return re;
+	}
+
+	protected PreferedDriverEntity createPreferedDriverEntity(DriverEntityDriver driverEntityDriver)
+	{
+		if (driverEntityDriver == null)
+		{
+			return new PreferedDriverEntity(null, -1);
+		}
+		else
+		{
+			return new PreferedDriverEntity(driverEntityDriver,
+					this.driverEntityManager.getLastModified(driverEntityDriver.getDriverEntity()));
+		}
 	}
 
 	protected String toDriverString(Driver driver)
@@ -583,47 +658,11 @@ public class DefaultConnectionSource implements ConnectionSource
 		}
 	}
 
-	protected static class PreferedDriverEntityResult
-	{
-		private DriverEntity driverEntity;
-
-		public PreferedDriverEntityResult()
-		{
-			super();
-		}
-
-		public PreferedDriverEntityResult(DriverEntity driverEntity)
-		{
-			super();
-			this.driverEntity = driverEntity;
-		}
-
-		public boolean hasDriverEntity()
-		{
-			return (this.driverEntity != null);
-		}
-
-		public DriverEntity getDriverEntity()
-		{
-			return driverEntity;
-		}
-
-		public void setDriverEntity(DriverEntity driverEntity)
-		{
-			this.driverEntity = driverEntity;
-		}
-	}
-
 	protected static class DriverEntityDriver
 	{
-		private DriverEntity driverEntity;
+		private final DriverEntity driverEntity;
 
-		private Driver driver;
-
-		public DriverEntityDriver()
-		{
-			super();
-		}
+		private final Driver driver;
 
 		public DriverEntityDriver(DriverEntity driverEntity, Driver driver)
 		{
@@ -637,9 +676,59 @@ public class DefaultConnectionSource implements ConnectionSource
 			return driverEntity;
 		}
 
-		public void setDriverEntity(DriverEntity driverEntity)
+		public Driver getDriver()
 		{
-			this.driverEntity = driverEntity;
+			return driver;
+		}
+	}
+
+	protected static class PreferedDriverEntity
+	{
+		private final DriverEntityDriver driverEntityDriver;
+
+		private final long creationModified;
+
+		/**
+		 * 创建实例。
+		 * 
+		 * @param driverEntityDriver
+		 *            允许{@code null}
+		 */
+		public PreferedDriverEntity(DriverEntityDriver driverEntityDriver, long creationModified)
+		{
+			super();
+			this.driverEntityDriver = driverEntityDriver;
+			this.creationModified = creationModified;
+		}
+
+		public boolean hasDriverEntityDriver()
+		{
+			return (this.driverEntityDriver != null);
+		}
+
+		public DriverEntityDriver getDriverEntityDriver()
+		{
+			return driverEntityDriver;
+		}
+
+		public long getCreationModified()
+		{
+			return creationModified;
+		}
+	}
+
+	protected static class InternalDataSourceKey
+	{
+		private final Driver driver;
+		private final String url;
+		private final Properties properties;
+
+		public InternalDataSourceKey(Driver driver, String url, Properties properties)
+		{
+			super();
+			this.driver = driver;
+			this.url = url;
+			this.properties = properties;
 		}
 
 		public Driver getDriver()
@@ -647,9 +736,79 @@ public class DefaultConnectionSource implements ConnectionSource
 			return driver;
 		}
 
-		public void setDriver(Driver driver)
+		public String getUrl()
 		{
-			this.driver = driver;
+			return url;
+		}
+
+		public Properties getProperties()
+		{
+			return properties;
+		}
+
+		/**
+		 * 复制，但是对密码脱敏处理。
+		 * 
+		 * @return
+		 */
+		public InternalDataSourceKey copyOfPsdMask()
+		{
+			ConnectionOption co = new ConnectionOption(this.url, this.properties);
+			co = co.copyOfPsdMask();
+
+			return new InternalDataSourceKey(this.driver, this.url, co.getProperties());
+		}
+
+		@Override
+		public int hashCode()
+		{
+			final int prime = 31;
+			int result = 1;
+			result = prime * result + ((driver == null) ? 0 : driver.hashCode());
+			result = prime * result + ((properties == null) ? 0 : properties.hashCode());
+			result = prime * result + ((url == null) ? 0 : url.hashCode());
+			return result;
+		}
+
+		@Override
+		public boolean equals(Object obj)
+		{
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			InternalDataSourceKey other = (InternalDataSourceKey) obj;
+			if (driver == null)
+			{
+				if (other.driver != null)
+					return false;
+			}
+			else if (!driver.equals(other.driver))
+				return false;
+			if (properties == null)
+			{
+				if (other.properties != null)
+					return false;
+			}
+			else if (!properties.equals(other.properties))
+				return false;
+			if (url == null)
+			{
+				if (other.url != null)
+					return false;
+			}
+			else if (!url.equals(other.url))
+				return false;
+			return true;
+		}
+
+		@Override
+		public String toString()
+		{
+			return getClass().getSimpleName() + " [driver=" + driver + ", url=" + url + ", properties=" + properties
+					+ "]";
 		}
 	}
 
@@ -703,10 +862,10 @@ public class DefaultConnectionSource implements ConnectionSource
 	 *
 	 */
 	protected static class DriverBasicDataSourceRemovalListener
-			implements RemovalListener<ConnectionIdentity, InternalDataSourceHolder>
+			implements RemovalListener<InternalDataSourceKey, InternalDataSourceHolder>
 	{
 		@Override
-		public void onRemoval(@Nullable ConnectionIdentity key, @Nullable InternalDataSourceHolder value,
+		public void onRemoval(@Nullable InternalDataSourceKey key, @Nullable InternalDataSourceHolder value,
 				@NonNull RemovalCause cause)
 		{
 			if (!value.hasDataSource())
@@ -724,11 +883,11 @@ public class DefaultConnectionSource implements ConnectionSource
 				((DriverBasicDataSource) dataSource).close();
 
 				if (LOGGER.isDebugEnabled())
-					LOGGER.debug("Close internal data source for {}", key);
+					LOGGER.debug("Close cache removed internal data source for {}", key.copyOfPsdMask());
 			}
 			catch (SQLException e)
 			{
-				LOGGER.error("Close internal data source exception:", e);
+				LOGGER.error("Close cache removed internal data source error", e);
 			}
 		}
 	}

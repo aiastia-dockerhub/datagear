@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -44,7 +44,7 @@ import org.datagear.util.TextParserSupport;
  * </p>
  * 
  * @author datagear@163.com
- * @deprecated SQL校验改为采用{@linkplain SqlReplacer}策略，此类没有使用
+ * @deprecated SQL校验改为采用{@linkplain SqlSimplifier}策略，此类没有使用
  */
 @Deprecated
 public class SqlTokenParser extends TextParserSupport

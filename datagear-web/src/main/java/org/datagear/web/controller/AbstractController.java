@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,46 +17,58 @@
 
 package org.datagear.web.controller;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import org.datagear.management.domain.AnalysisProject;
 import org.datagear.management.domain.AnalysisProjectAwareEntity;
-import org.datagear.management.domain.Authorization;
+import org.datagear.management.domain.CreateTimeEntity;
+import org.datagear.management.domain.CreateUserEntity;
 import org.datagear.management.domain.DataPermissionEntity;
-import org.datagear.management.domain.DirectoryFileDataSetEntity;
 import org.datagear.management.domain.Entity;
-import org.datagear.management.domain.Role;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.AnalysisProjectService;
 import org.datagear.management.service.DataPermissionEntityService;
 import org.datagear.management.service.EntityService;
+import org.datagear.management.util.DataPermissionSpec;
 import org.datagear.persistence.PagingQuery;
+import org.datagear.util.Global;
 import org.datagear.util.IOUtil;
-import org.datagear.util.JDBCCompatiblity;
 import org.datagear.util.StringUtil;
+import org.datagear.util.dirquery.DirectoryPagingQuery;
 import org.datagear.web.config.support.DeliverContentTypeExceptionHandlerExceptionResolver;
 import org.datagear.web.freemarker.WriteJsonTemplateDirectiveModel;
+import org.datagear.web.security.AuthenticationSecurity;
+import org.datagear.web.security.AuthenticationUserGetter;
+import org.datagear.web.util.MessageSourceSupport;
 import org.datagear.web.util.OperationMessage;
 import org.datagear.web.util.WebUtils;
 import org.datagear.web.vo.APIDDataFilterPagingQuery;
 import org.datagear.web.vo.DataFilterPagingQuery;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
-import org.springframework.context.NoSuchMessageException;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.WebAttributes;
 import org.springframework.ui.Model;
+import org.springframework.web.multipart.MultipartFile;
 
 import freemarker.template.TemplateModel;
 
@@ -66,14 +78,14 @@ import freemarker.template.TemplateModel;
  * @author datagear@163.com
  *
  */
-public abstract class AbstractController
+public abstract class AbstractController extends MessageSourceSupport
 {
 	/**
 	 * 控制器类加载时间戳。
 	 */
 	public static final long CONTROLLER_LOAD_TIME = System.currentTimeMillis();
 	
-	public static final String RESPONSE_ENCODING = "UTF-8";
+	public static final String RESPONSE_ENCODING = IOUtil.CHARSET_UTF_8;
 
 	public static final String CONTENT_TYPE_JSON = "application/json";
 
@@ -83,28 +95,16 @@ public abstract class AbstractController
 
 	public static final String CONTENT_TYPE_JAVASCRIPT = "application/javascript";
 
-	@Deprecated
-	public static final String KEY_TITLE_MESSAGE_KEY = "titleMessageKey";
-
-	@Deprecated
-	public static final String KEY_FORM_ACTION = "formAction";
-
-	@Deprecated
-	public static final String KEY_READONLY = "readonly";
-
-	@Deprecated
-	public static final String KEY_SELECT_OPERATION = "selectOperation";
+	public static final String CONTENT_TYPE_OCTET_STREAM = "application/octet-stream";
 
 	public static final String DATA_FILTER_PARAM = DataFilterPagingQuery.PROPERTY_DATA_FILTER;
 
-	public static final String DATA_FILTER_COOKIE = "DATA_FILTER_SEARCH";
-
-	public static final String KEY_ANALYSIS_PROJECT_ID = "ANALYSIS_PROJECT_ID";
+	public static final String KEY_ANALYSIS_PROJECT_ID = Global.NAME_SHORT_UCUS + "ANALYSIS_PROJECT_ID";
 
 	public static final String ERROR_PAGE_URL = "/error";
 
 	public static final String KEY_REQUEST_ACTION = "requestAction";
-	public static final String REQUEST_ACTION_QUERY = "query";
+	public static final String REQUEST_ACTION_MANAGE = "manage";
 	public static final String REQUEST_ACTION_SELECT = "select";
 	public static final String REQUEST_ACTION_ADD = "add";
 	public static final String REQUEST_ACTION_EDIT = "edit";
@@ -122,6 +122,8 @@ public abstract class AbstractController
 	public static final String SUBMIT_ACTION_SAVE_IMPORT = "saveImport";
 	public static final String SUBMIT_ACTION_NONE = "#";
 
+	public static final String KEY_QUERY_DATA_URL = "queryDataUrl";
+
 	public static final String KEY_FORM_MODEL = "formModel";
 	
 	public static final String KEY_IS_MULTIPLE_SELECT = "isMultipleSelect";
@@ -134,21 +136,24 @@ public abstract class AbstractController
 	private ConversionService conversionService;
 
 	@Autowired
-	private MessageSource messageSource;
+	private AuthenticationSecurity authenticationSecurity;
+
+	@Autowired
+	private AuthenticationUserGetter authenticationUserGetter;
+
+	@Autowired
+	private DataPermissionSpec dataPermissionSpec;
 
 	public AbstractController()
 	{
 		super();
 	}
 
-	public MessageSource getMessageSource()
-	{
-		return messageSource;
-	}
-
+	@Autowired
+	@Override
 	public void setMessageSource(MessageSource messageSource)
 	{
-		this.messageSource = messageSource;
+		super.setMessageSource(messageSource);
 	}
 
 	public ConversionService getConversionService()
@@ -161,34 +166,75 @@ public abstract class AbstractController
 		this.conversionService = conversionService;
 	}
 
+	public AuthenticationSecurity getAuthenticationSecurity()
+	{
+		return authenticationSecurity;
+	}
+
+	public void setAuthenticationSecurity(AuthenticationSecurity authenticationSecurity)
+	{
+		this.authenticationSecurity = authenticationSecurity;
+	}
+
+	public AuthenticationUserGetter getAuthenticationUserGetter()
+	{
+		return authenticationUserGetter;
+	}
+
+	public void setAuthenticationUserGetter(AuthenticationUserGetter authenticationUserGetter)
+	{
+		this.authenticationUserGetter = authenticationUserGetter;
+	}
+
+	public DataPermissionSpec getDataPermissionSpec()
+	{
+		return dataPermissionSpec;
+	}
+
+	public void setDataPermissionSpec(DataPermissionSpec dataPermissionSpec)
+	{
+		this.dataPermissionSpec = dataPermissionSpec;
+	}
+
+	protected User getCurrentUser()
+	{
+		return this.authenticationUserGetter.getUser();
+	}
+
+	protected User getCurrentUser(Authentication authentication)
+	{
+		return this.authenticationUserGetter.getUser(authentication);
+	}
+
+	protected Authentication getCurrentAuthentication()
+	{
+		return this.authenticationUserGetter.getAuthentication();
+	}
+
 	protected <ID, T extends Entity<ID>> T getByIdForEdit(EntityService<ID, T> service, ID id) throws RecordNotFoundException
 	{
 		T entity = service.getById(id);
-
-		if (entity == null)
-			throw new RecordNotFoundException();
+		checkNonNullEntity(entity);
 
 		return entity;
 	}
 
-	protected <ID, T extends DataPermissionEntity<ID>> T getByIdForEdit(DataPermissionEntityService<ID, T> service,
+	protected <ID, T extends DataPermissionEntity & Entity<ID>> T getByIdForEdit(
+			DataPermissionEntityService<ID, T> service,
 			User user, ID id) throws RecordNotFoundException
 	{
 		T entity = service.getByIdForEdit(user, id);
-
-		if (entity == null)
-			throw new RecordNotFoundException();
+		checkNonNullEntity(entity);
 
 		return entity;
 	}
 
-	protected <ID, T extends DataPermissionEntity<ID>> T getByIdForView(DataPermissionEntityService<ID, T> service,
+	protected <ID, T extends DataPermissionEntity & Entity<ID>> T getByIdForView(
+			DataPermissionEntityService<ID, T> service,
 			User user, ID id) throws RecordNotFoundException
 	{
 		T entity = service.getById(user, id);
-
-		if (entity == null)
-			throw new RecordNotFoundException();
+		checkNonNullEntity(entity);
 
 		return entity;
 	}
@@ -196,45 +242,160 @@ public abstract class AbstractController
 	protected <ID, T extends Entity<ID>> T getByIdForView(EntityService<ID, T> service, ID id) throws RecordNotFoundException
 	{
 		T entity = service.getById(id);
-
-		if (entity == null)
-			throw new RecordNotFoundException();
+		checkNonNullEntity(entity);
 
 		return entity;
 	}
 	
-	protected boolean setReadonlyActionByRole(Model model, User user)
+	protected void checkNonNullEntity(Object entity) throws RecordNotFoundException
 	{
-		boolean readonly = true;
-		
-		if(user == null || user.isAnonymous())
-		{
-			readonly = true;
-		}
-		else if(user.isAdmin() || user.hasRole(Role.ROLE_DATA_MANAGER))
-		{
-			readonly = false;
-		}
-		
+		if (entity == null)
+			throw new RecordNotFoundException();
+	}
+
+	/**
+	 * 设置创建时间。
+	 * 
+	 * @param entity
+	 *            允许{@code null}
+	 */
+	protected void inflateCreateTime(CreateTimeEntity entity)
+	{
+		inflateCreateTime(entity, new java.util.Date());
+	}
+
+	/**
+	 * 设置创建时间。
+	 * 
+	 * @param entity
+	 *            允许{@code null}
+	 * @param time
+	 *            允许{@code null}
+	 */
+	protected void inflateCreateTime(CreateTimeEntity entity, Date time)
+	{
+		if (entity == null)
+			return;
+
+		entity.setCreateTime(time);
+	}
+
+	/**
+	 * 设置创建用户、时间。
+	 * 
+	 * @param entity
+	 *            允许{@code null}
+	 * @param user
+	 *            允许{@code null}
+	 */
+	protected void inflateCreateUserAndTime(CreateUserEntity entity, User user)
+	{
+		inflateCreateUserAndTime(entity, user, new Date());
+	}
+
+	/**
+	 * 设置创建用户、时间。
+	 * 
+	 * @param entity
+	 *            允许{@code null}
+	 * @param user
+	 *            允许{@code null}
+	 * @param time
+	 *            允许{@code null}
+	 */
+	protected void inflateCreateUserAndTime(CreateUserEntity entity, User user, Date time)
+	{
+		if (entity == null)
+			return;
+
+		entity.setCreateUser((user == null ? null : user.cloneSimple()));
+		entity.setCreateTime(time);
+	}
+
+	/**
+	 * 设置查询数据URL。
+	 * 
+	 * @param model
+	 * @param url
+	 */
+	protected void setQueryDataUrl(Model model, String url)
+	{
+		model.addAttribute(KEY_QUERY_DATA_URL, url);
+	}
+
+	/**
+	 * 设置当前用户是否只能执行只读操作。
+	 * 
+	 * @param model
+	 * @return
+	 */
+	protected boolean setReadonlyAction(Model model)
+	{
+		boolean readonly = isReadonlyAction(model, getCurrentAuthentication());
 		return setReadonlyAction(model, readonly);
 	}
 
+	/**
+	 * 设置是否只能执行只读操作。
+	 * 
+	 * @param model
+	 * @param readonly
+	 * @return
+	 */
 	protected boolean setReadonlyAction(Model model, boolean readonly)
 	{
 		model.addAttribute(KEY_IS_READONLY_ACTION, readonly);
 		return readonly;
 	}
 
-	protected void setFormModel(Model model, Object formModel, String requestAction, String submitAction)
+	/**
+	 * 判断用户是否只能执行只读操作。
+	 * 
+	 * @param model
+	 * @param auth
+	 * @return
+	 */
+	protected boolean isReadonlyAction(Model model, Authentication auth)
 	{
-		addAttributeForWriteJson(model, KEY_FORM_MODEL, formModel);
-		setFormAction(model, requestAction, submitAction);
+		boolean readonly = true;
+
+		if (this.authenticationSecurity.isAnonymous(auth))
+		{
+			readonly = true;
+		}
+		else if (this.authenticationSecurity.hasDataManager(auth))
+		{
+			readonly = false;
+		}
+
+		return readonly;
 	}
-	
+
 	protected void setFormAction(Model model, String requestAction, String submitAction)
 	{
-		model.addAttribute(KEY_REQUEST_ACTION, requestAction);
+		setRequestAction(model, requestAction);
 		model.addAttribute(KEY_SUBMIT_ACTION, submitAction);
+	}
+
+	protected String getRequestAction(Model model)
+	{
+		return (String) model.getAttribute(KEY_REQUEST_ACTION);
+	}
+
+	protected void setRequestAction(Model model, String requestAction)
+	{
+		model.addAttribute(KEY_REQUEST_ACTION, requestAction);
+	}
+
+	protected <T> T getFormModel(Model model)
+	{
+		Object fm = model.getAttribute(KEY_FORM_MODEL);
+		return fromWriteJsonTemplateModel(fm);
+	}
+
+	protected void setFormModel(Model model, Object formModel)
+	{
+		addAttributeForWriteJson(model, KEY_FORM_MODEL, formModel);
 	}
 
 	protected void addAttributeForWriteJson(Model model, String name, Object value)
@@ -242,24 +403,23 @@ public abstract class AbstractController
 		model.addAttribute(name, toWriteJsonTemplateModel(value));
 	}
 
-	protected void setRequestAnalysisProjectIfValid(HttpServletRequest request, HttpServletResponse response,
-			AnalysisProjectService analysisProjectService, AnalysisProjectAwareEntity<?> entity)
+	protected void setRequestAnalysisProjectIfValid(HttpServletRequest request,
+			AnalysisProjectService service, AnalysisProjectAwareEntity entity)
 	{
-		entity.setAnalysisProject(getRequestAnalysisProject(request, response, analysisProjectService));
+		entity.setAnalysisProject(getRequestAnalysisProject(request, service));
 	}
 
 	/**
 	 * 获取请求中的{@linkplain AnalysisProject}，没有则返回{@code null}。
 	 * 
 	 * @param request
-	 * @param response
-	 * @param analysisProjectService
+	 * @param service
 	 * @return
 	 */
-	protected AnalysisProject getRequestAnalysisProject(HttpServletRequest request, HttpServletResponse response,
-			AnalysisProjectService analysisProjectService)
+	protected AnalysisProject getRequestAnalysisProject(HttpServletRequest request,
+			AnalysisProjectService service)
 	{
-		User user = WebUtils.getUser();
+		User user = getCurrentUser();
 
 		String analysisId = request.getParameter(KEY_ANALYSIS_PROJECT_ID);
 		
@@ -271,68 +431,12 @@ public abstract class AbstractController
 		
 		try
 		{
-			return analysisProjectService.getById(user, analysisId);
+			return service.getById(user, analysisId);
 		}
 		catch (Throwable t)
 		{
 			return null;
 		}
-	}
-
-	/**
-	 * 整理保存时的{@linkplain AnalysisProjectAwareEntity}：
-	 * 如果analysisProject.id为空字符串，则应将其改为null，因为存储时相关外键不允许空字符串
-	 * 
-	 * @param entity
-	 */
-	protected void trimAnalysisProjectAwareEntityForSave(AnalysisProjectAwareEntity<?> entity)
-	{
-		if (entity == null)
-			return;
-
-		if (entity.getAnalysisProject() == null)
-			return;
-
-		if (isEmpty(entity.getAnalysisProject().getId()))
-			entity.setAnalysisProject(null);
-	}
-
-	/**
-	 * 整理保存时的{@linkplain DirectoryFileDataSetEntity}：
-	 * 如果dataSetResDirectory.id为空字符串，则应将其改为null，因为存储时相关外键不允许空字符串
-	 * 
-	 * @param entity
-	 */
-	protected void trimDirectoryFileDataSetEntityForSave(DirectoryFileDataSetEntity entity)
-	{
-		if (entity == null)
-			return;
-
-		if (entity.getDataSetResDirectory() == null)
-			return;
-
-		if (isEmpty(entity.getDataSetResDirectory().getId()))
-			entity.setDataSetResDirectory(null);
-	}
-
-	/**
-	 * 如果用户对{@linkplain AnalysisProjectAwareEntity#getAnalysisProject()}没有权限，则置为{@code null}。
-	 * 
-	 * @param user
-	 * @param entity
-	 * @param service
-	 */
-	protected void setNullAnalysisProjectIfNoPermission(User user,
-			AnalysisProjectAwareEntity<?> entity, AnalysisProjectService service)
-	{
-		AnalysisProject analysisProject = entity.getAnalysisProject();
-		int apPermission = (analysisProject != null
-				? service.getPermission(user, analysisProject.getId())
-				: Authorization.PERMISSION_NONE_START);
-
-		// 没有读权限，应置为null
-		if (!Authorization.canRead(apPermission))
-			entity.setAnalysisProject(null);
 	}
 
 	/**
@@ -395,22 +499,6 @@ public abstract class AbstractController
 			pagingQuery.setNotLike(pq.isNotLike());
 		}
 
-		String value = pagingQuery.getDataFilter();
-
-		if (isEmpty(value))
-			value = WebUtils.getCookieValue(request, DATA_FILTER_COOKIE);
-
-		if (DataPermissionEntityService.DATA_FILTER_VALUE_MINE.equalsIgnoreCase(value))
-			value = DataPermissionEntityService.DATA_FILTER_VALUE_MINE;
-		else if (DataPermissionEntityService.DATA_FILTER_VALUE_OTHER.equalsIgnoreCase(value))
-			value = DataPermissionEntityService.DATA_FILTER_VALUE_OTHER;
-		else if (DataPermissionEntityService.DATA_FILTER_VALUE_ALL.equalsIgnoreCase(value))
-			value = DataPermissionEntityService.DATA_FILTER_VALUE_ALL;
-		else
-			value = DataPermissionEntityService.DATA_FILTER_VALUE_ALL;
-
-		pagingQuery.setDataFilter(value);
-
 		return pagingQuery;
 	}
 
@@ -425,9 +513,7 @@ public abstract class AbstractController
 	{
 		setReadonlyAction(model, true);
 		
-		boolean multiple = false;
-		if (request.getParameter("multiple") != null)
-			multiple = true;
+		boolean multiple = isMultipleSelectRequest(request);
 
 		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_SELECT);
 		model.addAttribute(KEY_IS_MULTIPLE_SELECT, multiple);
@@ -436,22 +522,15 @@ public abstract class AbstractController
 	}
 
 	/**
-	 * 设置{@code isMultipleSelect}属性。
+	 * 是否多选请求。
 	 * 
 	 * @param request
-	 * @param model
 	 * @return
 	 */
-	@Deprecated
-	protected boolean setIsMultipleSelectAttribute(HttpServletRequest request, org.springframework.ui.Model model)
+	protected boolean isMultipleSelectRequest(HttpServletRequest request)
 	{
-		boolean isMultipleSelect = false;
-		if (request.getParameter("multiple") != null)
-			isMultipleSelect = true;
-
-		model.addAttribute("isMultipleSelect", isMultipleSelect);
-
-		return isMultipleSelect;
+		String multipleParam = request.getParameter("multiple");
+		return (multipleParam != null);
 	}
 
 	/**
@@ -483,25 +562,83 @@ public abstract class AbstractController
 		if (pagingQuery == null)
 		{
 			pagingQuery = new PagingQuery();
+			Integer pageSize = resolveCookiePageSize(request, cookiePaginationSize);
 
-			if (!isEmpty(cookiePaginationSize))
-			{
-				try
-				{
-					String pss = WebUtils.getCookieValue(request, cookiePaginationSize);
-
-					if (!isEmpty(pss))
-						pagingQuery.setPageSize(Integer.parseInt(pss));
-				}
-				catch (Exception e)
-				{
-				}
-			}
+			if (pageSize != null)
+				pagingQuery.setPageSize(pageSize);
 		}
 
 		return pagingQuery;
 	}
-	
+
+	/**
+	 * 检查并补充{@linkplain DirectoryPagingQuery}。
+	 * 
+	 * @param request
+	 * @param pagingQuery
+	 *            允许为{@code null}
+	 * @return 不会为{@code null}
+	 */
+	protected DirectoryPagingQuery inflateDirectoryPagingQuery(HttpServletRequest request,
+			DirectoryPagingQuery pagingQuery)
+	{
+		return inflateDirectoryPagingQuery(request, pagingQuery, WebUtils.COOKIE_PAGINATION_SIZE);
+	}
+
+	/**
+	 * 检查并补充{@linkplain DirectoryPagingQuery}。
+	 * 
+	 * @param request
+	 * @param pagingQuery
+	 *            允许为{@code null}
+	 * @param cookiePaginationSize
+	 *            允许为{@code null}
+	 * @return 不会为{@code null}
+	 */
+	protected DirectoryPagingQuery inflateDirectoryPagingQuery(HttpServletRequest request,
+			DirectoryPagingQuery pagingQuery, String cookiePaginationSize)
+	{
+		if (pagingQuery == null)
+		{
+			pagingQuery = new DirectoryPagingQuery();
+			Integer pageSize = resolveCookiePageSize(request, cookiePaginationSize);
+
+			if (pageSize != null)
+				pagingQuery.setPageSize(pageSize);
+		}
+
+		return pagingQuery;
+	}
+
+	/**
+	 * 解析Cookie中的页大小。
+	 * 
+	 * @param request
+	 * @param cookiePageSize
+	 *            允许为{@code null}
+	 * @return {@code null}表示未解析到
+	 */
+	protected Integer resolveCookiePageSize(HttpServletRequest request, String cookiePageSize)
+	{
+		Integer pageSize = null;
+
+		if (!isEmpty(cookiePageSize))
+		{
+			try
+			{
+				String pss = WebUtils.getCookieValue(request, cookiePageSize);
+
+				if (!isEmpty(pss))
+					pageSize = Integer.parseInt(pss);
+			}
+			catch (Exception e)
+			{
+			}
+		}
+
+		return pageSize;
+	}
+
 	/**
 	 * 为异常设置{@linkplain OperationMessage}。
 	 * <p>
@@ -598,6 +735,67 @@ public abstract class AbstractController
 	}
 
 	/**
+	 * 返回{@linkplain HttpServletResponse#SC_BAD_REQUEST}错误消息页面。
+	 * @param request
+	 * @param response
+	 * @param msgCode
+	 * @param msgArgs
+	 * @return
+	 */
+	protected String errorViewOptMsg(HttpServletRequest request, HttpServletResponse response, String msgCode, Object... msgArgs)
+	{
+		return errorViewOptMsg(request, response, HttpServletResponse.SC_BAD_REQUEST, msgCode, msgArgs);
+	}
+
+	/**
+	 * 返回{@linkplain HttpServletResponse#SC_BAD_REQUEST}错误消息页面。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param msg
+	 * @return
+	 */
+	protected String errorViewOptMsg(HttpServletRequest request, HttpServletResponse response, OperationMessage msg)
+	{
+		return errorViewOptMsg(request, response, HttpServletResponse.SC_BAD_REQUEST, msg);
+	}
+
+	/**
+	 * 返回错误消息页面。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param statusCode
+	 * @param msgCode
+	 * @param msgArgs
+	 * @return
+	 */
+	protected String errorViewOptMsg(HttpServletRequest request, HttpServletResponse response, int statusCode,
+			String msgCode, Object... msgArgs)
+	{
+		response.setStatus(statusCode);
+		setOperationMessage(request, optMsgFail(request, msgCode, msgArgs));
+		return getErrorView(request, response);
+	}
+
+	/**
+	 * 返回错误消息页面。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param statusCode
+	 * @param msg
+	 * @return
+	 */
+	protected String errorViewOptMsg(HttpServletRequest request, HttpServletResponse response, int statusCode,
+			OperationMessage msg)
+	{
+		response.setStatus(statusCode);
+		setOperationMessage(request, msg);
+		return getErrorView(request, response);
+	}
+
+	/**
 	 * 获取错误信息视图。
 	 * 
 	 * @param request
@@ -606,7 +804,7 @@ public abstract class AbstractController
 	 */
 	protected String getErrorView(HttpServletRequest request, HttpServletResponse response)
 	{
-		setAttributeIfIsJsonResponse(request, response);
+		setErrorAttrIfIsJsonResponse(request, response);
 		return ERROR_PAGE_URL;
 	}
 
@@ -616,7 +814,7 @@ public abstract class AbstractController
 	 * @param request
 	 * @param response
 	 */
-	protected void setAttributeIfIsJsonResponse(HttpServletRequest request, HttpServletResponse response)
+	protected void setErrorAttrIfIsJsonResponse(HttpServletRequest request, HttpServletResponse response)
 	{
 		String expectedContentType = DeliverContentTypeExceptionHandlerExceptionResolver.getHandlerContentType(request);
 		if (expectedContentType != null && !expectedContentType.isEmpty())
@@ -629,9 +827,7 @@ public abstract class AbstractController
 		if (isJsonResponse)
 		{
 			OperationMessage operationMessage = getOptMsgForHttpError(request, response);
-
-			request.setAttribute(WebUtils.KEY_OPERATION_MESSAGE,
-					WriteJsonTemplateDirectiveModel.toWriteJsonTemplateModel(operationMessage));
+			request.setAttribute(WebUtils.KEY_OPERATION_MESSAGE, toWriteJsonTemplateModel(operationMessage));
 
 			response.setContentType(CONTENT_TYPE_JSON);
 		}
@@ -766,7 +962,7 @@ public abstract class AbstractController
 		if (saveCount > 0)
 			return optSuccessResponseEntity(request, "operationSuccess.withSaveCount", saveCount);
 
-		@JDBCCompatiblity("JDBC兼容问题，某些驱动不能正确返回更新记录数，比如Hive jdbc始终返回0，所以这里暂时禁用此逻辑")
+		@org.datagear.util.JDBCCompatiblity("JDBC兼容问题，某些驱动不能正确返回更新记录数，比如Hive jdbc始终返回0，所以这里暂时禁用此逻辑")
 		// if (saveCount == 0)
 		// return buildOperationMessageFailResponseEntity(request,
 		// HttpStatus.BAD_REQUEST, "saveFail.zeroCount");
@@ -788,7 +984,7 @@ public abstract class AbstractController
 		if (deleteCount > 0)
 			return optSuccessResponseEntity(request, "operationSuccess.withDeleteCount", deleteCount);
 
-		@JDBCCompatiblity("JDBC兼容问题，某些驱动不能正确返回更新记录数，比如Hive jdbc始终返回0，所以这里暂时禁用此逻辑")
+		@org.datagear.util.JDBCCompatiblity("JDBC兼容问题，某些驱动不能正确返回更新记录数，比如Hive jdbc始终返回0，所以这里暂时禁用此逻辑")
 		// if (deleteCount == 0)
 		// return buildOperationMessageFailResponseEntity(request,
 		// HttpStatus.BAD_REQUEST, "deleteFail.zeroCount");
@@ -826,63 +1022,6 @@ public abstract class AbstractController
 	}
 
 	/**
-	 * 获取I18N消息内容。
-	 * <p>
-	 * 如果找不到对应消息码的消息，则返回<code>"???[code]???"<code>（例如：{@code "???error???"}）。
-	 * </p>
-	 * 
-	 * @param request
-	 * @param code
-	 * @param args
-	 * @return
-	 */
-	protected String getMessage(HttpServletRequest request, String code, Object... args)
-	{
-		try
-		{
-			return this.messageSource.getMessage(code, args, getLocale(request));
-		}
-		catch (NoSuchMessageException e)
-		{
-			return "???" + code + "???";
-		}
-	}
-
-	/**
-	 * 获取I18N消息内容。
-	 * <p>
-	 * 如果找不到对应消息码的消息，则返回<code>"???[code]???"<code>（例如：{@code "???error???"}）。
-	 * </p>
-	 * 
-	 * @param locale
-	 * @param code
-	 * @param args
-	 * @return
-	 */
-	protected String getMessage(Locale locale, String code, Object... args)
-	{
-		try
-		{
-			return this.messageSource.getMessage(code, args, locale);
-		}
-		catch (NoSuchMessageException e)
-		{
-			return "???" + code + "???";
-		}
-	}
-
-	/**
-	 * 获取请求地区。
-	 * 
-	 * @param request
-	 * @return
-	 */
-	protected Locale getLocale(HttpServletRequest request)
-	{
-		return WebUtils.getLocale(request);
-	}
-
-	/**
 	 * 获取HTTP错误时的操作消息。
 	 * 
 	 * @param request
@@ -893,9 +1032,41 @@ public abstract class AbstractController
 	{
 		OperationMessage operationMessage = WebUtils.getOperationMessage(request);
 
+		// 尝试从session中取，并在之后移除
 		if (operationMessage == null)
 		{
-			Integer statusCode = (Integer) request.getAttribute("javax.servlet.error.status_code");
+			HttpSession session = request.getSession();
+			operationMessage = WebUtils.getOperationMessage(session);
+			
+			if(operationMessage != null)
+				WebUtils.removeOperationMessage(session);
+		}
+
+		if (operationMessage == null)
+		{
+			Exception exception = null;
+
+			Object exceptionAttr = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+			if (exceptionAttr instanceof Exception)
+				exception = (Exception) exceptionAttr;
+
+			if (exception != null)
+			{
+				String code = buildExceptionMsgCode(exception.getClass());
+				String message = getMessageNullable(request, code, exception.getMessage());
+
+				if (message != null)
+					operationMessage = OperationMessage.valueOfFail(code, message);
+			}
+		}
+
+		if (operationMessage == null)
+		{
+			Integer statusCode = null;
+
+			Object statusCodeAttr = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+			if (statusCodeAttr instanceof Integer)
+				statusCode = (Integer) statusCodeAttr;
 
 			if (statusCode == null)
 				statusCode = response.getStatus();
@@ -917,6 +1088,16 @@ public abstract class AbstractController
 	{
 		OperationMessage operationMessage = WebUtils.getOperationMessage(request);
 
+		// 尝试从session中取，并在之后移除
+		if (operationMessage == null)
+		{
+			HttpSession session = request.getSession();
+			operationMessage = WebUtils.getOperationMessage(session);
+
+			if (operationMessage != null)
+				WebUtils.removeOperationMessage(session);
+		}
+
 		if (operationMessage == null)
 			operationMessage = buildOptMsgForHttpError(request, statusCode);
 
@@ -932,19 +1113,24 @@ public abstract class AbstractController
 	 */
 	protected OperationMessage buildOptMsgForHttpError(HttpServletRequest request, Integer statusCode)
 	{
-		String message = (String) request.getAttribute("javax.servlet.error.message");
+		String rawMsg = (String) request.getAttribute(RequestDispatcher.ERROR_MESSAGE);
 
-		String statusCodeKey = "error.httpError";
+		if (rawMsg == null)
+			rawMsg = "";
+
+		String statusCodeKey = null;
+		String message = null;
 
 		if (statusCode != null)
-			statusCodeKey += "." + statusCode.intValue();
-
-		try
 		{
-			message = getMessage(request, statusCodeKey, new Object[0]);
+			statusCodeKey = "error.httpError" + "." + statusCode.intValue();
+			message = getMessageNullable(request, statusCodeKey, rawMsg);
 		}
-		catch (Throwable t)
+
+		if (message == null)
 		{
+			statusCodeKey = "error.httpError";
+			message = getMessage(request, statusCodeKey, rawMsg);
 		}
 
 		return OperationMessage.valueOfFail(statusCodeKey, message);
@@ -959,6 +1145,18 @@ public abstract class AbstractController
 	protected TemplateModel toWriteJsonTemplateModel(Object object)
 	{
 		return WriteJsonTemplateDirectiveModel.toWriteJsonTemplateModel(object);
+	}
+
+	/**
+	 * 获取由{@linkplain #toWriteJsonTemplateModel(Object)}转换的原始对象。
+	 * 
+	 * @param <T>
+	 * @param templateModel
+	 * @return
+	 */
+	protected <T> T fromWriteJsonTemplateModel(Object templateModel)
+	{
+		return WriteJsonTemplateDirectiveModel.fromWriteJsonTemplateModel(templateModel);
 	}
 
 	/**
@@ -979,29 +1177,16 @@ public abstract class AbstractController
 	}
 
 	/**
-	 * 解析请求路径中{@code pathPrefix}之后的路径名，如果路径不包含{@code pathPrefix}，则返回{@code null}。
+	 * 解析请求路径中{@code pathPrefix}之后的路径名。
 	 * 
 	 * @param request
 	 * @param pathPrefix
-	 *            为空或{@code null}，则返回整个请求路径
 	 * @return
+	 * @see {@linkplain WebUtils#resolvePathAfter(HttpServletRequest, String)}
 	 */
 	protected String resolvePathAfter(HttpServletRequest request, String pathPrefix)
 	{
-		String uri = request.getRequestURI();
-
-		if (StringUtil.isEmpty(pathPrefix))
-			return uri;
-
-		if (uri.endsWith(pathPrefix))
-			return "";
-
-		int index = uri.indexOf(pathPrefix);
-
-		if (index < 0)
-			return null;
-
-		return uri.substring(index + pathPrefix.length());
+		return WebUtils.resolvePathAfter(request, pathPrefix);
 	}
 
 	/**
@@ -1014,16 +1199,21 @@ public abstract class AbstractController
 	protected String appendRequestQueryString(String url, HttpServletRequest request)
 	{
 		String qs = request.getQueryString();
-
-		if (StringUtil.isEmpty(qs))
-			return url;
-
-		int qmIdx = url.lastIndexOf('?');
-
-		if (qmIdx < 0)
-			return url + "?" + qs;
-		else
-			return url + "&" + qs;
+		return WebUtils.addUrlParam(url, qs);
+	}
+	
+	/**
+	 * 设置下载文件响应头。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param fileName
+	 * @throws IOException
+	 */
+	protected void setDownloadResponseHeader(HttpServletRequest request, HttpServletResponse response, String fileName) throws IOException
+	{
+		response.setHeader("Content-Disposition",
+				"attachment; filename=" + toResponseAttachmentFileName(request, response, fileName));
 	}
 
 	/**
@@ -1132,5 +1322,87 @@ public abstract class AbstractController
 	protected void setCacheControlNoCache(HttpServletResponse response)
 	{
 		response.setHeader("Cache-Control", "no-cache");
+	}
+
+	/**
+	 * 获取{@linkplain AuthenticationException}。
+	 * 
+	 * @param request
+	 * @param removeSession
+	 * @return 返回{@code null}表示没有
+	 */
+	protected AuthenticationException getAuthenticationException(HttpServletRequest request, boolean removeSession)
+	{
+		// 参考org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler.saveException()
+
+		AuthenticationException exception = (AuthenticationException) request
+				.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
+
+		if (exception == null)
+		{
+			HttpSession session = request.getSession();
+
+			exception = (AuthenticationException) session
+					.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
+
+			if (exception != null && removeSession)
+				session.removeAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
+		}
+
+		return exception;
+	}
+
+	/**
+	 * 写上传文件。
+	 * 
+	 * @param multipartFile
+	 * @param file
+	 * @throws IOException
+	 */
+	protected void writeMultipartFile(MultipartFile multipartFile, File file) throws IOException
+	{
+		InputStream in = null;
+		OutputStream out = null;
+
+		try
+		{
+			in = multipartFile.getInputStream();
+			out = IOUtil.getOutputStream(file);
+			IOUtil.write(in, out);
+		}
+		finally
+		{
+			IOUtil.close(in);
+			IOUtil.close(out);
+		}
+	}
+
+	/**
+	 * 写上传文件。
+	 * 
+	 * @param multipartFile
+	 * @param out
+	 * @param closeOut
+	 * @throws IOException
+	 */
+	protected void writeMultipartFile(MultipartFile multipartFile, OutputStream out, boolean closeOut)
+			throws IOException
+	{
+		InputStream in = null;
+
+		try
+		{
+			in = multipartFile.getInputStream();
+			IOUtil.write(in, out);
+		}
+		finally
+		{
+			IOUtil.close(in);
+
+			if (closeOut)
+			{
+				IOUtil.close(out);
+			}
+		}
 	}
 }

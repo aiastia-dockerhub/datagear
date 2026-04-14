@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,6 +21,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.List;
+
 import org.junit.Test;
 
 /**
@@ -31,6 +33,218 @@ import org.junit.Test;
  */
 public class StringUtilTest
 {
+	@Test
+	public void splitTest()
+	{
+		{
+			String s = null;
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(0, actual.length);
+		}
+
+		{
+			String s = "";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(0, actual.length);
+		}
+
+		{
+			String s = ",,,,";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(0, actual.length);
+		}
+
+		{
+			String s = "abc,def";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("abc", actual[0]);
+			assertEquals("def", actual[1]);
+		}
+		{
+			String s = "ab,cd,ef";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(3, actual.length);
+			assertEquals("ab", actual[0]);
+			assertEquals("cd", actual[1]);
+			assertEquals("ef", actual[2]);
+		}
+		{
+			String s = "abc.def";
+			String[] actual = StringUtil.split(s, ".", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("abc", actual[0]);
+			assertEquals("def", actual[1]);
+		}
+		{
+			String s = "ab.cd.ef";
+			String[] actual = StringUtil.split(s, ".", true);
+
+			assertEquals(3, actual.length);
+			assertEquals("ab", actual[0]);
+			assertEquals("cd", actual[1]);
+			assertEquals("ef", actual[2]);
+		}
+
+		// 以分隔符开头
+		{
+			String s = ",abc";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(1, actual.length);
+			assertEquals("abc", actual[0]);
+		}
+		{
+			String s = ",ab,c";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("ab", actual[0]);
+			assertEquals("c", actual[1]);
+		}
+
+		// 以分隔符结尾
+		{
+			String s = "abc,";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(1, actual.length);
+			assertEquals("abc", actual[0]);
+		}
+		{
+			String s = "ab,c,";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("ab", actual[0]);
+			assertEquals("c", actual[1]);
+		}
+
+		// 连续分隔符
+		{
+			String s = "abc,,def";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("abc", actual[0]);
+			assertEquals("def", actual[1]);
+		}
+		{
+			String s = "abc,, , def";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("abc", actual[0]);
+			assertEquals("def", actual[1]);
+		}
+
+		// 无分隔符
+		{
+			String s = "abcdef";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(1, actual.length);
+			assertEquals(s, actual[0]);
+		}
+
+		// 有空格
+		{
+			String s = " abc , def ";
+			String[] actual = StringUtil.split(s, ",", true);
+
+			assertEquals(2, actual.length);
+			assertEquals("abc", actual[0]);
+			assertEquals("def", actual[1]);
+		}
+		{
+			String s = " abc , def ";
+			String[] actual = StringUtil.split(s, ",", false);
+
+			assertEquals(2, actual.length);
+			assertEquals(" abc ", actual[0]);
+			assertEquals(" def ", actual[1]);
+		}
+	}
+
+	@Test
+	public void splitWithTrimTest()
+	{
+		{
+			String s = " abc , def ";
+			List<String> actual = StringUtil.splitWithTrim(s, ",");
+
+			assertEquals(2, actual.size());
+			assertEquals("abc", actual.get(0));
+			assertEquals("def", actual.get(1));
+		}
+	}
+
+	@Test
+	public void splitWithEscape()
+	{
+		{
+			String s = " abc , def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', true);
+
+			assertEquals(2, actual.size());
+			assertEquals("abc", actual.get(0));
+			assertEquals("def", actual.get(1));
+		}
+
+		{
+			String s = " abc ,,  , def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', true);
+
+			assertEquals(2, actual.size());
+			assertEquals("abc", actual.get(0));
+			assertEquals("def", actual.get(1));
+		}
+
+		{
+			String s = " abc , def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', false);
+
+			assertEquals(2, actual.size());
+			assertEquals(" abc ", actual.get(0));
+			assertEquals(" def ", actual.get(1));
+		}
+
+		{
+			String s = " abc ,,  , def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', false);
+
+			assertEquals(3, actual.size());
+			assertEquals(" abc ", actual.get(0));
+			assertEquals("  ", actual.get(1));
+			assertEquals(" def ", actual.get(2));
+		}
+
+		{
+			String s = " abc \\,, def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', true);
+
+			assertEquals(2, actual.size());
+			assertEquals("abc ,", actual.get(0));
+			assertEquals("def", actual.get(1));
+		}
+
+		{
+			String s = " abc, \\,, def ";
+			List<String> actual = StringUtil.splitWithEscape(s, ',', true);
+
+			assertEquals(3, actual.size());
+			assertEquals("abc", actual.get(0));
+			assertEquals(",", actual.get(1));
+			assertEquals("def", actual.get(2));
+		}
+	}
+
 	@Test
 	public void escapeHtmlTest()
 	{
@@ -219,32 +433,84 @@ public class StringUtilTest
 	}
 
 	@Test
-	public void encodePathURLTest() throws Exception
+	public void maskEmailTest()
 	{
+
 		{
-			String url = "abc";
-			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
-			assertEquals(url, actual);
+			String s = null;
+			String actual = StringUtil.maskEmail(s, 2, 2, 2);
+			assertEquals("**", actual);
 		}
 
 		{
-			String url = "abc/def/ghi";
-			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
-			assertEquals(url, actual);
+			String s = "";
+			String actual = StringUtil.maskEmail(s, 2, 2, 2);
+			assertEquals("**", actual);
 		}
 
 		{
-			String url = "abc/中 文/?/ghi";
-			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
-			assertEquals("abc/%E4%B8%AD+%E6%96%87/%3F/ghi", actual);
-			assertEquals(url, StringUtil.decodeURL(actual, IOUtil.CHARSET_UTF_8));
+			String s = "a";
+			String actual = StringUtil.maskEmail(s, 2, 2, 2);
+			assertEquals("a**", actual);
 		}
 
 		{
-			String url = "/abc//中 文/?/ghi//";
-			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
-			assertEquals("/abc//%E4%B8%AD+%E6%96%87/%3F/ghi//", actual);
-			assertEquals(url, StringUtil.decodeURL(actual, IOUtil.CHARSET_UTF_8));
+			String s = "abcdef";
+			String actual = StringUtil.maskEmail(s, 2, 2, 2);
+			assertEquals("ab**ef", actual);
+		}
+
+		{
+			String s = "abcdef@test.com";
+			String actual = StringUtil.maskEmail(s, 2, 2, 2);
+			assertEquals("ab**ef@test.com", actual);
+		}
+	}
+
+	@Test
+	public void maskJdbcUrlTest()
+	{
+
+		{
+			String s = null;
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("**", actual);
+		}
+
+		{
+			String s = "";
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("**", actual);
+		}
+
+		{
+			String s = "a";
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("a**", actual);
+		}
+
+		{
+			String s = "abcdef";
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("ab**ef", actual);
+		}
+
+		{
+			String s = "jdbc:abc";
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("jdbc:ab**c", actual);
+		}
+
+		{
+			String s = "jdbc:abc:def";
+			String actual = StringUtil.maskJdbcUrl(s, 2, 2, 2);
+			assertEquals("jdbc:abc:de**f", actual);
+		}
+
+		{
+			String s = "jdbc:mysql://127.0.0.1?test";
+			String actual = StringUtil.maskJdbcUrl(s, 3, 3, 3);
+			assertEquals("jdbc:mysql://1***est", actual);
 		}
 	}
 
@@ -349,6 +615,126 @@ public class StringUtilTest
 			int v = -1;
 			boolean actual = StringUtil.toBoolean(v);
 			assertFalse(actual);
+		}
+	}
+
+	@Test
+	public void encodeURLTest() throws Exception
+	{
+		{
+			String s = "/a/b/c";
+			String actual = StringUtil.encodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("%2Fa%2Fb%2Fc", actual);
+		}
+
+		{
+			String s = "/a/b/ c";
+			String actual = StringUtil.encodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("%2Fa%2Fb%2F+c", actual);
+		}
+
+		{
+			String s = "/a/b/c?param=1";
+			String actual = StringUtil.encodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("%2Fa%2Fb%2Fc%3Fparam%3D1", actual);
+		}
+
+		{
+			String s = "中文";
+			String actual = StringUtil.encodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("%E4%B8%AD%E6%96%87", actual);
+		}
+	}
+
+	@Test
+	public void decodeURLTest() throws Exception
+	{
+		{
+			String s = "%2Fa%2Fb%2Fc";
+			String actual = StringUtil.decodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("/a/b/c", actual);
+		}
+
+		{
+			String s = "%2Fa%2Fb%2F+c";
+			String actual = StringUtil.decodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("/a/b/ c", actual);
+		}
+
+		{
+			String s = "%2Fa%2Fb%2Fc%3Fparam%3D1";
+			String actual = StringUtil.decodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("/a/b/c?param=1", actual);
+		}
+
+		{
+			String s = "%E4%B8%AD%E6%96%87";
+			String actual = StringUtil.decodeURL(s, IOUtil.CHARSET_UTF_8);
+
+			assertEquals("中文", actual);
+		}
+	}
+
+	@Test
+	public void encodePathURLTest() throws Exception
+	{
+		{
+			String url = "abc";
+			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
+			assertEquals(url, actual);
+		}
+
+		{
+			String url = "abc/def/ghi";
+			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
+			assertEquals(url, actual);
+		}
+
+		{
+			String url = "abc/中 文/?/ghi";
+			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
+			assertEquals("abc/%E4%B8%AD+%E6%96%87/%3F/ghi", actual);
+			assertEquals(url, StringUtil.decodeURL(actual, IOUtil.CHARSET_UTF_8));
+		}
+
+		{
+			String url = "/abc//中 文/?/ghi//";
+			String actual = StringUtil.encodePathURL(url, IOUtil.CHARSET_UTF_8);
+			assertEquals("/abc//%E4%B8%AD+%E6%96%87/%3F/ghi//", actual);
+			assertEquals(url, StringUtil.decodeURL(actual, IOUtil.CHARSET_UTF_8));
+		}
+	}
+
+	@Test
+	public void toAsciiURITest() throws Exception
+	{
+		{
+			String uri = "http://abc.def/def/ghi?param1=a&param2=b#jkl";
+			String actual = StringUtil.toAsciiURI(uri);
+			assertEquals(uri, actual);
+		}
+
+		{
+			String uri = "中文一/ghi?param1=中文二&param2=中文三#中文四";
+			String actual = StringUtil.toAsciiURI(uri);
+			assertEquals(
+					"%E4%B8%AD%E6%96%87%E4%B8%80/ghi?param1=%E4%B8%AD%E6%96%87%E4%BA%8C&param2=%E4%B8%AD%E6%96%87%E4%B8%89#%E4%B8%AD%E6%96%87%E5%9B%9B",
+					actual);
+		}
+
+		{
+			String uri = "http://中文.def.com/中文一/ghi?param1=中文二&param2=b#中文三";
+			String actual = StringUtil.toAsciiURI(uri);
+			assertEquals(
+					"http://%E4%B8%AD%E6%96%87.def.com/%E4%B8%AD%E6%96%87%E4%B8%80/ghi?param1=%E4%B8%AD%E6%96%87%E4%BA%8C&param2=b#%E4%B8%AD%E6%96%87%E4%B8%89",
+					actual);
 		}
 	}
 }

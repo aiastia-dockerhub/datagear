@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,8 +31,9 @@ dataSet_form_preview.ftl
 	po.inflateDataSetModel = function(dataSet)
 	{
 		dataSet.analysisProject = (dataSet.analysisProject == null ? {} : dataSet.analysisProject);
-		dataSet.properties = (dataSet.properties == null ? [] : dataSet.properties);
+		dataSet.fields = (dataSet.fields == null ? [] : dataSet.fields);
 		dataSet.params = (dataSet.params == null ? [] : dataSet.params);
+		dataSet.dataFormat = (dataSet.dataFormat == null ? {} : dataSet.dataFormat);
 	};
 	
 	po.createWorkspaceEditor = function(dom, options)

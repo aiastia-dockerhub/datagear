@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,10 +25,13 @@ import java.util.Map;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.datagear.analysis.DataSet;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetParam;
-import org.datagear.analysis.DataSetProperty;
 import org.datagear.analysis.support.AbstractResolvableResourceDataSet;
+import org.datagear.analysis.support.DataFormat;
+import org.datagear.analysis.support.HttpDataSet;
 import org.datagear.analysis.support.ProfileDataSet;
+import org.datagear.analysis.support.SqlDataSet;
 import org.datagear.connection.ConnectionSource;
 import org.datagear.management.domain.AnalysisProject;
 import org.datagear.management.domain.AnalysisProjectAwareEntity;
@@ -36,30 +39,32 @@ import org.datagear.management.domain.CsvFileDataSetEntity;
 import org.datagear.management.domain.CsvValueDataSetEntity;
 import org.datagear.management.domain.DataSetEntity;
 import org.datagear.management.domain.DirectoryFileDataSetEntity;
+import org.datagear.management.domain.DtbsSource;
 import org.datagear.management.domain.ExcelDataSetEntity;
 import org.datagear.management.domain.HttpDataSetEntity;
 import org.datagear.management.domain.JsonFileDataSetEntity;
 import org.datagear.management.domain.JsonValueDataSetEntity;
-import org.datagear.management.domain.Schema;
-import org.datagear.management.domain.SchemaConnectionFactory;
 import org.datagear.management.domain.SqlDataSetEntity;
 import org.datagear.management.domain.SummaryDataSetEntity;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.AnalysisProjectService;
 import org.datagear.management.service.AuthorizationService;
 import org.datagear.management.service.DataSetEntityService;
-import org.datagear.management.service.DataSetResDirectoryService;
+import org.datagear.management.service.DtbsSourceService;
+import org.datagear.management.service.FileSourceService;
 import org.datagear.management.service.PermissionDeniedException;
-import org.datagear.management.service.SchemaService;
 import org.datagear.management.service.UserService;
+import org.datagear.management.util.DtbsSourceConnectionFactory;
+import org.datagear.management.util.DtbsSourcePermissionSqlValidator;
+import org.datagear.management.util.DtbsSourceSqlPermissionValidator;
 import org.datagear.management.util.dialect.MbSqlDialect;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
-import org.datagear.util.CacheService;
 import org.datagear.util.FileUtil;
 import org.datagear.util.StringUtil;
 import org.datagear.util.sqlvalidator.SqlValidator;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.cache.Cache;
 
 /**
  * {@linkplain DataSetEntityService}实现类。
@@ -74,22 +79,25 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 	private ConnectionSource connectionSource;
 
-	private SchemaService schemaService;
+	private DtbsSourceService dtbsSourceService;
 
 	private AnalysisProjectService analysisProjectService;
 
 	private UserService userService;
 
-	private DataSetResDirectoryService dataSetResDirectoryService;
+	private FileSourceService fileSourceService;
 
 	/** 数据集文件存储根目录 */
 	private File dataSetRootDirectory;
 
 	private HttpClient httpClient;
 
-	private CacheService dataSetResourceDataCacheService = null;
+	private Cache dataSetResourceDataCache = null;
 
-	private SqlValidator sqlDataSetSqlValidator;
+	/** 数据集缓存数据的最大条目数 */
+	private int dataSetCacheMaxLength = 500;
+
+	private DtbsSourceSqlPermissionValidator dtbsSourceSqlPermissionValidator;
 
 	public DataSetEntityServiceImpl()
 	{
@@ -98,34 +106,34 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 	public DataSetEntityServiceImpl(SqlSessionFactory sqlSessionFactory, MbSqlDialect dialect,
 			AuthorizationService authorizationService,
-			ConnectionSource connectionSource, SchemaService schemaService,
+			ConnectionSource connectionSource, DtbsSourceService dtbsSourceService,
 			AnalysisProjectService analysisProjectService,
-			UserService userService, DataSetResDirectoryService dataSetResDirectoryService,
+			UserService userService, FileSourceService fileSourceService,
 			File dataSetRootDirectory, HttpClient httpClient)
 	{
 		super(sqlSessionFactory, dialect, authorizationService);
 		this.connectionSource = connectionSource;
-		this.schemaService = schemaService;
+		this.dtbsSourceService = dtbsSourceService;
 		this.analysisProjectService = analysisProjectService;
 		this.userService = userService;
-		this.dataSetResDirectoryService = dataSetResDirectoryService;
+		this.fileSourceService = fileSourceService;
 		setDataSetRootDirectory(dataSetRootDirectory);
 		this.httpClient = httpClient;
 	}
 
 	public DataSetEntityServiceImpl(SqlSessionTemplate sqlSessionTemplate, MbSqlDialect dialect,
 			AuthorizationService authorizationService,
-			ConnectionSource connectionSource, SchemaService schemaService,
+			ConnectionSource connectionSource, DtbsSourceService dtbsSourceService,
 			AnalysisProjectService analysisProjectService,
-			UserService userService, DataSetResDirectoryService dataSetResDirectoryService,
+			UserService userService, FileSourceService fileSourceService,
 			File dataSetRootDirectory, HttpClient httpClient)
 	{
 		super(sqlSessionTemplate, dialect, authorizationService);
 		this.connectionSource = connectionSource;
-		this.schemaService = schemaService;
+		this.dtbsSourceService = dtbsSourceService;
 		this.analysisProjectService = analysisProjectService;
 		this.userService = userService;
-		this.dataSetResDirectoryService = dataSetResDirectoryService;
+		this.fileSourceService = fileSourceService;
 		setDataSetRootDirectory(dataSetRootDirectory);
 		this.httpClient = httpClient;
 	}
@@ -140,14 +148,14 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		this.connectionSource = connectionSource;
 	}
 
-	public SchemaService getSchemaService()
+	public DtbsSourceService getDtbsSourceService()
 	{
-		return schemaService;
+		return dtbsSourceService;
 	}
 
-	public void setSchemaService(SchemaService schemaService)
+	public void setDtbsSourceService(DtbsSourceService dtbsSourceService)
 	{
-		this.schemaService = schemaService;
+		this.dtbsSourceService = dtbsSourceService;
 	}
 
 	public AnalysisProjectService getAnalysisProjectService()
@@ -170,14 +178,14 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		this.userService = userService;
 	}
 
-	public DataSetResDirectoryService getDataSetResDirectoryService()
+	public FileSourceService getFileSourceService()
 	{
-		return dataSetResDirectoryService;
+		return fileSourceService;
 	}
 
-	public void setDataSetResDirectoryService(DataSetResDirectoryService dataSetResDirectoryService)
+	public void setFileSourceService(FileSourceService fileSourceService)
 	{
-		this.dataSetResDirectoryService = dataSetResDirectoryService;
+		this.fileSourceService = fileSourceService;
 	}
 
 	public File getDataSetRootDirectory()
@@ -190,7 +198,6 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		this.dataSetRootDirectory = dataSetRootDirectory;
 	}
 
-	@Override
 	public HttpClient getHttpClient()
 	{
 		return httpClient;
@@ -201,31 +208,53 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		this.httpClient = httpClient;
 	}
 
-	public CacheService getDataSetResourceDataCacheService()
+	public Cache getDataSetResourceDataCache()
 	{
-		return dataSetResourceDataCacheService;
+		return dataSetResourceDataCache;
 	}
 
-	public void setDataSetResourceDataCacheService(CacheService dataSetResourceDataCacheService)
+	public void setDataSetResourceDataCache(Cache dataSetResourceDataCache)
 	{
-		this.dataSetResourceDataCacheService = dataSetResourceDataCacheService;
+		this.dataSetResourceDataCache = dataSetResourceDataCache;
 	}
 
-	@Override
-	public SqlValidator getSqlDataSetSqlValidator()
+	public int getDataSetCacheMaxLength()
 	{
-		return sqlDataSetSqlValidator;
+		return dataSetCacheMaxLength;
 	}
 
-	public void setSqlDataSetSqlValidator(SqlValidator sqlDataSetSqlValidator)
+	public void setDataSetCacheMaxLength(int dataSetCacheMaxLength)
 	{
-		this.sqlDataSetSqlValidator = sqlDataSetSqlValidator;
+		this.dataSetCacheMaxLength = dataSetCacheMaxLength;
+	}
+
+	public DtbsSourceSqlPermissionValidator getDtbsSourceSqlPermissionValidator()
+	{
+		return dtbsSourceSqlPermissionValidator;
+	}
+
+	public void setDtbsSourceSqlPermissionValidator(DtbsSourceSqlPermissionValidator dtbsSourceSqlPermissionValidator)
+	{
+		this.dtbsSourceSqlPermissionValidator = dtbsSourceSqlPermissionValidator;
 	}
 
 	@Override
 	public File getDataSetDirectory(String dataSetId)
 	{
 		return FileUtil.getDirectory(getDataSetRootDirectory(), dataSetId);
+	}
+
+	@Override
+	public HttpClient buildHttpClient(HttpDataSet dataSet)
+	{
+		return getHttpClient();
+	}
+
+	@Override
+	public SqlValidator buildSqlValidator(SqlDataSet dataSet)
+	{
+		return new DtbsSourcePermissionSqlValidator(getDtbsSourceSqlPermissionValidator(),
+				DtbsSource.PERMISSION_TABLE_DATA_READ);
 	}
 
 	@Override
@@ -236,19 +265,29 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		if (entity instanceof SqlDataSetEntity)
 		{
 			SqlDataSetEntity sqlDataSetEntity = (SqlDataSetEntity) entity;
-			SchemaConnectionFactory connectionFactory = sqlDataSetEntity.getConnectionFactory();
+			DtbsSourceConnectionFactory connectionFactory = sqlDataSetEntity.getConnectionFactory();
 			
 			if(connectionFactory != null)
 			{
-				connectionFactory = new SchemaConnectionFactory(this.connectionSource, connectionFactory.getSchema());
+				connectionFactory = new DtbsSourceConnectionFactory(this.connectionSource, connectionFactory.getDtbsSource());
 				sqlDataSetEntity.setConnectionFactory(connectionFactory);
 			}
 
-			sqlDataSetEntity.setSqlValidator(this.sqlDataSetSqlValidator);
+			sqlDataSetEntity.setSqlValidator(buildSqlValidator(sqlDataSetEntity));
 		}
 
+		if (entity instanceof DirectoryFileDataSetEntity)
+			((DirectoryFileDataSetEntity) entity).setDirectory(getDataSetDirectory(entity.getId()));
+
+		if (entity instanceof HttpDataSetEntity)
+			((HttpDataSetEntity) entity).setHttpClient(buildHttpClient((HttpDataSetEntity) entity));
+
 		if (entity instanceof AbstractResolvableResourceDataSet<?>)
-			((AbstractResolvableResourceDataSet<?>) entity).setCacheService(getDataSetResourceDataCacheService());
+		{
+			AbstractResolvableResourceDataSet<?> rds = (AbstractResolvableResourceDataSet<?>) entity;
+			rds.setCache(this.dataSetResourceDataCache);
+			rds.setDataCacheMaxLength(this.dataSetCacheMaxLength);
+		}
 
 		return entity;
 	}
@@ -296,7 +335,7 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		if (entity instanceof SummaryDataSetEntity)
 			throw new IllegalArgumentException();
 
-		super.add(entity, params);
+		super.add(toAddDataSetEntity(entity), params);
 
 		if (entity instanceof SqlDataSetEntity)
 			addSqlDataSetEntity((SqlDataSetEntity) entity);
@@ -312,8 +351,26 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 			addCsvFileDataSetEntity((CsvFileDataSetEntity) entity);
 		else if (entity instanceof HttpDataSetEntity)
 			addHttpDataSetEntity((HttpDataSetEntity) entity);
+		else
+			addExtDataSetEntity(entity, params);
 
 		saveDataSetChildren(entity);
+	}
+
+	protected SummaryDataSetEntity toAddDataSetEntity(DataSetEntity entity)
+	{
+		SummaryDataSetEntity re = new SummaryDataSetEntity(entity);
+
+		// 不保存默认数据格式，避免占用存储空间
+		if (DataFormat.DEFAULT.equals(re.getDataFormat()))
+			re.setDataFormat(null);
+
+		return re;
+	}
+
+	protected boolean addExtDataSetEntity(DataSetEntity entity, Map<String, Object> params)
+	{
+		return true;
 	}
 
 	protected boolean addSqlDataSetEntity(SqlDataSetEntity entity)
@@ -378,7 +435,7 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		if (entity instanceof SummaryDataSetEntity)
 			throw new IllegalArgumentException();
 
-		boolean success = super.update(entity, params);
+		boolean success = super.update(toUpdateDataSetEntity(entity), params);
 
 		if (success)
 		{
@@ -396,12 +453,30 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 				success = updateCsvFileDataSetEntity((CsvFileDataSetEntity) entity);
 			else if (entity instanceof HttpDataSetEntity)
 				success = updateHttpDataSetEntity((HttpDataSetEntity) entity);
+			else
+				success = updateExtDataSetEntity(entity, params);
 		}
 
 		if (success)
 			saveDataSetChildren(entity);
 
 		return success;
+	}
+
+	protected SummaryDataSetEntity toUpdateDataSetEntity(DataSetEntity entity)
+	{
+		SummaryDataSetEntity re = new SummaryDataSetEntity(entity);
+
+		// 不保存默认数据格式，避免占用存储空间
+		if (DataFormat.DEFAULT.equals(re.getDataFormat()))
+			re.setDataFormat(null);
+
+		return re;
+	}
+
+	protected boolean updateExtDataSetEntity(DataSetEntity entity, Map<String, Object> params)
+	{
+		return true;
 	}
 
 	protected boolean updateSqlDataSetEntity(SqlDataSetEntity entity)
@@ -494,13 +569,20 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 			entity = getCsvFileDataSetEntityById(entity.getId());
 		else if (DataSetEntity.DATA_SET_TYPE_Http.equals(entity.getDataSetType()))
 			entity = getHttpDataSetEntityById(entity.getId());
+		else
+			entity = getExtDataSetEntityById(entity, params);
 
-		inflateParamsAndProperties(entity);
+		inflateParamsAndFields(entity);
 
 		return entity;
 	}
 
-	protected void inflateParamsAndProperties(DataSetEntity dataSetEntity)
+	protected DataSetEntity getExtDataSetEntityById(DataSetEntity entity, Map<String, Object> params)
+	{
+		return entity;
+	}
+
+	protected void inflateParamsAndFields(DataSetEntity dataSetEntity)
 	{
 		if (dataSetEntity == null)
 			return;
@@ -508,9 +590,9 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		Map<String, Object> params = buildParamMap();
 		params.put("dataSetId", dataSetEntity.getId());
 
-		List<DataSetPropertyPO> propertyPOs = selectListMybatis("getPropertyPOs", params);
-		List<DataSetProperty> dataSetProperties = DataSetPropertyPO.to(propertyPOs);
-		dataSetEntity.setProperties(dataSetProperties);
+		List<DataSetFieldPO> fieldPOs = selectListMybatis("getFieldPOs", params);
+		List<DataSetField> fields = DataSetFieldPO.to(fieldPOs);
+		dataSetEntity.setFields(fields);
 
 		List<DataSetParamPO> paramPOs = selectListMybatis("getParamPOs", params);
 		List<DataSetParam> dataSetParams = DataSetParamPO.to(paramPOs);
@@ -544,9 +626,6 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 		JsonFileDataSetEntity entity = selectOneMybatis("getJsonFileDataSetEntityById", params);
 
-		if (entity != null)
-			entity.setDirectory(getDataSetDirectory(id));
-
 		return entity;
 	}
 
@@ -556,9 +635,6 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		params.put("id", id);
 
 		ExcelDataSetEntity entity = selectOneMybatis("getExcelDataSetEntityById", params);
-
-		if (entity != null)
-			entity.setDirectory(getDataSetDirectory(id));
 
 		return entity;
 	}
@@ -580,9 +656,6 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 		CsvFileDataSetEntity entity = selectOneMybatis("getCsvFileDataSetEntityById", params);
 
-		if (entity != null)
-			entity.setDirectory(getDataSetDirectory(id));
-
 		return entity;
 	}
 
@@ -593,9 +666,6 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 		HttpDataSetEntity entity = selectOneMybatis("getHttpDataSetEntityById", params);
 
-		if (entity != null)
-			entity.setHttpClient(this.httpClient);
-
 		return entity;
 	}
 
@@ -605,19 +675,23 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		inflateAnalysisProjectAwareEntity(obj, this.analysisProjectService);
 		inflateCreateUserEntity(obj, this.userService);
 
+		// 设置默认数据格式
+		if (obj.getDataFormat() == null)
+			obj.setDataFormat(DataFormat.DEFAULT);
+
 		if (obj instanceof DirectoryFileDataSetEntity)
-			inflateDirectoryFileDataSetEntity((DirectoryFileDataSetEntity) obj, this.dataSetResDirectoryService);
+			inflateDirectoryFileDataSetEntity((DirectoryFileDataSetEntity) obj, this.fileSourceService);
 
 		if (obj instanceof SqlDataSetEntity)
 		{
 			SqlDataSetEntity entity = (SqlDataSetEntity) obj;
 
-			SchemaConnectionFactory connectionFactory = entity.getConnectionFactory();
-			Schema schema = (connectionFactory == null ? null : connectionFactory.getSchema());
-			String schemaId = (schema == null ? null : schema.getId());
+			DtbsSourceConnectionFactory connectionFactory = entity.getConnectionFactory();
+			DtbsSource dtbsSource = (connectionFactory == null ? null : connectionFactory.getDtbsSource());
+			String dtbsSourceId = (dtbsSource == null ? null : dtbsSource.getId());
 
-			if (!StringUtil.isEmpty(schemaId))
-				connectionFactory.setSchema(this.schemaService.getById(schemaId));
+			if (!StringUtil.isEmpty(dtbsSourceId))
+				connectionFactory.setDtbsSource(this.dtbsSourceService.getById(dtbsSourceId));
 		}
 
 		return super.postProcessGet(obj);
@@ -639,11 +713,11 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 
 	protected void saveDataSetChildren(DataSetEntity entity)
 	{
-		saveDataSetPropertyPOs(entity);
+		saveDataSetFieldPOs(entity);
 		saveDataSetParamPOs(entity);
 	}
 
-	protected void saveDataSetPropertyPOs(DataSetEntity entity)
+	protected void saveDataSetFieldPOs(DataSetEntity entity)
 	{
 		if (entity == null)
 			return;
@@ -651,18 +725,18 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		Map<String, Object> delParams = buildParamMap();
 		delParams.put("dataSetId", entity.getId());
 
-		deleteMybatis("deletePropertyPOs", delParams);
+		deleteMybatis("deleteFieldPOs", delParams);
 
-		List<DataSetPropertyPO> pos = DataSetPropertyPO.from(entity);
+		List<DataSetFieldPO> pos = DataSetFieldPO.from(entity);
 
 		if (!pos.isEmpty())
 		{
-			for (DataSetPropertyPO relation : pos)
+			for (DataSetFieldPO relation : pos)
 			{
 				Map<String, Object> insertParams = buildParamMap();
 				insertParams.put("entity", relation);
 
-				insertMybatis("insertPropertyPO", insertParams);
+				insertMybatis("insertFieldPO", insertParams);
 			}
 		}
 	}
@@ -754,41 +828,41 @@ public class DataSetEntityServiceImpl extends AbstractMybatisDataPermissionEntit
 		}
 	}
 
-	public static class DataSetPropertyPO extends DataSetChildPO<DataSetProperty>
+	public static class DataSetFieldPO extends DataSetChildPO<DataSetField>
 	{
-		public DataSetPropertyPO()
+		public DataSetFieldPO()
 		{
 			super();
 		}
 
-		public DataSetPropertyPO(String dataSetId, DataSetProperty child, int order)
+		public DataSetFieldPO(String dataSetId, DataSetField child, int order)
 		{
 			super(dataSetId, child, order);
 		}
 
 		@Override
-		public DataSetProperty getChild()
+		public DataSetField getChild()
 		{
 			return super.getChild();
 		}
 
 		@Override
-		public void setChild(DataSetProperty child)
+		public void setChild(DataSetField child)
 		{
 			super.setChild(child);
 		}
 
-		public static List<DataSetPropertyPO> from(DataSet dataSet)
+		public static List<DataSetFieldPO> from(DataSet dataSet)
 		{
-			List<DataSetPropertyPO> pos = new ArrayList<>();
+			List<DataSetFieldPO> pos = new ArrayList<>();
 
-			List<DataSetProperty> properties = dataSet.getProperties();
+			List<DataSetField> fields = dataSet.getFields();
 
-			if (properties != null)
+			if (fields != null)
 			{
-				for (int i = 0; i < properties.size(); i++)
+				for (int i = 0; i < fields.size(); i++)
 				{
-					DataSetPropertyPO po = new DataSetPropertyPO(dataSet.getId(), properties.get(i), i);
+					DataSetFieldPO po = new DataSetFieldPO(dataSet.getId(), fields.get(i), i);
 					pos.add(po);
 				}
 			}

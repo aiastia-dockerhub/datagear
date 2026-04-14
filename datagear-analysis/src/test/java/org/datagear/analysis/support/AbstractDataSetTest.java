@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -18,6 +18,8 @@
 package org.datagear.analysis.support;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -28,10 +30,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.ResultDataFormat;
+import org.datagear.analysis.support.datasettpl.SqlTemplateResult;
 import org.junit.Test;
 
 /**
@@ -47,7 +50,7 @@ public class AbstractDataSetTest
 	{
 		TestAbstractDataSet dataSet = new TestAbstractDataSet();
 
-		DataFormat dataFormat = dataSet.createDataSetPropertyValueConverter().getDataFormat();
+		DataFormat dataFormat = dataSet.createDataSetFieldValueConverter().getDataFormat();
 		SimpleDateFormat dateFormat = new SimpleDateFormat(dataFormat.getDateFormat());
 		SimpleDateFormat timeFormat = new SimpleDateFormat(dataFormat.getTimeFormat());
 		SimpleDateFormat timestampFormat = new SimpleDateFormat(dataFormat.getTimestampFormat());
@@ -68,19 +71,19 @@ public class AbstractDataSetTest
 
 		Collections.addAll(rawData, raw0, raw1);
 
-		List<DataSetProperty> properties = new ArrayList<DataSetProperty>();
+		List<DataSetField> fields = new ArrayList<DataSetField>();
 		{
-			DataSetProperty p0 = new DataSetProperty("number", DataSetProperty.DataType.NUMBER);
-			DataSetProperty p1 = new DataSetProperty("date", DataSetProperty.DataType.DATE);
-			DataSetProperty p2 = new DataSetProperty("time", DataSetProperty.DataType.TIME);
-			DataSetProperty p3 = new DataSetProperty("timestamp", DataSetProperty.DataType.TIMESTAMP);
+			DataSetField p0 = new DataSetField("number", DataSetField.DataType.NUMBER);
+			DataSetField p1 = new DataSetField("date", DataSetField.DataType.DATE);
+			DataSetField p2 = new DataSetField("time", DataSetField.DataType.TIME);
+			DataSetField p3 = new DataSetField("timestamp", DataSetField.DataType.TIMESTAMP);
 
-			Collections.addAll(properties, p0, p1, p2, p3);
+			Collections.addAll(fields, p0, p1, p2, p3);
 		}
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-				properties, -1, null);
+				fields, -1, null);
 
 		assertEquals(rawData.size(), resultData.size());
 
@@ -132,19 +135,19 @@ public class AbstractDataSetTest
 
 		Collections.addAll(rawData, raw0, raw1);
 
-		List<DataSetProperty> properties = new ArrayList<DataSetProperty>();
+		List<DataSetField> fields = new ArrayList<DataSetField>();
 		{
-			DataSetProperty p0 = new DataSetProperty("number", DataSetProperty.DataType.NUMBER);
-			DataSetProperty p1 = new DataSetProperty("date", DataSetProperty.DataType.DATE);
-			DataSetProperty p2 = new DataSetProperty("time", DataSetProperty.DataType.TIME);
-			DataSetProperty p3 = new DataSetProperty("timestamp", DataSetProperty.DataType.TIMESTAMP);
+			DataSetField p0 = new DataSetField("number", DataSetField.DataType.NUMBER);
+			DataSetField p1 = new DataSetField("date", DataSetField.DataType.DATE);
+			DataSetField p2 = new DataSetField("time", DataSetField.DataType.TIME);
+			DataSetField p3 = new DataSetField("timestamp", DataSetField.DataType.TIMESTAMP);
 
-			Collections.addAll(properties, p0, p1, p2, p3);
+			Collections.addAll(fields, p0, p1, p2, p3);
 		}
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-				properties, -1, null);
+				fields, -1, null);
 
 		assertEquals(rawData.size(), resultData.size());
 
@@ -184,14 +187,14 @@ public class AbstractDataSetTest
 
 		Collections.addAll(rawData, raw0, raw1);
 
-		List<DataSetProperty> properties = new ArrayList<DataSetProperty>();
+		List<DataSetField> fields = new ArrayList<DataSetField>();
 		{
-			DataSetProperty p0 = new DataSetProperty("number", DataSetProperty.DataType.NUMBER);
-			DataSetProperty p1 = new DataSetProperty("date", DataSetProperty.DataType.DATE);
-			DataSetProperty p2 = new DataSetProperty("time", DataSetProperty.DataType.TIME);
-			DataSetProperty p3 = new DataSetProperty("timestamp", DataSetProperty.DataType.TIMESTAMP);
+			DataSetField p0 = new DataSetField("number", DataSetField.DataType.NUMBER);
+			DataSetField p1 = new DataSetField("date", DataSetField.DataType.DATE);
+			DataSetField p2 = new DataSetField("time", DataSetField.DataType.TIME);
+			DataSetField p3 = new DataSetField("timestamp", DataSetField.DataType.TIMESTAMP);
 
-			Collections.addAll(properties, p0, p1, p2, p3);
+			Collections.addAll(fields, p0, p1, p2, p3);
 		}
 
 		// 字符串
@@ -203,7 +206,7 @@ public class AbstractDataSetTest
 
 			@SuppressWarnings("unchecked")
 			List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-					properties, -1, resultDataFormat);
+					fields, -1, resultDataFormat);
 
 			assertEquals(rawData.size(), resultData.size());
 
@@ -231,7 +234,7 @@ public class AbstractDataSetTest
 
 			@SuppressWarnings("unchecked")
 			List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-					properties, -1, resultDataFormat);
+					fields, -1, resultDataFormat);
 
 			assertEquals(rawData.size(), resultData.size());
 
@@ -257,14 +260,14 @@ public class AbstractDataSetTest
 			resultDataFormat.setTimeType(ResultDataFormat.TYPE_NONE);
 			resultDataFormat.setTimestampType(ResultDataFormat.TYPE_NONE);
 
-			DataFormat dataFormat = dataSet.createDataSetPropertyValueConverter().getDataFormat();
+			DataFormat dataFormat = dataSet.createDataSetFieldValueConverter().getDataFormat();
 			SimpleDateFormat dateFormat = new SimpleDateFormat(dataFormat.getDateFormat());
 			SimpleDateFormat timeFormat = new SimpleDateFormat(dataFormat.getTimeFormat());
 			SimpleDateFormat timestampFormat = new SimpleDateFormat(dataFormat.getTimestampFormat());
 
 			@SuppressWarnings("unchecked")
 			List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-					properties, -1, resultDataFormat);
+					fields, -1, resultDataFormat);
 
 			assertEquals(rawData.size(), resultData.size());
 
@@ -290,14 +293,14 @@ public class AbstractDataSetTest
 			resultDataFormat.setTimeType(ResultDataFormat.TYPE_NONE);
 			resultDataFormat.setTimestampType(ResultDataFormat.TYPE_NONE);
 
-			DataFormat dataFormat = dataSet.createDataSetPropertyValueConverter().getDataFormat();
+			DataFormat dataFormat = dataSet.createDataSetFieldValueConverter().getDataFormat();
 			SimpleDateFormat dateFormat = new SimpleDateFormat(dataFormat.getDateFormat());
 			SimpleDateFormat timeFormat = new SimpleDateFormat(dataFormat.getTimeFormat());
 			SimpleDateFormat timestampFormat = new SimpleDateFormat(dataFormat.getTimestampFormat());
 
 			@SuppressWarnings("unchecked")
 			List<Map<String, Object>> resultData = (List<Map<String, Object>>) dataSet.resolveResultData(rawData,
-					properties, -1, resultDataFormat);
+					fields, -1, resultDataFormat);
 
 			assertEquals(rawData.size(), resultData.size());
 
@@ -332,29 +335,29 @@ public class AbstractDataSetTest
 
 		Collections.addAll(rawData, raw0);
 
-		List<DataSetProperty> properties = new ArrayList<DataSetProperty>();
+		List<DataSetField> fields = new ArrayList<DataSetField>();
 		{
-			DataSetProperty p0 = new DataSetProperty("v0", DataSetProperty.DataType.INTEGER);
-			DataSetProperty p1 = new DataSetProperty("v1", DataSetProperty.DataType.NUMBER);
-			DataSetProperty p2 = new DataSetProperty("v2", DataSetProperty.DataType.NUMBER);
-			DataSetProperty p3 = new DataSetProperty("s0", DataSetProperty.DataType.STRING);
+			DataSetField p0 = new DataSetField("v0", DataSetField.DataType.INTEGER);
+			DataSetField p1 = new DataSetField("v1", DataSetField.DataType.NUMBER);
+			DataSetField p2 = new DataSetField("v2", DataSetField.DataType.NUMBER);
+			DataSetField p3 = new DataSetField("s0", DataSetField.DataType.STRING);
 
 			// 支持自身计算
 			p2.setEvaluated(true);
 			p2.setExpression("v2 * 3 + v1");
 
-			DataSetProperty avg = new DataSetProperty("avg", DataSetProperty.DataType.DECIMAL);
+			DataSetField avg = new DataSetField("avg", DataSetField.DataType.DECIMAL);
 			avg.setEvaluated(true);
 			avg.setExpression("(v0 + v1)/2");
 
-			DataSetProperty suffix = new DataSetProperty("suffix", DataSetProperty.DataType.STRING);
+			DataSetField suffix = new DataSetField("suffix", DataSetField.DataType.STRING);
 			suffix.setEvaluated(true);
 			suffix.setExpression("s0 + '-sufix'");
 
-			Collections.addAll(properties, p0, p1, p2, p3, avg, suffix);
+			Collections.addAll(fields, p0, p1, p2, p3, avg, suffix);
 		}
 
-		List<Map<String, Object>> resultData = dataSet.convertRawDataToResult(rawData, properties, -1, null);
+		List<Map<String, Object>> resultData = dataSet.convertRawDataToResult(rawData, fields, -1, null);
 
 		assertEquals(rawData.size(), resultData.size());
 
@@ -369,8 +372,83 @@ public class AbstractDataSetTest
 		}
 	}
 
+	@Test
+	public void resolveTemplatePlainTest()
+	{
+		TestAbstractDataSet dataSet = new TestAbstractDataSet();
+		DataSetQuery query = new DataSetQuery();
+		query.setParamValue("name", "vvv-'a'-<b>-\"c\"-\t-\r-\n-vvv");
+
+		String actual = dataSet.resolveTemplatePlain("tpl-${name}-tpl", query);
+		assertEquals("tpl-vvv-'a'-<b>-\"c\"-\t-\r-\n-vvv-tpl", actual);
+	}
+
+	@Test
+	public void resolveTemplateCsvTest()
+	{
+		TestAbstractDataSet dataSet = new TestAbstractDataSet();
+		DataSetQuery query = new DataSetQuery();
+		query.setParamValue("name", "vvv-'a'-<b>-\"c\"-\t-\r-\n-vvv");
+
+		String actual = dataSet.resolveTemplateCsv("tpl-${name}-tpl", query);
+		assertEquals("tpl-vvv-'a'-<b>-\"\"c\"\"-\t-\\r-\\n-vvv-tpl", actual);
+	}
+
+	@Test
+	public void resolveTemplateJsonTest()
+	{
+		TestAbstractDataSet dataSet = new TestAbstractDataSet();
+		DataSetQuery query = new DataSetQuery();
+		query.setParamValue("name", "vvv-'a'-<b>-\"c\"-\t-\r-\n-vvv");
+
+		String actual = dataSet.resolveTemplateJson("tpl-${name}-tpl", query);
+		assertEquals("tpl-vvv-'a'-<b>-\\\"c\\\"-\t-\\r-\\n-vvv-tpl", actual);
+	}
+
+	@Test
+	public void resolveTemplateSqlTest()
+	{
+		TestAbstractDataSet dataSet = new TestAbstractDataSet();
+
+		{
+			DataSetQuery query = new DataSetQuery();
+			query.setParamValue("name", "vvv-'a'-<b>-\"c\"-\t-\r-\n-vvv");
+
+			String actual = dataSet.resolveTemplateSql("tpl-${name}-tpl", query);
+			assertEquals("tpl-vvv-''a''-<b>-\"c\"-\t-\r-\n-vvv-tpl", actual);
+		}
+
+		// 预编译
+		{
+			DataSetQuery query = new DataSetQuery();
+			query.setParamValue("name", "a'a");
+
+			SqlTemplateResult actual = dataSet.resolveTemplateResultSql("SELECT * FROM TABLE WHERE NAME = ${pc(name)}",
+					query);
+			List<Object> paramValues = actual.getParamValues();
+
+			assertEquals("SELECT * FROM TABLE WHERE NAME = ?", actual.getResult());
+			assertTrue(actual.isPrecompiled());
+			assertFalse(paramValues.isEmpty());
+			assertEquals("a'a", paramValues.get(0));
+		}
+	}
+
+	@Test
+	public void resolveTemplateXmlTest()
+	{
+		TestAbstractDataSet dataSet = new TestAbstractDataSet();
+		DataSetQuery query = new DataSetQuery();
+		query.setParamValue("name", "vvv-'a'-<b>-\"c\"-\t-\r-\n-&-vvv");
+
+		String actual = dataSet.resolveTemplateXml("tpl-${name}-tpl", query);
+		assertEquals("tpl-vvv-&apos;a&apos;-&lt;b&gt;-&quot;c&quot;-\t-\r-\n-&amp;-vvv-tpl", actual);
+	}
+
 	private static class TestAbstractDataSet extends AbstractDataSet
 	{
+		private static final long serialVersionUID = 1L;
+
 		@Override
 		public DataSetResult getResult(DataSetQuery query) throws DataSetException
 		{

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -43,6 +43,8 @@ import org.datagear.util.i18n.Label;
  */
 public class AttributeValueHtmlChartPlugin extends HtmlChartPlugin
 {
+	private static final long serialVersionUID = 1L;
+
 	private String attrName;
 
 	public AttributeValueHtmlChartPlugin()
@@ -50,11 +52,11 @@ public class AttributeValueHtmlChartPlugin extends HtmlChartPlugin
 		super();
 	}
 
-	public AttributeValueHtmlChartPlugin(String id, String attrName)
+	public AttributeValueHtmlChartPlugin(String id, String attrName, HtmlChartPluginScriptObjectWriter pluginWriter,
+			HtmlRenderContextScriptObjectWriter renderContextWriter, HtmlChartScriptObjectWriter chartWriter)
 	{
-		super();
-		super.setId(id);
-		super.setNameLabel(new Label(AttributeValueHtmlChartPlugin.class.getSimpleName()));
+		super(id, new Label(AttributeValueHtmlChartPlugin.class.getSimpleName()), null, pluginWriter,
+				renderContextWriter, chartWriter);
 		super.setRenderer(buildJsChartRenderer(attrName));
 		this.attrName = attrName;
 	}

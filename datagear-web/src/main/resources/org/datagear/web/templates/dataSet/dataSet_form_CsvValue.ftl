@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DataSetEntity=statics['org.datagear.management.domain.DataSetEntity']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -58,14 +59,13 @@
 					</p-inputtext>
 				</div>
 			</div>
-			<#include "include/dataSet_form_param_property.ftl">
+			<#include "include/dataSet_form_param_field.ftl">
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
-			<#include "include/dataSet_form_preview.ftl">
-			<p-button type="submit" label="<@spring.message code='save' />" class="hide-if-readonly"></p-button>
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
+			<#include "include/dataSet_form_submit_btn.ftl">
 		</div>
 	</form>
-	<#include "include/dataSet_form_param_property_form.ftl">
+	<#include "include/dataSet_form_param_field_form.ftl">
 </div>
 <#include "../include/page_form.ftl">
 <#include "../include/page_simple_form.ftl">
@@ -76,7 +76,7 @@
 (function(po)
 {
 	po.submitUrl = "/dataSet/"+po.submitAction;
-	po.previewUrl = "/dataSet/previewCsvValue";
+	po.previewUrl = "/dataSet/preview/${DataSetEntity.DATA_SET_TYPE_CsvValue}";
 	
 	po.inflatePreviewFingerprint = function(fingerprint, dataSet)
 	{
@@ -126,10 +126,9 @@
 		po.codeEditor = po.createWorkspaceEditor(po.elementOfId("${pid}codeEditor"));
 		po.setCodeTextTimeout(po.codeEditor, fm.value);
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

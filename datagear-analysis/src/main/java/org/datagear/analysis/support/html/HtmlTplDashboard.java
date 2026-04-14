@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -29,6 +29,8 @@ import org.datagear.analysis.TplDashboardWidget;
  */
 public class HtmlTplDashboard extends TplDashboard
 {
+	private static final long serialVersionUID = 1L;
+
 	/** 看板JS对象变量名 */
 	private String varName;
 	

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,7 +25,7 @@ import java.util.Date;
  * @author datagear@163.com
  *
  */
-public class SqlHistory extends AbstractStringIdEntity
+public class SqlHistory extends AbstractStringIdEntity implements CreateTimeEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -33,24 +33,24 @@ public class SqlHistory extends AbstractStringIdEntity
 	private String sql;
 
 	/** 数据源ID */
-	private String schemaId;
+	private String dtbsSourceId;
 
 	/** 用户ID */
 	private String userId;
 
 	/** SQL时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	public SqlHistory()
 	{
 		super();
 	}
 
-	public SqlHistory(String id, String sql, String schemaId, String userId)
+	public SqlHistory(String id, String sql, String dtbsSourceId, String userId)
 	{
 		super(id);
 		this.sql = sql;
-		this.schemaId = schemaId;
+		this.dtbsSourceId = dtbsSourceId;
 		this.userId = userId;
 	}
 
@@ -64,14 +64,14 @@ public class SqlHistory extends AbstractStringIdEntity
 		this.sql = sql;
 	}
 
-	public String getSchemaId()
+	public String getDtbsSourceId()
 	{
-		return schemaId;
+		return dtbsSourceId;
 	}
 
-	public void setSchemaId(String schemaId)
+	public void setDtbsSourceId(String dtbsSourceId)
 	{
-		this.schemaId = schemaId;
+		this.dtbsSourceId = dtbsSourceId;
 	}
 
 	public String getUserId()
@@ -84,11 +84,13 @@ public class SqlHistory extends AbstractStringIdEntity
 		this.userId = userId;
 	}
 
+	@Override
 	public Date getCreateTime()
 	{
 		return createTime;
 	}
 
+	@Override
 	public void setCreateTime(Date createTime)
 	{
 		this.createTime = createTime;

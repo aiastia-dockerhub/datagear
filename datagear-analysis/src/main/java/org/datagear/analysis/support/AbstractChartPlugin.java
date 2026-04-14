@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -41,6 +41,8 @@ import org.datagear.util.i18n.Label;
  */
 public abstract class AbstractChartPlugin extends AbstractIdentifiable implements ChartPlugin
 {
+	private static final long serialVersionUID = 1L;
+
 	private Label nameLabel;
 
 	private Label descLabel = null;
@@ -59,9 +61,19 @@ public abstract class AbstractChartPlugin extends AbstractIdentifiable implement
 
 	private int order = 0;
 
-	private List<Category> categories = Collections.emptyList();;
+	private List<Category> categories = Collections.emptyList();
 
-	private List<Integer> categoryOrders = Collections.emptyList();;
+	private List<Integer> categoryOrders = Collections.emptyList();
+
+	private String author = "";
+
+	private String contact = "";
+
+	private String issueDate = "";
+
+	private String platformVersion = "";
+
+	private Map<String, ?> additions = null;
 
 	public AbstractChartPlugin()
 	{
@@ -214,6 +226,7 @@ public abstract class AbstractChartPlugin extends AbstractIdentifiable implement
 		return null;
 	}
 
+	@Override
 	public ChartPluginDataSetRange getDataSetRange()
 	{
 		return dataSetRange;
@@ -266,5 +279,60 @@ public abstract class AbstractChartPlugin extends AbstractIdentifiable implement
 	public void setCategoryOrders(List<Integer> categoryOrders)
 	{
 		this.categoryOrders = categoryOrders;
+	}
+
+	@Override
+	public String getAuthor()
+	{
+		return author;
+	}
+
+	public void setAuthor(String author)
+	{
+		this.author = author;
+	}
+
+	@Override
+	public String getContact()
+	{
+		return contact;
+	}
+
+	public void setContact(String contact)
+	{
+		this.contact = contact;
+	}
+
+	@Override
+	public String getIssueDate()
+	{
+		return issueDate;
+	}
+
+	public void setIssueDate(String issueDate)
+	{
+		this.issueDate = issueDate;
+	}
+
+	@Override
+	public String getPlatformVersion()
+	{
+		return platformVersion;
+	}
+
+	public void setPlatformVersion(String platformVersion)
+	{
+		this.platformVersion = platformVersion;
+	}
+
+	@Override
+	public Map<String, ?> getAdditions()
+	{
+		return additions;
+	}
+
+	public void setAdditions(Map<String, ?> additions)
+	{
+		this.additions = additions;
 	}
 }

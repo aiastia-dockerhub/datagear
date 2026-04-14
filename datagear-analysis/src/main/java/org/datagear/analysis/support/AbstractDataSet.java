@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,7 @@
 
 package org.datagear.analysis.support;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -27,14 +28,18 @@ import java.util.Map;
 
 import org.datagear.analysis.AbstractIdentifiable;
 import org.datagear.analysis.DataSet;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetParam;
-import org.datagear.analysis.DataSetProperty;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.NameAwareUtil;
 import org.datagear.analysis.ResolvedDataSetResult;
 import org.datagear.analysis.ResultDataFormat;
-import org.datagear.analysis.support.DataSetPropertyExpEvaluator.ValueSetter;
+import org.datagear.analysis.support.DataSetFieldExpEvaluator.ValueSetter;
+import org.datagear.analysis.support.datasettpl.DataSetFmkTemplateResolvers;
+import org.datagear.analysis.support.datasettpl.SqlTemplateResult;
+import org.datagear.analysis.support.datasettpl.TemplateContext;
+import org.datagear.analysis.support.datasettpl.TemplateResult;
 
 /**
  * 抽象{@linkplain DataSet}。
@@ -42,29 +47,34 @@ import org.datagear.analysis.support.DataSetPropertyExpEvaluator.ValueSetter;
  * @author datagear@163.com
  *
  */
-public abstract class AbstractDataSet extends AbstractIdentifiable implements DataSet
+public abstract class AbstractDataSet extends AbstractIdentifiable implements DataSet, Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	private String name;
 
 	private boolean mutableModel = false;
 
-	private List<DataSetProperty> properties = Collections.emptyList();
+	private List<DataSetField> fields = Collections.emptyList();
 
 	private List<DataSetParam> params = Collections.emptyList();
 
-	/** 数据格式 */
-	private DataFormat dataFormat = new DataFormat();
+	/** 底层数据转换格式 */
+	private DataFormat dataFormat = DataFormat.DEFAULT;
+
+	/** 描述 */
+	private String description = "";
 
 	public AbstractDataSet()
 	{
 		super();
 	}
 
-	public AbstractDataSet(String id, String name, List<DataSetProperty> properties)
+	public AbstractDataSet(String id, String name, List<DataSetField> fields)
 	{
 		super(id);
 		this.name = name;
-		this.properties = properties;
+		this.fields = fields;
 	}
 
 	@Override
@@ -90,20 +100,20 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	@Override
-	public List<DataSetProperty> getProperties()
+	public List<DataSetField> getFields()
 	{
-		return properties;
+		return fields;
 	}
 
-	public void setProperties(List<DataSetProperty> properties)
+	public void setFields(List<DataSetField> fields)
 	{
-		this.properties = properties;
+		this.fields = fields;
 	}
 
 	@Override
-	public DataSetProperty getProperty(String name)
+	public DataSetField getField(String name)
 	{
-		return NameAwareUtil.find(this.properties, name);
+		return NameAwareUtil.find(this.fields, name);
 	}
 
 	public boolean hasParam()
@@ -129,7 +139,7 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	/**
-	 * 获取数据格式。
+	 * 获取底层数据转换格式。
 	 * 
 	 * @return
 	 */
@@ -139,9 +149,9 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	/**
-	 * 设置数据格式。
+	 * 设置底层数据转换格式。
 	 * <p>
-	 * 当数据集属性{@linkplain #getProperties()}的{@linkplain DataSetProperty#getType()}与底层数据源（数据库、CSV、JSON等）不匹配时，
+	 * 当数据集字段{@linkplain #getFields()}的{@linkplain DataSetField#getType()}与底层数据源（数据库、CSV、JSON等）不匹配时，
 	 * 可设置此数据格式，用于支持类型转换。
 	 * </p>
 	 * 
@@ -150,6 +160,16 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	public void setDataFormat(DataFormat dataFormat)
 	{
 		this.dataFormat = dataFormat;
+	}
+
+	public String getDescription()
+	{
+		return description;
+	}
+
+	public void setDescription(String description)
+	{
+		this.description = description;
 	}
 
 	/**
@@ -173,38 +193,60 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 						"Parameter [" + param.getName() + "] 's value is required");
 		}
 	}
+
+	/**
+	 * 解析结果。
+	 * 
+	 * @param rawResult
+	 * @param fields
+	 * @param fetchSize
+	 *            获取条数，小于{@code 0}表示全部
+	 * @param format
+	 *            允许为{@code null}
+	 * @return
+	 * @throws Throwable
+	 * @see {@link #resolveResultData(Object, List, int, ResultDataFormat)}
+	 */
+	protected ResolvedDataSetResult resolveResult(DataSetResult rawResult, List<DataSetField> fields, int fetchSize,
+			ResultDataFormat format) throws Throwable
+	{
+		Object data = resolveResultData(rawResult.getData(), fields, fetchSize, format);
+		DataSetResult resolvedResult = toDataSetResult(data, rawResult.getAdditions());
+
+		return new ResolvedDataSetResult(resolvedResult, fields);
+	}
 	
 	/**
 	 * 解析结果数据。
 	 * 
 	 * @param rawData    {@code Collection<Map<String, ?>>}、{@code Map<String, ?>[]}、{@code Map<String, ?>}、{@code null}
-	 * @param properties
+	 * @param fields
 	 * @param fetchSize  获取条数，小于{@code 0}表示全部
 	 * @param format     允许为{@code null}
 	 * @return {@code List<Map<String, ?>>}、{@code Map<String, ?>[]}、{@code Map<String, ?>}、{@code null}
 	 * @throws Throwable
 	 */
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	protected Object resolveResultData(Object rawData, List<DataSetProperty> properties,
+	protected Object resolveResultData(Object rawData, List<DataSetField> fields,
 			int fetchSize, ResultDataFormat format) throws Throwable
 	{
 		Object data = null;
 
 		if (rawData == null)
 		{
-
+			data = null;
 		}
 		else if (rawData instanceof Collection<?>)
 		{
 			Collection<Map<String, ?>> rawCollection = (Collection<Map<String, ?>>) rawData;
 
-			data = convertRawDataToResult(rawCollection, properties, fetchSize, format);
+			data = convertRawDataToResult(rawCollection, fields, fetchSize, format);
 		}
 		else if (rawData instanceof Map<?, ?>[])
 		{
 			Map<?, ?>[] rawArray = (Map<?, ?>[]) rawData;
 			List<Map<String, ?>> rawCollection = (List) Arrays.asList(rawArray);
-			List<Map<String, Object>> dataList = convertRawDataToResult(rawCollection, properties, fetchSize, format);
+			List<Map<String, Object>> dataList = convertRawDataToResult(rawCollection, fields, fetchSize, format);
 
 			data = dataList.toArray(new Map<?, ?>[dataList.size()]);
 		}
@@ -212,7 +254,7 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 		{
 			Map<?, ?> rawMap = (Map<?, ?>) rawData;
 			List<Map<String, ?>> rawCollection = (List) Arrays.asList(rawMap);
-			List<Map<String, Object>> dataList = convertRawDataToResult(rawCollection, properties, fetchSize, format);
+			List<Map<String, Object>> dataList = convertRawDataToResult(rawCollection, fields, fetchSize, format);
 
 			data = dataList.get(0);
 		}
@@ -224,43 +266,25 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	/**
-	 * 解析结果。
-	 * 
-	 * @param rawData    允许为{@code null}
-	 * @param properties
-	 * @param fetchSize  获取条数，小于{@code 0}表示全部
-	 * @param format     允许为{@code null}
-	 * @return
-	 * @throws Throwable
-	 * @see {@link #resolveResultData(Object, List, ResultDataFormat)}
-	 */
-	protected ResolvedDataSetResult resolveResult(Object rawData, List<DataSetProperty> properties,
-			int fetchSize, ResultDataFormat format) throws Throwable
-	{
-		Object data = resolveResultData(rawData, properties, fetchSize, format);
-		return new ResolvedDataSetResult(new DataSetResult(data), properties);
-	}
-
-	/**
 	 * 转换原始数据。
 	 * 
 	 * @param rawData
-	 * @param properties
+	 * @param fields
 	 * @param fetchSize  获取条数，小于{@code 0}表示全部
 	 * @param format     允许为{@code null}
 	 * @return
 	 * @throws Throwable
 	 */
 	protected List<Map<String, Object>> convertRawDataToResult(Collection<? extends Map<String, ?>> rawData,
-			List<DataSetProperty> properties, int fetchSize, ResultDataFormat format) throws Throwable
+			List<DataSetField> fields, int fetchSize, ResultDataFormat format) throws Throwable
 	{
-		DataSetPropertyValueConverter converter = createDataSetPropertyValueConverter();
-		List<Object> defaultValues = getDefaultValues(properties, converter);
+		DataSetFieldValueConverter converter = createDataSetFieldValueConverter();
+		List<Object> defaultValues = getDefaultValues(fields, converter);
 
 		int dataSize = (fetchSize >= 0 ? fetchSize : rawData.size());
 		List<Map<String, Object>> data = new ArrayList<>(dataSize);
 
-		int plen = properties.size();
+		int plen = fields.size();
 
 		for (Map<String, ?> rowRaw : rawData)
 		{
@@ -272,13 +296,13 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 
 			for (int i = 0; i < plen; i++)
 			{
-				DataSetProperty property = properties.get(i);
+				DataSetField field = fields.get(i);
 
-				String name = property.getName();
+				String name = field.getName();
 				Object value = rowRaw.get(name);
-				value = convertToPropertyDataType(converter, value, property);
+				value = convertToFieldDataType(converter, value, field);
 				
-				//无论是否计算属性，这里都应设置默认值
+				// 无论是否计算字段，这里都应设置默认值
 				if(value == null)
 					value = defaultValues.get(i);
 
@@ -289,48 +313,48 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 		}
 		
 		// 计算表达式
-		evalResultData(data, properties, defaultValues, converter);
+		evalResultData(data, fields, defaultValues, converter);
 		
 		// 格式化，应是最后步骤
-		formatResultData(data, properties, format);
+		formatResultData(data, fields, format);
 		
 		return data;
 	}
 	
-	protected void evalResultData(List<Map<String, Object>> data, List<DataSetProperty> properties,
-			List<Object> defaultValues, DataSetPropertyValueConverter converter)
+	protected void evalResultData(List<Map<String, Object>> data, List<DataSetField> fields,
+			List<Object> defaultValues, DataSetFieldValueConverter converter)
 	{
-		DataSetPropertyExpEvaluator evaluator = getDataSetPropertyExpEvaluator();
+		DataSetFieldExpEvaluator evaluator = getDataSetFieldExpEvaluator();
 		
-		evaluator.eval(properties, data, new ValueSetter<Map<String, Object>>()
+		evaluator.eval(fields, data, new ValueSetter<Map<String, Object>>()
 		{
 			@Override
-			public void set(DataSetProperty property, int propertyIndex, Map<String, Object> data, Object value)
+			public void set(DataSetField field, int fieldIndex, Map<String, Object> data, Object value)
 			{
-				value = convertToPropertyDataType(converter, value, property);
+				value = convertToFieldDataType(converter, value, field);
 				
 				if (value == null)
-					value = defaultValues.get(propertyIndex);
+					value = defaultValues.get(fieldIndex);
 				
-				data.put(property.getName(), value);
+				data.put(field.getName(), value);
 			}
 		});
 	}
 	
-	protected void formatResultData(List<Map<String, Object>> data, List<DataSetProperty> properties, ResultDataFormat format)
+	protected void formatResultData(List<Map<String, Object>> data, List<DataSetField> fields, ResultDataFormat format)
 	{
 		if(format == null)
 			return;
 		
 		ResultDataFormatter formatter = new ResultDataFormatter(format);
-		int plen = properties.size();
+		int plen = fields.size();
 
 		for (Map<String, Object> row : data)
 		{
 			for (int i = 0; i < plen; i++)
 			{
-				DataSetProperty property = properties.get(i);
-				String name = property.getName();
+				DataSetField field = fields.get(i);
+				String name = field.getName();
 				Object value = row.get(name);
 				Object fv = formatter.format(value);
 				
@@ -340,20 +364,20 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 		}
 	}
 
-	protected DataSetPropertyExpEvaluator getDataSetPropertyExpEvaluator()
+	protected DataSetFieldExpEvaluator getDataSetFieldExpEvaluator()
 	{
-		return DataSetPropertyExpEvaluator.DEFAULT;
+		return DataSetFieldExpEvaluator.DEFAULT;
 	}
 
-	protected List<Object> getDefaultValues(List<DataSetProperty> properties,
-			DataSetPropertyValueConverter converter)
+	protected List<Object> getDefaultValues(List<DataSetField> fields,
+			DataSetFieldValueConverter converter)
 	{
-		List<Object> defaultValues = new ArrayList<Object>(properties.size());
+		List<Object> defaultValues = new ArrayList<Object>(fields.size());
 
-		for (DataSetProperty p : properties)
+		for (DataSetField p : fields)
 		{
 			Object defaultValue = p.getDefaultValue();
-			defaultValue = convertToPropertyDataType(converter, defaultValue, p);
+			defaultValue = convertToFieldDataType(converter, defaultValue, p);
 			defaultValues.add(defaultValue);
 		}
 
@@ -382,80 +406,111 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	/**
-	 * 查找与名称数组对应的{@linkplain DataSetProperty}列表。
-	 * <p>
-	 * 如果{@code names}某元素没有对应的{@linkplain DataSetProperty}，返回列表对应元素位置将为{@code null}。
-	 * </p>
+	 * 转换为{@linkplain DataSetResult}。
 	 * 
-	 * @param dataSetProperties
-	 * @param names
+	 * @param data
+	 *            允许{@code null}
+	 * @param additions
+	 *            允许{@code null}
 	 * @return
 	 */
-	protected List<DataSetProperty> findDataSetProperties(List<DataSetProperty> dataSetProperties, String[] names)
+	protected DataSetResult toDataSetResult(Object data)
 	{
-		return findDataSetProperties(dataSetProperties, Arrays.asList(names));
+		return toDataSetResult(data, null);
 	}
 
 	/**
-	 * 查找与名称数组对应的{@linkplain DataSetProperty}列表。
-	 * <p>
-	 * 如果{@code names}某元素没有对应的{@linkplain DataSetProperty}，返回列表对应元素位置将为{@code null}。
-	 * </p>
+	 * 转换为{@linkplain DataSetResult}。
 	 * 
-	 * @param dataSetProperties
-	 * @param names
+	 * @param data
+	 *            允许{@code null}
+	 * @param additions
+	 *            允许{@code null}
 	 * @return
 	 */
-	protected List<DataSetProperty> findDataSetProperties(List<DataSetProperty> dataSetProperties, List<String> names)
+	protected DataSetResult toDataSetResult(Object data, Map<String, ?> additions)
 	{
-		return NameAwareUtil.finds(dataSetProperties, names);
+		DataSetResult re = new DataSetResult(data);
+		re.setAdditions(additions);
+
+		return re;
 	}
 
 	/**
-	 * 将源对象转换为指定{@linkplain DataSetProperty.DataType}类型的对象。
+	 * 查找与名称数组对应的{@linkplain DataSetField}列表。
 	 * <p>
-	 * 如果{@code property}为{@code null}，则什么也不做直接返回。
+	 * 如果{@code names}某元素没有对应的{@linkplain DataSetField}，返回列表对应元素位置将为{@code null}。
+	 * </p>
+	 * 
+	 * @param fields
+	 * @param names
+	 * @return
+	 */
+	protected List<DataSetField> findDataSetFields(List<DataSetField> fields, String[] names)
+	{
+		return findDataSetFields(fields, Arrays.asList(names));
+	}
+
+	/**
+	 * 查找与名称数组对应的{@linkplain DataSetField}列表。
+	 * <p>
+	 * 如果{@code names}某元素没有对应的{@linkplain DataSetField}，返回列表对应元素位置将为{@code null}。
+	 * </p>
+	 * 
+	 * @param fields
+	 * @param names
+	 * @return
+	 */
+	protected List<DataSetField> findDataSetFields(List<DataSetField> fields, List<String> names)
+	{
+		return NameAwareUtil.finds(fields, names);
+	}
+
+	/**
+	 * 将源对象转换为指定{@linkplain DataSetField.DataType}类型的对象。
+	 * <p>
+	 * 如果{@code field}为{@code null}，则什么也不做直接返回。
 	 * </p>
 	 * 
 	 * @param converter
 	 * @param source
 	 *            允许为{@code null}
-	 * @param property
+	 * @param field
 	 *            允许为{@code null}
 	 * @return
 	 */
-	protected Object convertToPropertyDataType(DataSetPropertyValueConverter converter, Object source,
-			DataSetProperty property)
+	protected Object convertToFieldDataType(DataSetFieldValueConverter converter, Object source,
+			DataSetField field)
 	{
-		if (property == null)
+		if (field == null)
 			return source;
 
 		if (source == null)
 			return null;
 		
-		String propertyType = property.getType();
+		String fieldType = field.getType();
 		
-		if (propertyType == null || DataSetProperty.DataType.UNKNOWN.equals(propertyType))
+		if (fieldType == null || DataSetField.DataType.UNKNOWN.equals(fieldType))
 			return source;
 
-		return converter.convert(source, property);
+		return converter.convert(source, field);
 	}
 
 	/**
-	 * 创建一个{@linkplain DataSetPropertyValueConverter}实例。
+	 * 创建一个{@linkplain DataSetFieldValueConverter}实例。
 	 * <p>
-	 * 由于{@linkplain DataSetPropertyValueConverter}不是线程安全的，所以每次使用时要手动创建。
+	 * 由于{@linkplain DataSetFieldValueConverter}不是线程安全的，所以每次使用时要手动创建。
 	 * </p>
 	 * 
 	 * @return
 	 */
-	protected DataSetPropertyValueConverter createDataSetPropertyValueConverter()
+	protected DataSetFieldValueConverter createDataSetFieldValueConverter()
 	{
 		DataFormat dataFormat = getDataFormat();
 		if (dataFormat == null)
-			dataFormat = new DataFormat();
+			dataFormat = DataFormat.DEFAULT;
 
-		DataSetPropertyValueConverter converter = new DataSetPropertyValueConverter(dataFormat);
+		DataSetFieldValueConverter converter = new DataSetFieldValueConverter(dataFormat);
 
 		// 这里应设为true，可避免精度丢失，同时可保留BigDecimal的原始小数位数
 		converter.setIgnoreBigIntegerToInteger(true);
@@ -465,23 +520,23 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	}
 
 	/**
-	 * 解析{@linkplain DataSetProperty.DataType}类型。
+	 * 解析{@linkplain DataSetField.DataType}类型。
 	 * 
 	 * @param value
 	 * @return
 	 */
-	protected String resolvePropertyDataType(Object value)
+	protected String resolveFieldDataType(Object value)
 	{
-		return DataSetProperty.DataType.resolveDataType(value);
+		return DataSetField.DataType.resolveDataType(value);
 	}
 	
 	@SuppressWarnings("unchecked")
-	protected List<Map<String, Object>> listRowsToMapRows(List<List<Object>> data, List<DataSetProperty> properties)
+	protected List<Map<String, Object>> listRowsToMapRows(List<List<Object>> data, List<DataSetField> fields)
 	{
 		if (data == null)
 			return Collections.EMPTY_LIST;
 
-		int plen = properties.size();
+		int plen = fields.size();
 
 		List<Map<String, Object>> maps = new ArrayList<>(data.size());
 
@@ -491,7 +546,7 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 
 			for (int i = 0; i < Math.min(plen, row.size()); i++)
 			{
-				String name = properties.get(i).getName();
+				String name = fields.get(i).getName();
 				map.put(name, row.get(i));
 			}
 
@@ -499,6 +554,20 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 		}
 
 		return maps;
+	}
+
+	/**
+	 * 解析模板：普通文本。
+	 * 
+	 * @param text
+	 *            允许{@code null}
+	 * @param query
+	 * @return
+	 * @see {@linkplain #resolveTemplateResultPlain(String, DataSetQuery)}
+	 */
+	protected String resolveTemplatePlain(String text, DataSetQuery query)
+	{
+		return resolveTemplateResultPlain(text, query).getResult();
 	}
 
 	/**
@@ -512,12 +581,27 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	 * </ol>
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param query
 	 * @return
 	 */
-	protected String resolveTemplatePlain(String text, DataSetQuery query)
+	protected TemplateResult resolveTemplateResultPlain(String text, DataSetQuery query)
 	{
 		return DataSetFmkTemplateResolvers.resolvePlain(text, toTemplateContext(query));
+	}
+
+	/**
+	 * 解析模板：CSV。
+	 * 
+	 * @param text
+	 *            允许{@code null}
+	 * @param query
+	 * @return
+	 * @see {@linkplain #resolveTemplateResultCsv(String, DataSetQuery)}
+	 */
+	protected String resolveTemplateCsv(String text, DataSetQuery query)
+	{
+		return resolveTemplateResultCsv(text, query).getResult();
 	}
 
 	/**
@@ -531,12 +615,27 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	 * </ol>
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param query
 	 * @return
 	 */
-	protected String resolveTemplateCsv(String text, DataSetQuery query)
+	protected TemplateResult resolveTemplateResultCsv(String text, DataSetQuery query)
 	{
 		return DataSetFmkTemplateResolvers.resolveCsv(text, toTemplateContext(query));
+	}
+
+	/**
+	 * 解析模板：JSON。
+	 * 
+	 * @param text
+	 *            允许{@code null}
+	 * @param query
+	 * @return
+	 * @see {@linkplain #resolveTemplateResultJson(String, DataSetQuery)}
+	 */
+	protected String resolveTemplateJson(String text, DataSetQuery query)
+	{
+		return resolveTemplateResultJson(text, query).getResult();
 	}
 
 	/**
@@ -550,12 +649,27 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	 * </ol>
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param query
 	 * @return
 	 */
-	protected String resolveTemplateJson(String text, DataSetQuery query)
+	protected TemplateResult resolveTemplateResultJson(String text, DataSetQuery query)
 	{
 		return DataSetFmkTemplateResolvers.resolveJson(text, toTemplateContext(query));
+	}
+
+	/**
+	 * 解析模板：SQL。
+	 * 
+	 * @param text
+	 *            允许{@code null}
+	 * @param query
+	 * @return
+	 * @see {@linkplain #resolveTemplateResultSql(String, DataSetQuery)}
+	 */
+	protected String resolveTemplateSql(String text, DataSetQuery query)
+	{
+		return resolveTemplateResultSql(text, query).getResult();
 	}
 
 	/**
@@ -569,12 +683,27 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	 * </ol>
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param query
 	 * @return
 	 */
-	protected String resolveTemplateSql(String text, DataSetQuery query)
+	protected SqlTemplateResult resolveTemplateResultSql(String text, DataSetQuery query)
 	{
 		return DataSetFmkTemplateResolvers.resolveSql(text, toTemplateContext(query));
+	}
+
+	/**
+	 * 解析模板：XML。
+	 * 
+	 * @param text
+	 *            允许{@code null}
+	 * @param query
+	 * @return
+	 * @see {@linkplain #resolveTemplateResultXml(String, DataSetQuery)}
+	 */
+	protected String resolveTemplateXml(String text, DataSetQuery query)
+	{
+		return resolveTemplateResultXml(text, query).getResult();
 	}
 
 	/**
@@ -588,10 +717,11 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 	 * </ol>
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param query
 	 * @return
 	 */
-	protected String resolveTemplateXml(String text, DataSetQuery query)
+	protected TemplateResult resolveTemplateResultXml(String text, DataSetQuery query)
 	{
 		return DataSetFmkTemplateResolvers.resolveXml(text, toTemplateContext(query));
 	}
@@ -608,21 +738,21 @@ public abstract class AbstractDataSet extends AbstractIdentifiable implements Da
 		return new TemplateContext(values);
 	}
 
-	protected static class EvaludatedPropertiesInfo
+	protected static class EvaludatedFieldsInfo
 	{
-		private final List<DataSetProperty> properties;
+		private final List<DataSetField> fields;
 		private final List<Object> defaultValues;
 
-		public EvaludatedPropertiesInfo(List<DataSetProperty> properties, List<Object> defaultValues)
+		public EvaludatedFieldsInfo(List<DataSetField> fields, List<Object> defaultValues)
 		{
 			super();
-			this.properties = properties;
+			this.fields = fields;
 			this.defaultValues = defaultValues;
 		}
 
-		public List<DataSetProperty> getProperties()
+		public List<DataSetField> getFields()
 		{
-			return properties;
+			return fields;
 		}
 
 		public List<Object> getDefaultValues()

@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -27,33 +27,52 @@
 	<#include "../include/html_app_name_suffix.ftl">
 </title>
 </head>
-<body class="p-card no-border">
+<body class="p-card no-border h-screen m-0">
 <#include "../include/page_obj.ftl">
-<div id="${pid}" class="page page-manager page-table">
-	<div class="page-header grid align-items-center">
-		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
-			<#include "../include/page_search_form.ftl">
+<div id="${pid}" class="page page-manager page-table h-full flex flex-column overflow-auto">
+	<div class="page-header grid grid-nogutter align-items-center p-1 flex-grow-0">
+		<div class="col-12 mb-1">
+			<#include "../include/page_directory_breadcrumb.ftl">
 		</div>
-		<div class="h-opts col-12 text-right" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
+		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
+			<#include "../include/page_search_form_directory.ftl">
+		</div>
+		<div class="operations col-12 flex gap-1 flex-wrap md:justify-content-end" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
 			<p-button label="<@spring.message code='confirm' />" @click="onSelect" v-if="pm.isSelectAction"></p-button>
 			
 			<p-button label="<@spring.message code='add' />" @click="onAdd" v-if="!pm.isReadonlyAction"></p-button>
 			<p-button label="<@spring.message code='upload' />" @click="onUpload" v-if="!pm.isReadonlyAction"></p-button>
 			<p-button label="<@spring.message code='edit' />" @click="onEdit" v-if="!pm.isReadonlyAction"></p-button>
+			<p-button label="<@spring.message code='rename' />" @click="onRename" v-if="!pm.isReadonlyAction"></p-button>
+			<p-button label="<@spring.message code='move' />" @click="onMove" v-if="!pm.isReadonlyAction"></p-button>
 			<p-button label="<@spring.message code='view' />" @click="onView" :class="{'p-button-secondary': pm.isSelectAction}"></p-button>
-			<p-button label="<@spring.message code='download' />" @click="onDownload"></p-button>
+			<p-button label="<@spring.message code='download' />" @click="onDownload" v-if="!pm.isSelectAction"></p-button>
 			<p-button label="<@spring.message code='delete' />" @click="onDelete" class="p-button-danger" v-if="!pm.isReadonlyAction"></p-button>
 		</div>
 	</div>
-	<div class="page-content">
+	<div class="page-content flex-grow-1 overflow-auto">
 		<p-datatable :value="pm.items" :scrollable="true" scroll-height="flex"
-			:loading="pm.loading" :lazy="true"
+			:paginator="pm.paginator" :paginator-template="pm.paginatorTemplate" :first="pm.pageRecordIndex"
+			:rows="pm.rowsPerPage" :current-page-report-template="pm.pageReportTemplate"
+			:rows-per-page-options="pm.rowsPerPageOptions" :loading="pm.loading"
+			:lazy="true" :total-records="pm.totalRecords" @page="onPaginator($event)"
 			sort-mode="multiple" :multi-sort-meta="pm.multiSortMeta" @sort="onSort($event)"
 			:resizable-columns="true" column-resize-mode="expand"
-			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" dataKey="path" striped-rows>
+			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" data-key="path" striped-rows>
 			<p-column :selection-mode="pm.selectionMode" :frozen="true" class="col-check"></p-column>
 			<p-column field="path" header="<@spring.message code='id' />" :hidden="true"></p-column>
-			<p-column field="path" header="<@spring.message code='path' />"></p-column>
+			<p-column field="displayName" header="<@spring.message code='name' />" :sortable="true" class="col-desc">
+				<template #body="{data}">
+					<div class="underline" v-if="data.directory">
+						<span @click="submitSearchFormForQueryPath(data.path)">{{data.displayName}}</span>
+					</div>
+					<div v-else>
+						{{data.displayName}}
+					</div>
+				</template>
+			</p-column>
+			<p-column field="size" header="<@spring.message code='size' />" :sortable="true" class="col-row-number"></p-column>
+			<p-column field="displayLastModified" header="<@spring.message code='modifyDate' />" :sortable="true" class="col-datetime col-last"></p-column>
 		</p-datatable>
 	</div>
 	<#include "../include/page_foot.ftl">
@@ -63,24 +82,31 @@
 <script>
 (function(po)
 {
+	po.i18n.confirmDeleteAsk = "<@spring.message code='confirmDeleteFileAsk' />";
+	
+	po.onlyDirectory = ("${(onlyDirectory!false)?string('true', 'false')}"  == "true");
 	po.inflateEntityActionIdPropName = "path";
 	po.inflateEntityActionIdParamName = "path";
 	
-	po.setupAjaxTable("/dashboardGlobalRes/queryData",
+	po.isMultipleQueryOrder = function(){ return false; };
+	
+	po.setupAjaxTable("/dashboardGlobalRes/pagingQueryData",
 	{
-		multiSortMeta: []
+		multiSortMeta: [ {field: "displayName", order: 1} ]
 	});
 	
 	po.vueMethod(
 	{
 		onAdd: function()
 		{
-			po.handleAddAction("/dashboardGlobalRes/add", { width: "70vw" });
+			var dir = po.getDirQueryPath();
+			po.handleAddAction("/dashboardGlobalRes/add?dir=" + encodeURIComponent(dir), { width: "70vw" });
 		},
 
 		onUpload: function()
 		{
-			po.handleAddAction("/dashboardGlobalRes/upload");
+			var dir = po.getDirQueryPath();
+			po.handleAddAction("/dashboardGlobalRes/upload?dir=" + encodeURIComponent(dir));
 		},
 		
 		onEdit: function()
@@ -96,10 +122,30 @@
 				po.doOpenOfAction("/dashboardGlobalRes/edit", entity, { width: "70vw" });
 			});
 		},
+
+		onRename: function()
+		{
+			po.handleOpenOfAction("/dashboardGlobalRes/rename");
+		},
+		
+		onMove: function()
+		{
+			po.handleOpenOfAction("/dashboardGlobalRes/move");
+		},
 		
 		onView: function()
 		{
-			po.handleOpenOfAction("/dashboardGlobalRes/view", { target: "_blank" });
+			var viewCallback = po.pageParam("onView");
+			
+			if(!viewCallback)
+				po.handleOpenOfAction("/dashboardGlobalRes/view", { target: "_blank" });
+			else
+			{
+				po.executeOnSelect(function(entity)
+				{
+					viewCallback(entity);
+				});
+			}
 		},
 		
 		onDownload: function()
@@ -117,10 +163,15 @@
 			po.handleSelectAction();
 		}
 	});
-	
-	po.vueMount();
+
+	if(po.onlyDirectory)
+	{
+		var pm = po.vuePageModel();
+		pm.searchForm.onlyDirectory = true;
+	}
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

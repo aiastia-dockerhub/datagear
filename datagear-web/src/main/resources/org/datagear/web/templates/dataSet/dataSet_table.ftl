@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,24 +28,25 @@
 	<#include "../include/html_app_name_suffix.ftl">
 </title>
 </head>
-<body class="p-card no-border">
+<body class="p-card no-border h-screen m-0">
 <#include "../include/page_obj.ftl">
-<div id="${pid}" class="page page-manager page-table page-search-ap-aware">
-	<div class="page-header grid grid-nogutter align-items-center pb-2">
+<div id="${pid}" class="page page-manager page-table page-search-ap-aware h-full flex flex-column overflow-auto">
+	<div class="page-header grid grid-nogutter align-items-center p-1 flex-grow-0">
 		<div class="col-12 mb-1">
 			<#include "../include/page_current_analysis_project.ftl">
 		</div>
 		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
 			<#include "../include/page_search_form_filter.ftl">
 		</div>
-		<div class="h-opts col-12 text-right" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
+		<div class="operations col-12 flex gap-1 flex-wrap md:justify-content-end" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
 			<p-button label="<@spring.message code='confirm' />" @click="onSelect" v-if="pm.isSelectAction"></p-button>
 			
 			<p-button label="<@spring.message code='add' />"
 				icon="pi pi-chevron-down" icon-pos="right" aria-haspopup="true" aria-controls="${pid}addMenu"
 				@click="onAddMenuToggle" v-if="!pm.isReadonlyAction">
 			</p-button>
-			<p-menu id="${pid}addMenu" ref="addMenuEle" :model="pm.addMenuItems" :popup="true" v-if="!pm.isReadonlyAction"></p-menu>
+			<p-tieredmenu id="${pid}addMenu" ref="addMenuEle" :model="pm.addMenuItems" :popup="true" v-if="!pm.isReadonlyAction" class="left-submenu-list">
+			</p-tieredmenu>
 			
 			<p-button label="<@spring.message code='edit' />" @click="onEdit" v-if="!pm.isReadonlyAction"></p-button>
 			<p-button label="<@spring.message code='share' />" @click="onShare" v-if="!pm.isReadonlyAction"></p-button>
@@ -53,7 +54,7 @@
 			<p-button label="<@spring.message code='delete' />" @click="onDelete" class="p-button-danger" v-if="!pm.isReadonlyAction"></p-button>
 		</div>
 	</div>
-	<div class="page-content">
+	<div class="page-content flex-grow-1 overflow-auto">
 		<p-datatable :value="pm.items" :scrollable="true" scroll-height="flex"
 			:paginator="pm.paginator" :paginator-template="pm.paginatorTemplate" :first="pm.pageRecordIndex"
 			:rows="pm.rowsPerPage" :current-page-report-template="pm.pageReportTemplate"
@@ -61,7 +62,7 @@
 			:lazy="true" :total-records="pm.totalRecords" @page="onPaginator($event)"
 			sort-mode="multiple" :multi-sort-meta="pm.multiSortMeta" @sort="onSort($event)"
 			:resizable-columns="true" column-resize-mode="expand"
-			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" dataKey="id" striped-rows>
+			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" data-key="id" striped-rows>
 			<p-column :selection-mode="pm.selectionMode" :frozen="true" class="col-check"></p-column>
 			<p-column field="id" header="<@spring.message code='id' />" :hidden="true"></p-column>
 			<p-column field="name" header="<@spring.message code='name' />" :sortable="true" class="col-name"></p-column>
@@ -87,6 +88,28 @@
 		multiSortMeta: [ {field: "createTime", order: -1} ]
 	});
 	
+	po.formatDataSetType = function(data)
+	{
+		var type = data.dataSetType;
+		
+		if("${DataSetEntity.DATA_SET_TYPE_SQL}" == type)
+			return "<@spring.message code='dataSetType.SQL' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_Excel}" == type)
+			return "<@spring.message code='dataSetType.Excel' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_CsvValue}" == type)
+			return "<@spring.message code='dataSetType.CsvValue' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_CsvFile}" == type)
+			return "<@spring.message code='dataSetType.CsvFile' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_JsonValue}" == type)
+			return "<@spring.message code='dataSetType.JsonValue' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_JsonFile}" == type)
+			return "<@spring.message code='dataSetType.JsonFile' />";
+		else if("${DataSetEntity.DATA_SET_TYPE_Http}" == type)
+			return "<@spring.message code='dataSetType.Http' />";
+		else
+			return "";
+	};
+	
 	po.vuePageModel(
 	{
 		addMenuItems:
@@ -95,50 +118,62 @@
 				label: "<@spring.message code='dataSetType.SQL' />",
 				command: function()
 				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForSQL"), {width: "70vw"});
-				}
-			},
-			{
-				label: "<@spring.message code='dataSetType.CsvValue' />",
-				command: function()
-				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForCsvValue"), {width: "70vw"});
-				}
-			},
-			{
-				label: "<@spring.message code='dataSetType.CsvFile' />",
-				command: function()
-				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForCsvFile"), {width: "70vw"});
-				}
-			},
-			{
-				label: "<@spring.message code='dataSetType.Excel' />",
-				command: function()
-				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForExcel"), {width: "70vw"});
+					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_SQL}"), {width: "70vw"});
 				}
 			},
 			{
 				label: "<@spring.message code='dataSetType.Http' />",
 				command: function()
 				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForHttp"), {width: "70vw"});
+					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_Http}"), {width: "70vw"});
 				}
 			},
 			{
-				label: "<@spring.message code='dataSetType.JsonValue' />",
-				command: function()
-				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForJsonValue"), {width: "70vw"});
-				}
+				label: "<@spring.message code='file' />",
+				items:
+				[
+					{
+						label: "<@spring.message code='dataSetType.CsvFile' />",
+						command: function()
+						{
+							po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_CsvFile}"), {width: "70vw"});
+						}
+					},
+					{
+						label: "<@spring.message code='dataSetType.Excel' />",
+						command: function()
+						{
+							po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_Excel}"), {width: "70vw"});
+						}
+					},
+					{
+						label: "<@spring.message code='dataSetType.JsonFile' />",
+						command: function()
+						{
+							po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_JsonFile}"), {width: "70vw"});
+						}
+					}
+				]
 			},
 			{
-				label: "<@spring.message code='dataSetType.JsonFile' />",
-				command: function()
-				{
-					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/addForJsonFile"), {width: "70vw"});
-				}
+				label: "<@spring.message code='text' />",
+				items:
+				[
+					{
+						label: "<@spring.message code='dataSetType.CsvValue' />",
+						command: function()
+						{
+							po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_CsvValue}"), {width: "70vw"});
+						}
+					},
+					{
+						label: "<@spring.message code='dataSetType.JsonValue' />",
+						command: function()
+						{
+							po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dataSet/add/${DataSetEntity.DATA_SET_TYPE_JsonValue}"), {width: "70vw"});
+						}
+					}
+				]
 			},
 			{ separator: true },
 			{
@@ -157,24 +192,7 @@
 	{
 		formatDataSetType: function(data)
 		{
-			var type = data.dataSetType;
-			
-			if("${DataSetEntity.DATA_SET_TYPE_SQL}" == type)
-				return "<@spring.message code='dataSetType.SQL' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_Excel}" == type)
-				return "<@spring.message code='dataSetType.Excel' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_CsvValue}" == type)
-				return "<@spring.message code='dataSetType.CsvValue' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_CsvFile}" == type)
-				return "<@spring.message code='dataSetType.CsvFile' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_JsonValue}" == type)
-				return "<@spring.message code='dataSetType.JsonValue' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_JsonFile}" == type)
-				return "<@spring.message code='dataSetType.JsonFile' />";
-			else if("${DataSetEntity.DATA_SET_TYPE_Http}" == type)
-				return "<@spring.message code='dataSetType.Http' />";
-			else
-				return "";
+			return po.formatDataSetType(data);
 		},
 		
 		onAddMenuToggle: function(e)
@@ -196,7 +214,7 @@
 		{
 			po.executeOnSelect(function(entity)
 			{
-				po.openTableDialog("/authorization/${DataSetEntity.AUTHORIZATION_RESOURCE_TYPE}/"+encodeURIComponent(entity.id)+"/query");
+				po.openTableDialog("/authorization/${DataSetEntity.AUTHORIZATION_RESOURCE_TYPE}/"+encodeURIComponent(entity.id)+"/manage");
 			});
 		},
 		
@@ -210,10 +228,9 @@
 			po.handleSelectAction();
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

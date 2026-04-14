@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -51,14 +51,14 @@
 		        	<div id="${pid}driverLibrary" class="input p-component p-inputtext w-full overflow-auto" style="height:8rem;">
 		        		<p-chip v-for="dlf in pm.driverLibraryFiles.files" :key="dlf.key"
 		        			class="mb-2" :removable="!pm.isReadonlyAction" @remove="onRemovedLibraryFile($event, dlf.name)">
-		        			<a :href="genDownloadLibraryPath(dlf.name)" target="_blank" class="link">
+		        			<a :href="genDownloadLibraryPath(dlf.name)" target="_blank" class="link text-color">
 		        				{{dlf.name+' ('+dlf.size+')'}}
 		        			</a>
 		        		</p-chip>
 		        	</div>
 		        	<div class="fileupload-wrapper flex align-items-center mt-1" v-if="!pm.isReadonlyAction">
 			        	<p-fileupload mode="basic" name="file" :url="pm.uploadFileUrl"
-			        		@upload="onUploadedLibraryFile" @select="uploadFileOnSelect" @progress="uploadFileOnProgress"
+			        		@upload="onUploadedLibraryFile" @select="uploadFileOnSelect" @progress="uploadFileOnProgress" @error="uploadFileOnError"
 			        		:auto="true" choose-label="<@spring.message code='upload' />" class="mr-2">
 			        	</p-fileupload>
 						<#include "../include/page_fileupload.ftl">
@@ -90,7 +90,7 @@
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -180,7 +180,6 @@
 				po.ajax("/driverEntity/deleteDriverFile",
 				{
 					data: {id: fm.id, file: name},
-					tipSuccess: false,
 					success: function(response)
 					{
 						po.setDriverLibrary(response.data);
@@ -201,10 +200,9 @@
 			po.refreshDriverLibrary();
 		});
 	}
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

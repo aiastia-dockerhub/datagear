@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,8 +22,8 @@
 依赖：
 
 -->
-<p-button id="${pid}previewPanelBtn" type="button" label="<@spring.message code='preview' />"
-	aria:haspopup="true" aria-controls="${pid}previewPanel"
+<p-button id="${pid}previewPanelBtn" type="button" :label="pm.inPreviewRequest ? '<@spring.message code='previewing' />' : '<@spring.message code='preview' />'"
+	aria:haspopup="true" aria-controls="${pid}previewPanel" :disabled="pm.inPreviewRequest ? true : false"
 	@click="onPreview" class="p-button-secondary">
 </p-button>
 <p-overlaypanel ref="${pid}previewPanelEle" append-to="body"
@@ -45,8 +45,8 @@
 						</template>
 					</p-column>
 					<p-column v-for="col in pm.previewColumns"
-						:field="col.name" :header="col.label" :sortable="false" :style="col.style"
-						:key="col.name">
+						:field="col.name" :header="col.label" :sortable="false" :style="col.style" :key="col.name">
+						<template #body="slotProps">{{formatPreviewColValue(slotProps.data, slotProps.field)}}</template>
 					</p-column>
 				</p-datatable>
 				<p-textarea v-model="pm.previewTplResult" class="overflow-auto p-invalid w-full h-full" readonly
@@ -64,21 +64,31 @@
 						</p-button>
 					</div>
 				</div>
-				<div class="flex-grow-1 flex justify-content-end" v-if="!pm.previewError">
-					<p-button icon="pi pi-comment" type="button"
+				<div class="flex-grow-1 flex justify-content-end gap-1" v-if="!pm.previewError">
+					<p-button icon="pi pi-paperclip" type="button" title="<@spring.message code='additionData' />"
+						aria:haspopup="true" aria-controls="${pid}previewAdditionsResultPanel" v-if="pm.previewAdditionsResult"
+						@click="togglePreviewAdditionsResultPanel" class="p-button-secondary p-button-sm">
+					</p-button>
+					<p-button icon="pi pi-info-circle" type="button" title="<@spring.message code='templateResult' />"
 						aria:haspopup="true" aria-controls="${pid}previewTplResultPanel"
 						@click="togglePreviewTplResultPanel" class="p-button-secondary p-button-sm">
 					</p-button>
-					<p-overlaypanel ref="${pid}previewTplResultEle" append-to="body"
-						:show-close-icon="false" id="${pid}previewTplResultPanel">
-						<p-textarea v-model="pm.previewTplResult" class="overflow-auto"
-							readonly style="width:30vw;height:30vh;">
-						</p-textarea>
-					</p-overlaypanel>
 				</div>
 			</div>
 		</div>
 	</div>
+</p-overlaypanel>
+<p-overlaypanel ref="${pid}previewAdditionsResultEle" append-to="body"
+	:show-close-icon="false" id="${pid}previewAdditionsResultPanel">
+	<p-textarea v-model="pm.previewAdditionsResult" class="overflow-auto"
+		readonly style="width:30vw;height:30vh;">
+	</p-textarea>
+</p-overlaypanel>
+<p-overlaypanel ref="${pid}previewTplResultEle" append-to="body"
+	:show-close-icon="false" id="${pid}previewTplResultPanel">
+	<p-textarea v-model="pm.previewTplResult" class="overflow-auto"
+		readonly style="width:30vw;height:30vh;">
+	</p-textarea>
 </p-overlaypanel>
 <p-button id="${pid}paramPanelBtn" type="button" label="<@spring.message code='parameter' />"
 	aria:haspopup="true" aria-controls="${pid}previewParamPanel"
@@ -101,13 +111,15 @@
 	po.previewUrl = "#";
 	//需实现
 	po.inflatePreviewFingerprint = function(fingerprint, dataSet){};
+	
+	po.previewColumnAllFieldName = $.uid();
 
 	po.toPreviewFingerprint = function(dataSet)
 	{
 		var fingerprint = {};
 		
 		fingerprint.mutableModel = dataSet.mutableModel;
-		fingerprint.properties = $.extend(true, [], dataSet.properties);
+		fingerprint.fields = $.extend(true, [], dataSet.fields);
 		fingerprint.params = $.extend(true, [], dataSet.params);
 		fingerprint.dataFormat = $.extend(true, {}, dataSet.dataFormat);
 		
@@ -134,16 +146,22 @@
 	
 	po.beforeSubmitFormWithPreview = function(action)
 	{
+		var pm = po.vuePageModel();
+		
 		if(po.inPreviewAction())
 		{
+			pm.inPreviewRequest = true;
+			
 			action.url = ($.isFunction(po.previewUrl) ? po.previewUrl() : po.previewUrl);
 			action.options.defaultSuccessCallback = false;
 			action.options.success = function(response)
 			{
+				pm.inPreviewRequest = false;
 				po.handlePreviewSuccess(response);
 			};
 			action.options.error = function(jqXHR)
 			{
+				pm.inPreviewRequest = false;
 				po.handlePreviewError(jqXHR);
 			};
 			
@@ -151,18 +169,21 @@
 			var previewQuery = pm.previewQuery;
 			po.trimPreviewQueryFetchSize(previewQuery);
 			
-			action.options.data = { dataSet: action.options.data, query: po.vueRaw(previewQuery) };
+			action.options.data = { dataSet: action.options.data, query: po.vueRaw(previewQuery), view: po.isViewAction };
 			
 			po._prevPreviewFingerprint = po.toPreviewFingerprint(action.options.data.dataSet);
 		}
 		else
 		{
-			var myPreviewFingerprint = po.toPreviewFingerprint(action.options.data);
-			if(!$.equalsForSameType(myPreviewFingerprint, po._prevPreviewFingerprint)
-					|| !po.isPreviewSuccess())
+			if(pm.saveMustPreview)
 			{
-				$.tipInfo("<@spring.message code='dataSet.previewRequired' />");
-				return false;
+				var myPreviewFingerprint = po.toPreviewFingerprint(action.options.data);
+				if(!$.equalsForSameType(myPreviewFingerprint, po._prevPreviewFingerprint)
+						|| !po.isPreviewSuccess())
+				{
+					$.tipInfo("<@spring.message code='dataSet.previewRequired' />");
+					return false;
+				}
 			}
 		}
 		
@@ -181,40 +202,40 @@
 		
 		var fm = po.vueFormModel();
 		var pm = po.vuePageModel();
-		
+
 		pm.previewError = false;
 		pm.previewPanelShow = true;
 		
-		if(!fm.mutableModel && !pm.isReadonlyAction && pm.autoGenerateProperty)
+		if(!fm.mutableModel && !pm.isReadonlyAction && pm.autoGenerateField)
 		{
-			fm.properties = response.properties;
+			fm.fields = response.fields;
+			pm.selectedFields = [];
 			
 			if(po._prevPreviewFingerprint)
-				po._prevPreviewFingerprint.properties = $.extend(true, [], response.properties);
+				po._prevPreviewFingerprint.fields = $.extend(true, [], response.fields);
 		}
 		
 		var previewColumns = [];
-		$.each(fm.properties, function(i, p)
+		$.each(fm.fields, function(i, p)
 		{
 			previewColumns.push({ name: p.name, label: p.name, style: "" });	
 		});
 		
-		var columnAllFieldName = null;
 		if(fm.mutableModel)
 		{
-			columnAllFieldName = $.uid();
-			previewColumns.push({ name: columnAllFieldName, label: "<@spring.message code='dataSet.mutableModelDataDetail' />", style: "min-width:25rem;" });
+			previewColumns.push({ name: po.previewColumnAllFieldName, label: "<@spring.message code='dataSet.mutableModelDataDetail' />", style: "min-width:25rem;" });
 		}
 		
 		pm.previewColumns = previewColumns;
 		pm.previewResultDatas = $.wrapAsArray(response.result && response.result.data ? response.result.data : []);
+		pm.previewAdditionsResult = (response.result && response.result.additions ? $.toJsonString(response.result.additions, true) : "");
 		pm.previewTplResult = response.templateResult;
 		
 		if(fm.mutableModel)
 		{
 			$.each(pm.previewResultDatas, function(idx, rd)
 			{
-				rd[columnAllFieldName] = $.toJsonString(rd);
+				rd[po.previewColumnAllFieldName] = $.toJsonString(rd);
 			});
 		}
 	};
@@ -224,12 +245,15 @@
 		po._isPreviewSuccess = false;
 		
 		var pm = po.vuePageModel();
-		
+
 		pm.previewError = true;
 		pm.previewPanelShow = true;
 		
 		var er = $.getResponseJson(jqXHR);
-		pm.previewTplResult = er.data;
+		var msg = (er && er.data ? er.data : null);
+		msg = (msg ? msg : (er && er.message ? er.message : ""));
+		
+		pm.previewTplResult = msg;
 	};
 	
 	po.handlePreviewInvalidForm = function()
@@ -283,6 +307,7 @@
 			{
 				$("select, input[type='text'], textarea", this).addClass("p-inputtext p-component w-full");
 				$("button", this).addClass("p-button p-component");
+				$.focusOnFirstInput(this);
 			},
 			submit: function()
 			{
@@ -309,11 +334,14 @@
 		previewQuery: { resultFetchSize: 100, paramValues: {} },
 		previewColumns: [],
 		previewResultDatas: [],
+		previewAdditionsResult: "",
 		previewTplResult: "",
-		previewError: false
+		previewError: false,
+		inPreviewRequest: false
 	});
 	
 	po.vueRef("${pid}previewPanelEle", null);
+	po.vueRef("${pid}previewAdditionsResultEle", null);
 	po.vueRef("${pid}previewTplResultEle", null);
 	po.vueRef("${pid}previewParamPanelEle", null);
 
@@ -345,6 +373,10 @@
 				po.elementOfId("${pid}paramPanelBtn").click();
 			}
 		},
+		togglePreviewAdditionsResultPanel: function(e)
+		{
+			po.vueUnref("${pid}previewAdditionsResultEle").toggle(e);
+		},
 		togglePreviewTplResultPanel: function(e)
 		{
 			po.vueUnref("${pid}previewTplResultEle").toggle(e);
@@ -361,6 +393,17 @@
 		{
 			var wrapper = $(".paramvalue-form-wrapper", po.elementOfId("${pid}previewParamPanel", document.body));
 			chartFactory.chartSetting.destroyDataSetParamValueForm(wrapper);
+		},
+		formatPreviewColValue: function(data, name)
+		{
+			var value = (data ? data[name] : "");
+			
+			if(value && $.isTypeString(value) && value.length > 1003)
+			{
+				value = value.substr(0, 1000) + "...";
+			}
+			
+			return value;
 		}
 	});
 

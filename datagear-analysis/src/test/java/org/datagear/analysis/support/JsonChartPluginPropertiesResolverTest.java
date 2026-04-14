@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -40,6 +40,7 @@ import org.datagear.analysis.DataSign;
 import org.datagear.analysis.Group;
 import org.datagear.analysis.RenderContext;
 import org.datagear.analysis.RenderException;
+import org.datagear.util.IOUtil;
 import org.datagear.util.StringUtil;
 import org.datagear.util.i18n.Label;
 import org.junit.Test;
@@ -66,7 +67,8 @@ public class JsonChartPluginPropertiesResolverTest
 					.getResourceAsStream("org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest.json");
 
 			TestChartPlugin chartPlugin = new TestChartPlugin();
-			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream, "UTF-8");
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
 
 			assertEquals("pie-chart", chartPlugin.getId());
 			assertNotNull(chartPlugin.getNameLabel());
@@ -80,6 +82,9 @@ public class JsonChartPluginPropertiesResolverTest
 			assertEquals(2, chartPlugin.getCategories().size());
 			assertNotNull(chartPlugin.getCategoryOrders());
 			assertEquals(2, chartPlugin.getCategoryOrders().size());
+			assertEquals("test", chartPlugin.getAuthor());
+			assertEquals("2024-09-01", chartPlugin.getIssueDate());
+			assertEquals("5.3.0+", chartPlugin.getPlatformVersion());
 
 			{
 				Label nameLabel = chartPlugin.getNameLabel();
@@ -121,6 +126,11 @@ public class JsonChartPluginPropertiesResolverTest
 				assertEquals("X值描述", descLabel.getValue());
 				assertEquals("X value desc", descLabel.getValue(enLocale));
 				assertEquals("X值描述中文", descLabel.getValue(zhLocale));
+
+				Map<String, ?> additions = dataSign.getAdditions();
+				assertNotNull(additions);
+				assertEquals("field", additions.get("for"));
+				assertEquals("x-val", additions.get("name"));
 			}
 
 			{
@@ -139,6 +149,7 @@ public class JsonChartPluginPropertiesResolverTest
 				assertEquals("Y值描述", descLabel.getValue());
 				assertEquals("Y value desc", descLabel.getValue(enLocale));
 				assertEquals("Y值描述中文", descLabel.getValue(zhLocale));
+				assertNull(dataSign.getAdditions());
 			}
 
 			{
@@ -318,7 +329,58 @@ public class JsonChartPluginPropertiesResolverTest
 				assertEquals(41, categoryOrders.get(0).intValue());
 				assertEquals(51, categoryOrders.get(1).intValue());
 			}
+
+			{
+				Map<String, ?> additions = chartPlugin.getAdditions();
+				assertNotNull(additions);
+				assertEquals("aaa", additions.get("name"));
+				assertEquals(3, ((Number) additions.get("value")).intValue());
+			}
 		}
+	}
+
+	@Test
+	public void resolveChartPluginPropertiesTest_author_issueDate() throws IOException
+	{
+		InputStream jsonInputStream = getClass().getClassLoader().getResourceAsStream(
+				"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-author-issueDate.json");
+
+		TestChartPlugin chartPlugin = new TestChartPlugin();
+		jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+				IOUtil.CHARSET_UTF_8);
+
+		assertEquals("author-issueDate", chartPlugin.getId());
+		assertEquals("test", chartPlugin.getAuthor());
+		assertEquals("2024-09-01", chartPlugin.getIssueDate());
+	}
+
+	@Test
+	public void resolveChartPluginPropertiesTest_platformVersion() throws IOException
+	{
+		InputStream jsonInputStream = getClass().getClassLoader().getResourceAsStream(
+				"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-platformVersion.json");
+
+		TestChartPlugin chartPlugin = new TestChartPlugin();
+		jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+				IOUtil.CHARSET_UTF_8);
+
+		assertEquals("5.2.0", chartPlugin.getPlatformVersion());
+	}
+
+	@Test
+	public void resolveChartPluginPropertiesTest_contact() throws IOException
+	{
+		InputStream jsonInputStream = getClass().getClassLoader().getResourceAsStream(
+				"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-contact.json");
+
+		TestChartPlugin chartPlugin = new TestChartPlugin();
+		jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+				IOUtil.CHARSET_UTF_8);
+
+		assertEquals("contact", chartPlugin.getId());
+		assertEquals("test", chartPlugin.getAuthor());
+		assertEquals("test@dgtest.com", chartPlugin.getContact());
+		assertEquals("2024-09-01", chartPlugin.getIssueDate());
 	}
 
 	@Test
@@ -330,7 +392,8 @@ public class JsonChartPluginPropertiesResolverTest
 							"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-dataSetRange-number.json");
 
 			TestChartPlugin chartPlugin = new TestChartPlugin();
-			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream, "UTF-8");
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
 
 			assertEquals("dataset-range-number", chartPlugin.getId());
 
@@ -348,7 +411,8 @@ public class JsonChartPluginPropertiesResolverTest
 							"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-dataSetRange.json");
 
 			TestChartPlugin chartPlugin = new TestChartPlugin();
-			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream, "UTF-8");
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
 
 			assertEquals("pie-chart", chartPlugin.getId());
 
@@ -370,7 +434,8 @@ public class JsonChartPluginPropertiesResolverTest
 					"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-string-categories.json");
 
 			TestChartPlugin chartPlugin = new TestChartPlugin();
-			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream, "UTF-8");
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
 
 			assertEquals("pie-chart", chartPlugin.getId());
 			assertEquals(2, chartPlugin.getCategories().size());
@@ -411,7 +476,8 @@ public class JsonChartPluginPropertiesResolverTest
 							"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-3.0.1.json");
 
 			TestChartPlugin chartPlugin = new TestChartPlugin();
-			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream, "UTF-8");
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
 
 			assertEquals("pie-chart", chartPlugin.getId());
 			assertNotNull(chartPlugin.getNameLabel());
@@ -529,6 +595,140 @@ public class JsonChartPluginPropertiesResolverTest
 					assertEquals("descLabel", category.getDescLabel().getValue());
 					assertEquals(41, category.getOrder());
 				}
+			}
+		}
+	}
+
+	@Test
+	public void resolveChartPluginPropertiesTest_5_4_0_dataSetSign() throws IOException
+	{
+		{
+			InputStream jsonInputStream = getClass().getClassLoader().getResourceAsStream(
+					"org/datagear/analysis/support/JsonChartPluginPropertiesResolverTest-5.4.0-dataSetSign.json");
+
+			TestChartPlugin chartPlugin = new TestChartPlugin();
+			jsonChartPluginPropertiesResolver.resolveChartPluginProperties(chartPlugin, jsonInputStream,
+					IOUtil.CHARSET_UTF_8);
+
+			assertEquals("dataSetSign", chartPlugin.getId());
+
+			{
+				Label nameLabel = chartPlugin.getNameLabel();
+				assertEquals("数据集标记", nameLabel.getValue());
+			}
+
+			List<DataSign> dataSigns = chartPlugin.getDataSigns();
+
+			{
+				DataSign dataSign = dataSigns.get(0);
+				String[] targets = dataSign.getTargets();
+
+				assertEquals("field-01", dataSign.getName());
+				assertEquals(1, targets.length);
+				assertEquals(DataSign.TARGET_FIELD, targets[0]);
+				assertTrue(dataSign.isRequired());
+				assertFalse(dataSign.isMultiple());
+				assertNull(dataSign.getChildren());
+				assertNull(dataSign.getNameLabel());
+			}
+
+			{
+				DataSign dataSign = dataSigns.get(1);
+				String[] targets = dataSign.getTargets();
+
+				assertEquals("dataSet-01", dataSign.getName());
+				assertEquals(1, targets.length);
+				assertEquals(DataSign.TARGET_DATASET, targets[0]);
+				assertFalse(dataSign.isRequired());
+				assertTrue(dataSign.isMultiple());
+				assertNull(dataSign.getNameLabel());
+
+				List<DataSign> children = dataSign.getChildren();
+				assertNotNull(children);
+				assertEquals(4, children.size());
+
+				{
+					DataSign ds = children.get(0);
+					String[] dsTargets = ds.getTargets();
+
+					assertEquals("name", ds.getName());
+					assertEquals(1, dsTargets.length);
+					assertEquals(DataSign.TARGET_FIELD, dsTargets[0]);
+					assertFalse(ds.isRequired());
+					assertTrue(ds.isMultiple());
+					assertEquals("数据集标记01-名称", ds.getNameLabel().getValue());
+					assertEquals("数据集标记01-名称-描述", ds.getDescLabel().getValue());
+					assertNull(ds.getChildren());
+
+					Map<String, ?> additions = ds.getAdditions();
+					assertEquals("v0", additions.get("a0"));
+					assertEquals(3, ((Integer) additions.get("a1")).intValue());
+				}
+
+				{
+					DataSign ds = children.get(1);
+					String[] dsTargets = ds.getTargets();
+
+					assertEquals("value", ds.getName());
+					assertEquals(1, dsTargets.length);
+					assertEquals(DataSign.TARGET_FIELD, dsTargets[0]);
+					assertTrue(ds.isRequired());
+					assertFalse(ds.isMultiple());
+					assertEquals("数据集标记01-值", ds.getNameLabel().getValue());
+				}
+
+				{
+					DataSign ds = children.get(2);
+					String[] dsTargets = ds.getTargets();
+
+					assertEquals("size", ds.getName());
+					assertEquals(1, dsTargets.length);
+					assertEquals("unknown", dsTargets[0]);
+					assertTrue(ds.isRequired());
+					assertFalse(ds.isMultiple());
+					assertEquals("数据集标记01-尺寸", ds.getNameLabel().getValue());
+				}
+
+				{
+					DataSign ds = children.get(3);
+					String[] dsTargets = ds.getTargets();
+
+					assertEquals("range", ds.getName());
+					assertEquals(2, dsTargets.length);
+					assertEquals("aaa", dsTargets[0]);
+					assertEquals("bbb", dsTargets[1]);
+					assertTrue(ds.isRequired());
+					assertFalse(ds.isMultiple());
+					assertEquals("数据集标记01-范围", ds.getNameLabel().getValue());
+				}
+			}
+
+			{
+				DataSign dataSign = dataSigns.get(2);
+				String[] targets = dataSign.getTargets();
+
+				assertEquals("value", dataSign.getName());
+				assertEquals(1, targets.length);
+				assertEquals(DataSign.TARGET_FIELD, targets[0]);
+				assertTrue(dataSign.isRequired());
+				assertFalse(dataSign.isMultiple());
+				assertNull(dataSign.getChildren());
+				assertNull(dataSign.getNameLabel());
+			}
+
+			{
+				DataSign dataSign = dataSigns.get(3);
+				String[] targets = dataSign.getTargets();
+
+				assertEquals("dataSet-02", dataSign.getName());
+				assertEquals(3, targets.length);
+				assertEquals(DataSign.TARGET_FIELD, targets[0]);
+				assertEquals(DataSign.TARGET_DATASET, targets[1]);
+				assertEquals("unknown", targets[2]);
+				assertTrue(dataSign.isRequired());
+				assertFalse(dataSign.isMultiple());
+				assertNull(dataSign.getNameLabel());
+				assertNull(dataSign.getChildren());
 			}
 		}
 	}
@@ -686,6 +886,8 @@ public class JsonChartPluginPropertiesResolverTest
 
 	private static class TestChartPlugin extends AbstractChartPlugin
 	{
+		private static final long serialVersionUID = 1L;
+
 		public TestChartPlugin()
 		{
 			super();

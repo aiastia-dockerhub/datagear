@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,7 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
@@ -26,8 +27,10 @@ import java.util.List;
  * @author datagear@163.com
  *
  */
-public class Dashboard extends DashboardQueryHandler implements Identifiable
+public class Dashboard extends DashboardQueryHandler implements Identifiable, Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	public static final String PROPERTY_ID = "id";
 	public static final String PROPERTY_RENDER_CONTEXT = "renderContext";
 	public static final String PROPERTY_CHARTS = "charts";
@@ -37,6 +40,8 @@ public class Dashboard extends DashboardQueryHandler implements Identifiable
 	private RenderContext renderContext;
 
 	private List<Chart> charts = Collections.emptyList();
+
+	private String version = "";
 
 	public Dashboard()
 	{
@@ -109,6 +114,16 @@ public class Dashboard extends DashboardQueryHandler implements Identifiable
 		}
 
 		return null;
+	}
+
+	public String getVersion()
+	{
+		return version;
+	}
+
+	public void setVersion(String version)
+	{
+		this.version = version;
 	}
 
 	@Override

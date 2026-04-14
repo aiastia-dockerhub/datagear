@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -36,7 +36,7 @@
 			<div class="grid grid-nogutter justify-content-center">
 				<p-card class="col-10 md:col-5 p-card mt-6">
 					<template #title><@spring.message code='module.register' /></template>
-					<template #content>
+					<template id="${pid}tplDomContent" #content>
 					<form id="${pid}form" class="flex flex-column">
 						<div class="page-form-content flex-grow-1 px-2 py-1 overflow-y-auto">
 							<div class="field grid">
@@ -45,7 +45,7 @@
 								</label>
 						        <div class="field-input col-12 md:col-9">
 						        	<p-inputtext id="${pid}name" v-model="fm.user.name" type="text" class="input w-full"
-						        		name="name" required maxlength="20">
+						        		name="name" required maxlength="50" autofocus>
 						        	</p-inputtext>
 						        </div>
 							</div>
@@ -55,9 +55,12 @@
 								</label>
 						        <div class="field-input col-12 md:col-9">
 						        	<p-password id="${pid}password" v-model="fm.user.password" class="input w-full"
-						        		input-class="w-full" toggle-mask :feedback="false"
-						        		name="password" required maxlength="50" autocomplete="new-password">
+						        		input-class="w-full" toggle-mask :feedback="false" required
+						        		:pt="{input:{name:'password',maxlength:'50',autocomplete:'new-password'}}">
 						        	</p-password>
+						        	<div class="desc text-color-secondary" v-if="pm.userPasswordStrengthTip != ''">
+						        		<small>{{pm.userPasswordStrengthTip}}</small>
+						        	</div>
 						        </div>
 							</div>
 							<div class="field grid">
@@ -66,8 +69,8 @@
 								</label>
 						        <div class="field-input col-12 md:col-9">
 						        	<p-password id="${pid}confirmPassword" v-model="fm.user.confirmPassword" class="input w-full"
-						        		input-class="w-full" toggle-mask :feedback="false"
-						        		name="confirmPassword" required maxlength="50" autocomplete="new-password">
+						        		input-class="w-full" toggle-mask :feedback="false" required
+						        		:pt="{input:{name:'confirmPassword',maxlength:'50',autocomplete:'new-password'}}">
 						        	</p-password>
 						        </div>
 							</div>
@@ -86,14 +89,16 @@
 									<@spring.message code='checkCode' />
 								</label>
 						        <div class="field-input col-12 md:col-9">
-						        	<p-inputtext id="${pid}checkCode" v-model="fm.checkCode" type="text" class="input w-6"
-						        		name="checkCode" required maxlength="10">
-						        	</p-inputtext>
-						        	<img class="checkCodeImg ml-1 vertical-align-middle" style="height:1.5rem;" />
+						        	<div class="flex align-items-center gap-1">
+							        	<p-inputtext id="${pid}checkCode" v-model="fm.checkCode" type="text" class="input w-6"
+							        		name="checkCode" required maxlength="10">
+							        	</p-inputtext>
+							        	<img class="checkCodeImg" />
+						        	</div>
 						        </div>
 							</div>
 						</div>
-						<div class="page-form-foot flex-grow-0 pt-3 text-center">
+						<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 							<p-button type="submit" label="<@spring.message code='register' />"></p-button>
 						</div>
 					</form>
@@ -108,6 +113,18 @@
 (function(po)
 {
 	po.submitUrl = "/register/doRegister";
+	po.userPasswordStrengthTip = "${userPasswordStrengthTip}";
+
+	po.beforeSubmitForm = function(action)
+	{
+		var user = action.options.data.user;
+		user.confirmPassword = undefined;
+	};
+
+	po.vuePageModel(
+	{
+		userPasswordStrengthTip: po.userPasswordStrengthTip
+	});
 	
 	po.setupForm({user: {}},
 	{
@@ -115,6 +132,10 @@
 		success: function()
 		{
 			(window.top ? window.top : window).location.href="${contextPath}/register/success";
+		},
+		error: function(jqXHR)
+		{
+			po.element(".checkCodeImg").click();
 		}
 	},
 	function()
@@ -123,6 +144,10 @@
 		{
 			rules:
 			{
+				"password":
+				{
+					"pattern" : ${userPasswordStrengthRegex}
+				},
 				"confirmPassword":
 				{
 					"equalTo" : po.elementOfName("password")
@@ -141,10 +166,9 @@
 		})
 		.click();
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "include/page_vue_mount.ftl">
 </body>
 </html>

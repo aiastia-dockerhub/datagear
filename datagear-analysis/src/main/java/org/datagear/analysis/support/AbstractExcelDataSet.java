@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -32,14 +32,12 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
-import org.datagear.analysis.support.AbstractExcelDataSet.ExcelDataSetResource;
-import org.datagear.analysis.support.RangeExpResolver.IndexRange;
-import org.datagear.analysis.support.RangeExpResolver.Range;
+import org.datagear.analysis.DataSetField;
+import org.datagear.analysis.support.datasetres.ExcelDataSetResource;
+import org.datagear.analysis.support.datasetres.ResourceResult;
 import org.datagear.util.IOUtil;
 import org.datagear.util.StringUtil;
 import org.slf4j.Logger;
@@ -62,14 +60,13 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> extends AbstractResolvableResourceDataSet<T>
 {
+	private static final long serialVersionUID = 1L;
+
 	protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractExcelDataSet.class);
 
 	public static final String EXTENSION_XLSX = "xlsx";
 
 	public static final String EXTENSION_XLS = "xls";
-
-	protected static final RangeExpResolver RANGE_EXP_RESOLVER = RangeExpResolver
-			.valueOf(RangeExpResolver.RANGE_SPLITTER_CHAR, RangeExpResolver.RANGE_GROUP_SPLITTER_CHAR);
 
 	/** 数据集数据所处的sheet名称 */
 	private String sheetName = "";
@@ -99,9 +96,9 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		super(id, name);
 	}
 
-	public AbstractExcelDataSet(String id, String name, List<DataSetProperty> properties)
+	public AbstractExcelDataSet(String id, String name, List<DataSetField> fields)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 	}
 
 	/**
@@ -246,23 +243,22 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 	}
 
 	@Override
-	protected ResourceData resolveResourceData(T resource) throws Throwable
+	protected ResourceResult resolveResourceResult(T resource, boolean resolveFields) throws Throwable
 	{
 		if (resource.isXls())
-			return resolveExcelResourceDataForXls(resource);
+			return resolveResourceResultForXls(resource, resolveFields);
 		else
-			return resolveExcelResourceDataForXlsx(resource);
+			return resolveResourceResultForXlsx(resource, resolveFields);
 	}
 
 	/**
-	 * 解析{@code ExcelResourceData}。
+	 * 解析Excel结果。
 	 * 
 	 * @param resource
 	 * @return
-	 * @throws DataSetException
+	 * @throws Throwable
 	 */
-	protected ResourceData resolveExcelResourceDataForXls(T resource)
-			throws DataSetException
+	protected ResourceResult resolveResourceResultForXls(T resource, boolean resolveFields) throws Throwable
 	{
 		InputStream in = null;
 		POIFSFileSystem poifs = null;
@@ -275,15 +271,11 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 			wb = new HSSFWorkbook(poifs.getRoot(), true);
 			Sheet sheet = resource.getDataSheet(wb);
 
-			return resolveExcelResourceDataForSheet(resource, sheet);
+			return resolveResourceResultForSheet(resource, sheet, resolveFields);
 		}
 		catch (DataSetException e)
 		{
 			throw e;
-		}
-		catch (Throwable t)
-		{
-			throw new DataSetSourceParseException(t);
 		}
 		finally
 		{
@@ -294,13 +286,13 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 	}
 
 	/**
-	 * 解析{@code ExcelResourceData}。
+	 * 解析Excel结果。
 	 * 
 	 * @param resource
 	 * @return
 	 * @throws Throwable
 	 */
-	protected ResourceData resolveExcelResourceDataForXlsx(T resource) throws Throwable
+	protected ResourceResult resolveResourceResultForXlsx(T resource, boolean resolveFields) throws Throwable
 	{
 		InputStream in = null;
 		OPCPackage pkg = null;
@@ -313,15 +305,11 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 			wb = new XSSFWorkbook(pkg);
 			Sheet sheet = resource.getDataSheet(wb);
 
-			return resolveExcelResourceDataForSheet(resource, sheet);
+			return resolveResourceResultForSheet(resource, sheet, resolveFields);
 		}
 		catch (DataSetException e)
 		{
 			throw e;
-		}
-		catch (Throwable t)
-		{
-			throw new DataSetSourceParseException(t);
 		}
 		finally
 		{
@@ -334,14 +322,13 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 	/**
 	 * 解析sheet数据。
 	 * 
-	 * @param query
+	 * @param resource
 	 * @param sheet
-	 * @param properties
-	 * @param resolveProperties
+	 * @param resolveFields
 	 * @return
 	 * @throws Throwable
 	 */
-	protected ResourceData resolveExcelResourceDataForSheet(T resource, Sheet sheet)
+	protected ResourceResult resolveResourceResultForSheet(T resource, Sheet sheet, boolean resolveFields)
 			throws Throwable
 	{
 		List<Row> excelRows = new ArrayList<Row>();
@@ -349,26 +336,32 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		for (Row row : sheet)
 			excelRows.add(row);
 
-		List<ExcelPropertyInfo> propertyInfos = resolvePropertyInfos(resource, excelRows);
-		List<String> rawDataPropertyNames = toPropertyNames(propertyInfos);
-		List<Map<String, Object>> data = resolveData(resource, propertyInfos, excelRows);
-		List<DataSetProperty> properties = resolveProperties(rawDataPropertyNames, data);
+		List<ExcelFieldInfo> fieldInfos = resolveFieldInfos(resource, excelRows);
+		List<Map<String, Object>> data = resolveData(resource, fieldInfos, excelRows);
 
-		return new ResourceData(data, properties);
+		List<DataSetField> fields = null;
+
+		if (resolveFields)
+		{
+			List<String> rawDataFieldNames = toFieldNames(fieldInfos);
+			fields = resolveFields(rawDataFieldNames, data);
+		}
+
+		return toResourceResult(data, fields);
 	}
 
 	/**
-	 * 解析属性信息。
+	 * 解析字段信息。
 	 * 
 	 * @param resource
 	 * @param excelRows
 	 * @return
 	 * @throws Throwable
 	 */
-	protected List<ExcelPropertyInfo> resolvePropertyInfos(T resource, List<Row> excelRows)
+	protected List<ExcelFieldInfo> resolveFieldInfos(T resource, List<Row> excelRows)
 			throws Throwable
 	{
-		List<ExcelPropertyInfo> propertyInfos = null;
+		List<ExcelFieldInfo> fieldInfos = null;
 
 		for (int i = 0, len = excelRows.size(); i < len; i++)
 		{
@@ -376,7 +369,7 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 
 			if (resource.isNameRow(i))
 			{
-				propertyInfos = new ArrayList<ExcelPropertyInfo>();
+				fieldInfos = new ArrayList<ExcelFieldInfo>();
 
 				short minColIdx = row.getFirstCellNum(), maxColIdx = row.getLastCellNum();
 				for (short colIdx = minColIdx; colIdx < maxColIdx; colIdx++)
@@ -401,7 +394,7 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 						if (StringUtil.isEmpty(name))
 							name = CellReference.convertNumToColString(colIdx);
 
-						propertyInfos.add(new ExcelPropertyInfo(name, colIdx));
+						fieldInfos.add(new ExcelFieldInfo(name, colIdx));
 					}
 				}
 
@@ -409,9 +402,9 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 			}
 			else if (resource.isDataRow(i))
 			{
-				if (propertyInfos == null)
+				if (fieldInfos == null)
 				{
-					propertyInfos = new ArrayList<ExcelPropertyInfo>();
+					fieldInfos = new ArrayList<ExcelFieldInfo>();
 
 					short minColIdx = row.getFirstCellNum(), maxColIdx = row.getLastCellNum();
 					for (short colIdx = minColIdx; colIdx < maxColIdx; colIdx++)
@@ -419,7 +412,7 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 						if (resource.isDataColumn(colIdx))
 						{
 							String name = CellReference.convertNumToColString(colIdx);
-							propertyInfos.add(new ExcelPropertyInfo(name, colIdx));
+							fieldInfos.add(new ExcelFieldInfo(name, colIdx));
 						}
 					}
 				}
@@ -429,74 +422,74 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 			}
 		}
 
-		if (propertyInfos == null)
-			propertyInfos = Collections.emptyList();
+		if (fieldInfos == null)
+			fieldInfos = Collections.emptyList();
 
-		return propertyInfos;
+		return fieldInfos;
 	}
 
 	/**
-	 * 解析{@linkplain DataSetProperty}。
+	 * 解析{@linkplain DataSetField}。
 	 * 
-	 * @param rawDataPropertyNames
+	 * @param rawDataFieldNames
 	 * @param rawData              允许为{@code null}
 	 * @return
 	 * @throws Throwable
 	 */
-	protected List<DataSetProperty> resolveProperties(List<String> rawDataPropertyNames,
+	protected List<DataSetField> resolveFields(List<String> rawDataFieldNames,
 			List<Map<String, Object>> rawData) throws Throwable
 	{
-		int propertyLen = rawDataPropertyNames.size();
-		List<DataSetProperty> properties = new ArrayList<>(propertyLen);
+		int fieldLen = rawDataFieldNames.size();
+		List<DataSetField> fields = new ArrayList<>(fieldLen);
 
-		for (String name : rawDataPropertyNames)
-			properties.add(new DataSetProperty(name, DataSetProperty.DataType.UNKNOWN));
+		for (String name : rawDataFieldNames)
+			fields.add(new DataSetField(name, DataSetField.DataType.UNKNOWN));
 
 		if (rawData != null && rawData.size() > 0)
 		{
 			for (Map<String, Object> row : rawData)
 			{
-				int resolvedPropertyTypeCount = 0;
+				int resolvedFieldTypeCount = 0;
 
-				for (int i = 0; i < propertyLen; i++)
+				for (int i = 0; i < fieldLen; i++)
 				{
-					DataSetProperty property = properties.get(i);
+					DataSetField field = fields.get(i);
 
-					if (!DataSetProperty.DataType.UNKNOWN.equals(property.getType()))
+					if (!DataSetField.DataType.UNKNOWN.equals(field.getType()))
 					{
-						resolvedPropertyTypeCount++;
+						resolvedFieldTypeCount++;
 						continue;
 					}
 
-					Object value = row.get(rawDataPropertyNames.get(i));
+					Object value = row.get(rawDataFieldNames.get(i));
 
 					if (value != null)
-						property.setType(resolvePropertyDataType(value));
+						field.setType(resolveFieldDataType(value));
 				}
 
-				if (resolvedPropertyTypeCount == propertyLen)
+				if (resolvedFieldTypeCount == fieldLen)
 					break;
 			}
 		}
 
-		return properties;
+		return fields;
 	}
 
 	/**
 	 * 解析数据。
 	 * 
 	 * @param resource
-	 * @param propertyInfos
+	 * @param fieldInfos
 	 * @param excelRows
 	 * @return
 	 * @throws Throwable
 	 */
 	protected List<Map<String, Object>> resolveData(T resource,
-			List<ExcelPropertyInfo> propertyInfos, List<Row> excelRows) throws Throwable
+			List<ExcelFieldInfo> fieldInfos, List<Row> excelRows) throws Throwable
 	{
 		List<Map<String, Object>> data = new ArrayList<>();
 
-		Map<Short, String> cellNumPropertyNames = toCellNumPropertyNames(propertyInfos);
+		Map<Short, String> cellNumFieldNames = toCellNumFieldNames(fieldInfos);
 
 		for (int i = 0, len = excelRows.size(); i < len; i++)
 		{
@@ -513,7 +506,7 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 				if (resource.isDataColumn(colIdx))
 				{
 					Cell cell = excelRow.getCell(colIdx);
-					String name = cellNumPropertyNames.get(colIdx);
+					String name = cellNumFieldNames.get(colIdx);
 					Object value = resolveCellValue(cell);
 					row.put(name, value);
 				}
@@ -525,30 +518,31 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		return data;
 	}
 
-	protected Map<Short, String> toCellNumPropertyNames(List<ExcelPropertyInfo> propertyInfos)
+	protected Map<Short, String> toCellNumFieldNames(List<ExcelFieldInfo> fieldInfos)
 	{
 		Map<Short, String> re = new HashMap<Short, String>();
 
-		for (ExcelPropertyInfo epi : propertyInfos)
+		for (ExcelFieldInfo epi : fieldInfos)
 			re.put(epi.getCellIdx(), epi.getName());
 
 		return re;
 	}
 
-	protected List<String> toPropertyNames(List<ExcelPropertyInfo> propertyInfos)
+	protected List<String> toFieldNames(List<ExcelFieldInfo> fieldInfos)
 	{
-		List<String> re = new ArrayList<String>(propertyInfos.size());
+		List<String> re = new ArrayList<String>(fieldInfos.size());
 
-		for (ExcelPropertyInfo epi : propertyInfos)
+		for (ExcelFieldInfo epi : fieldInfos)
 			re.add(epi.getName());
 
 		return re;
 	}
 
 	/**
-	 * 解析单元格属性值。
+	 * 解析单元格字段值。
 	 * 
-	 * @param cell 允许为{@code null}
+	 * @param cell
+	 *            允许为{@code null}
 	 * @return
 	 * @throws DataSetSourceParseException
 	 * @throws DataSetException
@@ -604,9 +598,9 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		return cellValue;
 	}
 	
-	protected static class ExcelPropertyInfo
+	protected static class ExcelFieldInfo
 	{
-		/** 属性名 */
+		/** 字段名 */
 		private final String name;
 
 		/**
@@ -614,7 +608,7 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		 */
 		private final short cellIdx;
 
-		public ExcelPropertyInfo(String name, short cellIdx)
+		public ExcelFieldInfo(String name, short cellIdx)
 		{
 			super();
 			this.name = name;
@@ -629,261 +623,6 @@ public abstract class AbstractExcelDataSet<T extends ExcelDataSetResource> exten
 		public short getCellIdx()
 		{
 			return cellIdx;
-		}
-	}
-
-	/**
-	 * Excel数据集资源。
-	 * 
-	 * @author datagear@163.com
-	 *
-	 */
-	public static abstract class ExcelDataSetResource extends DataSetResource
-	{
-		private static final long serialVersionUID = 1L;
-
-		private String sheetName;
-		
-		private int sheetIndex;
-
-		private int nameRow;
-
-		private String dataRowExp;
-
-		private String dataColumnExp;
-
-		private boolean xls;
-
-		private List<IndexRange> _dataRowRanges = null;
-		private List<IndexRange> _dataColumnRanges = null;
-
-		public ExcelDataSetResource()
-		{
-			super();
-		}
-
-		public ExcelDataSetResource(String resolvedTemplate, String sheetName, int sheetIndex, int nameRow, String dataRowExp,
-				String dataColumnExp, boolean xls)
-		{
-			super(resolvedTemplate);
-			this.sheetName = sheetName;
-			this.sheetIndex = sheetIndex;
-			this.nameRow = nameRow;
-			this.dataRowExp = dataRowExp;
-			this.dataColumnExp = dataColumnExp;
-			this.xls = xls;
-
-			this._dataRowRanges = getRangeExpResolver().resolveIndex(this.dataRowExp);
-			this._dataColumnRanges = resolveDataColumnRanges(dataColumnExp);
-		}
-
-		public String getSheetName()
-		{
-			return sheetName;
-		}
-
-		public int getSheetIndex()
-		{
-			return sheetIndex;
-		}
-
-		public int getNameRow()
-		{
-			return nameRow;
-		}
-
-		public String getDataRowExp()
-		{
-			return dataRowExp;
-		}
-
-		public String getDataColumnExp()
-		{
-			return dataColumnExp;
-		}
-
-		public boolean isXls()
-		{
-			return xls;
-		}
-		
-		/**
-		 * 获取数据所在工作表。
-		 * 
-		 * @param wb
-		 * @return
-		 * @throws DataSetException
-		 */
-		public Sheet getDataSheet(Workbook wb) throws DataSetException
-		{
-			Sheet sheet = null;
-			
-			//sheet名应优先使用
-			if(!StringUtil.isEmpty(this.sheetName))
-				sheet = wb.getSheet(this.sheetName);
-			else
-			{
-				int sheetIndex = (this.sheetIndex < 1 ? 0 : this.sheetIndex - 1);
-				sheet = wb.getSheetAt(sheetIndex);
-			}
-			
-			if(sheet == null)
-				throw new DataSetSourceParseException("No sheet found");
-			
-			return sheet;
-		}
-		
-		/**
-		 * 获取Excel输入流。
-		 * 
-		 * @return
-		 * @throws Throwable
-		 */
-		public abstract InputStream getInputStream() throws Throwable;
-
-		/**
-		 * 是否名称行。
-		 * 
-		 * @param rowIndex 行索引（以{@code 0}计数）
-		 * @return
-		 */
-		protected boolean isNameRow(int rowIndex)
-		{
-			return ((rowIndex + 1) == this.nameRow);
-		}
-
-		/**
-		 * 是否在名称行之后。
-		 * <p>
-		 * 如果没有名称行，应返回{@code true}。
-		 * </p>
-		 * 
-		 * @param rowIndex 行索引（以{@code 0}计数）
-		 * @return
-		 */
-		protected boolean isAfterNameRow(int rowIndex)
-		{
-			return ((rowIndex + 1) > this.nameRow);
-		}
-
-		/**
-		 * 是否数据行。
-		 * 
-		 * @param rowIndex 行索引（以{@code 0}计数）
-		 * @return
-		 */
-		protected boolean isDataRow(int rowIndex)
-		{
-			if (isNameRow(rowIndex))
-				return false;
-
-			if (this._dataRowRanges == null || this._dataRowRanges.isEmpty())
-				return true;
-
-			return IndexRange.includes(this._dataRowRanges, rowIndex + 1);
-		}
-
-		/**
-		 * 是否数据列。
-		 * 
-		 * @param columnIndex 列索引（以{@code 0}计数）
-		 * @return
-		 */
-		protected boolean isDataColumn(int columnIndex)
-		{
-			if (this._dataColumnRanges == null || this._dataColumnRanges.isEmpty())
-				return true;
-
-			return IndexRange.includes(this._dataColumnRanges, columnIndex);
-		}
-
-		@SuppressWarnings("unchecked")
-		protected List<IndexRange> resolveDataColumnRanges(String dataColumnExp) throws DataSetException
-		{
-			List<Range> ranges = getRangeExpResolver().resolve(dataColumnExp);
-
-			if (ranges == null || ranges.isEmpty())
-				return Collections.EMPTY_LIST;
-
-			List<IndexRange> indexRanges = new ArrayList<>(ranges.size());
-
-			for (Range range : ranges)
-			{
-				int from = 0;
-				int to = -1;
-
-				String fromStr = range.trimFrom();
-				String toStr = range.trimTo();
-
-				if (!StringUtil.isEmpty(fromStr))
-					from = CellReference.convertColStringToIndex(fromStr);
-
-				if (!StringUtil.isEmpty(toStr))
-					to = CellReference.convertColStringToIndex(toStr);
-
-				indexRanges.add(new IndexRange(from, to));
-			}
-
-			return indexRanges;
-		}
-
-		protected RangeExpResolver getRangeExpResolver()
-		{
-			return RANGE_EXP_RESOLVER;
-		}
-
-		@Override
-		public int hashCode()
-		{
-			final int prime = 31;
-			int result = super.hashCode();
-			result = prime * result + ((dataColumnExp == null) ? 0 : dataColumnExp.hashCode());
-			result = prime * result + ((dataRowExp == null) ? 0 : dataRowExp.hashCode());
-			result = prime * result + nameRow;
-			result = prime * result + sheetIndex;
-			result = prime * result + ((sheetName == null) ? 0 : sheetName.hashCode());
-			result = prime * result + (xls ? 1231 : 1237);
-			return result;
-		}
-
-		@Override
-		public boolean equals(Object obj)
-		{
-			if (this == obj)
-				return true;
-			if (!super.equals(obj))
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			ExcelDataSetResource other = (ExcelDataSetResource) obj;
-			if (dataColumnExp == null)
-			{
-				if (other.dataColumnExp != null)
-					return false;
-			}
-			else if (!dataColumnExp.equals(other.dataColumnExp))
-				return false;
-			if (dataRowExp == null)
-			{
-				if (other.dataRowExp != null)
-					return false;
-			}
-			else if (!dataRowExp.equals(other.dataRowExp))
-				return false;
-			if (nameRow != other.nameRow)
-				return false;
-			if (sheetIndex != other.sheetIndex)
-				return false;
-			if (sheetName == null)
-			{
-				if (other.sheetName != null)
-					return false;
-			}
-			else if (!sheetName.equals(other.sheetName))
-				return false;
-			if (xls != other.xls)
-				return false;
-			return true;
 		}
 	}
 }

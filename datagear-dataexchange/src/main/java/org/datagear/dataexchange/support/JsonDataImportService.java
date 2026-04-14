@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import javax.json.Json;
 import javax.json.stream.JsonLocation;
@@ -38,9 +37,9 @@ import org.datagear.dataexchange.DataExchangeException;
 import org.datagear.dataexchange.IndexFormatDataExchangeContext;
 import org.datagear.dataexchange.RowColumnDataIndex;
 import org.datagear.meta.Column;
+import org.datagear.meta.Table;
 import org.datagear.meta.resolver.DBMetaResolver;
 import org.datagear.util.JdbcUtil;
-import org.datagear.util.StringUtil;
 
 /**
  * JSON导入服务。
@@ -106,7 +105,7 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 			if (!Event.START_OBJECT.equals(event))
 				throw new IllegalJsonDataFormatException(p.getLocation(), true, Event.START_OBJECT);
 
-			String table = null;
+			Table table = null;
 
 			while (p.hasNext())
 			{
@@ -117,7 +116,8 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 
 				if (Event.KEY_NAME.equals(event))
 				{
-					table = p.getString();
+					String tableName = p.getString();
+					table = getTableIfValid(cn, tableName);
 				}
 				else if (Event.START_ARRAY.equals(event))
 				{
@@ -144,9 +144,7 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 	 */
 	protected void importForRowArrayData(JsonDataImport dataExchange, DataExchangeContext context) throws Throwable
 	{
-		String table = dataExchange.getTable();
-
-		if (StringUtil.isEmpty(table))
+		if (!dataExchange.hasTable())
 			throw new DataExchangeException("JsonDataImport.table must be set");
 
 		IndexFormatDataExchangeContext importContext = IndexFormatDataExchangeContext.cast(context);
@@ -155,7 +153,9 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 
 		Connection cn = context.getConnection();
 		JdbcUtil.setAutoCommitIfSupports(cn, false);
+		JdbcUtil.setReadonlyIfSupports(cn, false);
 
+		Table table = getTableIfValid(cn, dataExchange.getTable());
 		JsonParser p = Json.createParser(jsonReader);
 
 		if (p.hasNext())
@@ -178,16 +178,15 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 	 * @param context
 	 * @param cn
 	 * @param p
-	 * @param table
+	 * @param tableName
 	 * @throws Throwable
 	 */
 	@SuppressWarnings("unchecked")
 	protected void importJsonArray(JsonDataImport dataExchange, IndexFormatDataExchangeContext context, Connection cn,
-			JsonParser p, String table) throws Throwable
+			JsonParser p, Table table) throws Throwable
 	{
 		JsonDataImportOption importOption = dataExchange.getImportOption();
-
-		List<Column> totalColumns = getColumns(cn, table);
+		List<Boolean> importKeyColumns = isImportKeyColumns(table, table.getColumns());
 
 		PreparedStatement prevSt = null;
 		List<Column> prevColumns = null;
@@ -208,7 +207,7 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 
 			Map<String, Object> row = parseNextObject(p);
 
-			Object[] myColumnValuess = getColumnValues(dataExchange, table, totalColumns, row);
+			Object[] myColumnValuess = getColumnValues(dataExchange, table, importKeyColumns, row);
 			List<Column> myColumns = (List<Column>) myColumnValuess[0];
 			List<Object> myColumnValues = (List<Object>) myColumnValuess[1];
 
@@ -227,7 +226,7 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 				{
 					JdbcUtil.closeStatement(prevSt);
 
-					String sql = buildInsertPreparedSql(cn, table, myColumns);
+					String sql = buildInsertPreparedSql(cn, table.getName(), myColumns);
 
 					prevSt = cn.prepareStatement(sql);
 					prevColumns = myColumns;
@@ -247,36 +246,41 @@ public class JsonDataImportService extends AbstractDevotedDBMetaDataExchangeServ
 	 * 
 	 * @param dataExchange
 	 * @param table
-	 * @param columns
+	 * @param importKeyColumns
 	 * @param row
 	 * @return
 	 * @throws ColumnNotFoundException
 	 */
-	protected Object[] getColumnValues(JsonDataImport dataExchange, String table, List<Column> columns,
+	protected Object[] getColumnValues(JsonDataImport dataExchange, Table table, List<Boolean> importKeyColumns,
 			Map<String, Object> row) throws ColumnNotFoundException
 	{
+		boolean ignoreInexistentColumn = dataExchange.getImportOption().isIgnoreInexistentColumn();
 		List<Column> myColumns = new ArrayList<>();
+		List<Boolean> myImportKeyColumns = new ArrayList<Boolean>();
 		List<Object> myColumnValues = new ArrayList<>();
 
-		for (Column column : columns)
+		// 这里应使用Table的API查找到对应的Column后再执行其他逻辑，因为可能存在大小写不一致的问题
+		for (Map.Entry<String, Object> entry : row.entrySet())
 		{
-			if (row.containsKey(column.getName()))
+			int columnIndex = table.getColumnIndex(entry.getKey());
+
+			if (columnIndex >= 0)
 			{
+				Column column = table.getColumn(columnIndex);
 				myColumns.add(column);
-				myColumnValues.add(row.get(column.getName()));
+				myImportKeyColumns.add(importKeyColumns.get(columnIndex));
+				myColumnValues.add(entry.getValue());
+			}
+			else
+			{
+				if (!ignoreInexistentColumn)
+					throw new ColumnNotFoundException(table.getName(), entry.getKey());
 			}
 		}
 
-		// 有不存在的列且不被允许
-		if (row.size() > myColumns.size() && !dataExchange.getImportOption().isIgnoreInexistentColumn())
+		if (dataExchange.getImportOption().isNullForEmptyImportKey())
 		{
-			Set<String> myNames = row.keySet();
-
-			for (String myName : myNames)
-			{
-				if (findColumn(columns, myName) == null)
-					throw new ColumnNotFoundException(table, myName);
-			}
+			setNullForEmptyIfImportKey(myColumns, myImportKeyColumns, myColumnValues);
 		}
 
 		return new Object[] { myColumns, myColumnValues };

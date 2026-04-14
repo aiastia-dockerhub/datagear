@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -23,8 +23,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.support.DataSetPropertyExpEvaluatorException;
-import org.datagear.analysis.support.DataSetPropertyExpEvaluatorParseException;
+import org.datagear.analysis.support.DataSetFieldExpEvaluatorException;
+import org.datagear.analysis.support.DataSetFieldExpEvaluatorParseException;
 import org.datagear.analysis.support.DataSetSourceParseException;
 import org.datagear.analysis.support.DataValueConvertionException;
 import org.datagear.analysis.support.HeaderContentNotNameValueObjArrayJsonException;
@@ -34,9 +34,10 @@ import org.datagear.analysis.support.SqlDataSetConnectionException;
 import org.datagear.analysis.support.SqlDataSetSqlExecutionException;
 import org.datagear.analysis.support.SqlDataSetSqlValidationException;
 import org.datagear.analysis.support.SqlDataSetUnsupportedSqlTypeException;
-import org.datagear.analysis.support.TemplateResolverException;
 import org.datagear.analysis.support.UnsupportedJsonResultDataException;
 import org.datagear.analysis.support.UnsupportedResultDataException;
+import org.datagear.analysis.support.datasettpl.TemplateResolverException;
+import org.datagear.analysis.support.html.HtmlChartPluginLoadException;
 import org.datagear.connection.ConnectionSourceException;
 import org.datagear.connection.DriverClassFormatErrorException;
 import org.datagear.connection.DriverEntityManagerException;
@@ -47,7 +48,8 @@ import org.datagear.connection.URLNotAcceptedException;
 import org.datagear.connection.UnsupportedGetConnectionException;
 import org.datagear.management.service.DeleteBuiltinRoleDeniedException;
 import org.datagear.management.service.PermissionDeniedException;
-import org.datagear.management.service.impl.SaveSchemaUrlPermissionDeniedException;
+import org.datagear.management.service.impl.SaveDtbsSourcePermissionDeniedException;
+import org.datagear.management.util.RefPermissionDeniedException;
 import org.datagear.meta.resolver.DBMetaResolverException;
 import org.datagear.meta.resolver.TableNotFoundException;
 import org.datagear.persistence.NonUniqueResultException;
@@ -58,6 +60,7 @@ import org.datagear.persistence.support.SqlParamValueSqlExpressionException;
 import org.datagear.persistence.support.SqlParamValueVariableExpressionException;
 import org.datagear.persistence.support.SqlValidationException;
 import org.datagear.persistence.support.UnsupportedDialectException;
+import org.datagear.util.FileInfo;
 import org.datagear.util.MalformedZipException;
 import org.datagear.web.util.OperationMessage;
 import org.slf4j.Logger;
@@ -71,6 +74,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * mvc控制器Advice。
@@ -133,6 +137,19 @@ public class ControllerAdvice extends AbstractController
 		return getErrorView(request, response);
 	}
 
+	@ExceptionHandler(OperationMessageException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public String handleControllerOperationMessageException(HttpServletRequest request, HttpServletResponse response,
+			OperationMessageException exception)
+	{
+		setOperationMessage(request, exception.getOperationMessage());
+
+		if (LOGGER.isDebugEnabled())
+			LOGGER.debug("Operation error", exception);
+
+		return getErrorView(request, response);
+	}
+
 	@ExceptionHandler(IllegalArgumentException.class)
 	@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
 	public String handleControllerIllegalArgumentException(HttpServletRequest request, HttpServletResponse response,
@@ -151,10 +168,10 @@ public class ControllerAdvice extends AbstractController
 		return getErrorView(request, response);
 	}
 
-	@ExceptionHandler(SchemaNotFoundException.class)
+	@ExceptionHandler(DtbsSourceNotFoundException.class)
 	@ResponseStatus(HttpStatus.NOT_FOUND)
-	public String handleControllerSchemaNotFoundException(HttpServletRequest request, HttpServletResponse response,
-			SchemaNotFoundException exception)
+	public String handleControllerDtbsSourceNotFoundException(HttpServletRequest request, HttpServletResponse response,
+			DtbsSourceNotFoundException exception)
 	{
 		setOptMsgForThrowable(request, exception);
 		return getErrorView(request, response);
@@ -214,12 +231,24 @@ public class ControllerAdvice extends AbstractController
 		return getErrorView(request, response);
 	}
 
-	@ExceptionHandler(DataSetResDirectoryNotFoundException.class)
+	@ExceptionHandler(FileSourceDirectoryNotFoundException.class)
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public String handleDataSetResDirectoryNotFoundException(HttpServletRequest request, HttpServletResponse response,
-			DataSetResDirectoryNotFoundException exception)
+	public String handleFileSourceDirectoryNotFoundException(HttpServletRequest request, HttpServletResponse response,
+			FileSourceDirectoryNotFoundException exception)
 	{
 		setOptMsgForThrowable(request, exception, exception.getDirectory());
+		return getErrorView(request, response);
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public String handleControllerMaxUploadSizeExceededException(HttpServletRequest request,
+			HttpServletResponse response, MaxUploadSizeExceededException exception)
+	{
+		// 这个异常DeliverContentTypeExceptionHandlerExceptionResolver处理不到，所以这里手动设置为CONTENT_TYPE_JSON
+		response.setContentType(CONTENT_TYPE_JSON);
+
+		setOptMsgForThrowable(request, exception, FileInfo.toPrettySize(exception.getMaxUploadSize()));
 		return getErrorView(request, response);
 	}
 
@@ -513,32 +542,51 @@ public class ControllerAdvice extends AbstractController
 		return getErrorView(request, response);
 	}
 
-	@ExceptionHandler(DataSetPropertyExpEvaluatorParseException.class)
+	@ExceptionHandler(DataSetFieldExpEvaluatorParseException.class)
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public String handleAnalysisDataSetPropertyExpEvaluatorParseException(HttpServletRequest request,
-			HttpServletResponse response, DataSetPropertyExpEvaluatorParseException exception)
+	public String handleAnalysisDataSetFieldExpEvaluatorParseException(HttpServletRequest request,
+			HttpServletResponse response, DataSetFieldExpEvaluatorParseException exception)
 	{
 		setOptMsgForThrowableMsgCode(request, exception, buildExceptionMsgCode(exception.getClass()),
-				exception.getPropertyName(), getRootMessage(exception));
+				exception.getFieldName(), getRootMessage(exception));
 		return getErrorView(request, response);
 	}
 
-	@ExceptionHandler(DataSetPropertyExpEvaluatorException.class)
+	@ExceptionHandler(DataSetFieldExpEvaluatorException.class)
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public String handleAnalysisDataSetPropertyExpEvaluatorException(HttpServletRequest request,
-			HttpServletResponse response, DataSetPropertyExpEvaluatorException exception)
+	public String handleAnalysisDataSetFieldExpEvaluatorException(HttpServletRequest request,
+			HttpServletResponse response, DataSetFieldExpEvaluatorException exception)
 	{
 		setOptMsgForThrowableMsgCode(request, exception, buildExceptionMsgCode(exception.getClass()),
-				exception.getPropertyName(), getRootMessage(exception));
+				exception.getFieldName(), getRootMessage(exception));
 		return getErrorView(request, response);
 	}
 
-	@ExceptionHandler(SaveSchemaUrlPermissionDeniedException.class)
+	@ExceptionHandler(HtmlChartPluginLoadException.class)
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public String handleServiceSaveSchemaUrlPermissionDeniedException(HttpServletRequest request,
-			HttpServletResponse response, SaveSchemaUrlPermissionDeniedException exception)
+	public String handleAnalysisHtmlChartPluginLoadException(HttpServletRequest request, HttpServletResponse response,
+			HtmlChartPluginLoadException exception)
+	{
+		setOptMsgForThrowableMsgCode(request, exception, buildExceptionMsgCode(exception.getClass()),
+				exception.getSource(), getRootMessage(exception));
+		return getErrorView(request, response);
+	}
+
+	@ExceptionHandler(SaveDtbsSourcePermissionDeniedException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public String handleServiceSaveDtbsSourcePermissionDeniedException(HttpServletRequest request,
+			HttpServletResponse response, SaveDtbsSourcePermissionDeniedException exception)
 	{
 		setOptMsgForThrowable(request, exception);
+		return getErrorView(request, response);
+	}
+
+	@ExceptionHandler(RefPermissionDeniedException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public String handleServiceRefPermissionDeniedException(HttpServletRequest request, HttpServletResponse response,
+			RefPermissionDeniedException exception)
+	{
+		setOptMsgForThrowable(request, exception, exception.getRefName());
 		return getErrorView(request, response);
 	}
 
@@ -592,7 +640,7 @@ public class ControllerAdvice extends AbstractController
 		OperationMessage om = super.setOptMsgForThrowable(request, t, msgArgs);
 
 		if (LOGGER.isDebugEnabled())
-			LOGGER.debug("Operation error: ", t);
+			LOGGER.debug("Operation error", t);
 		
 		return om;
 	}
@@ -601,7 +649,7 @@ public class ControllerAdvice extends AbstractController
 	{
 		OperationMessage om = super.setOptMsgForThrowable(request, t, msgArgs);
 		
-		LOGGER.error("Operation error: ", t);
+		LOGGER.error("Operation error", t);
 		
 		return om;
 	}
@@ -612,7 +660,7 @@ public class ControllerAdvice extends AbstractController
 		OperationMessage om = super.setOptMsgForThrowableMsgCode(request, t, msgCode, msgArgs);
 		
 		if (LOGGER.isDebugEnabled())
-			LOGGER.debug("Operation error: ", t);
+			LOGGER.debug("Operation error", t);
 		
 		return om;
 	}
@@ -621,7 +669,7 @@ public class ControllerAdvice extends AbstractController
 	{
 		OperationMessage om = super.setOptMsgForThrowableMsgCode(request, t, msgCode, msgArgs);
 		
-		LOGGER.error("Operation error: ", t);
+		LOGGER.error("Operation error", t);
 		
 		return om;
 	}

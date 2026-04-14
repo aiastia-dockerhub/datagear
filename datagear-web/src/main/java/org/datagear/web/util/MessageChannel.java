@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,114 +17,47 @@
 
 package org.datagear.web.util;
 
-import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-
-import com.github.benmanes.caffeine.cache.CacheLoader;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 
 /**
  * 消息通道。
  * <p>
- * 此类是线程安全的。
+ * 支持向指定名称的通道发送消息、读取消息。
  * </p>
  * 
  * @author datagear@163.com
  *
  */
-public class MessageChannel
+public interface MessageChannel
 {
-	private LoadingCache<String, LinkedBlockingQueue<Object>> _cache;
-
-	public MessageChannel()
-	{
-		this(60 * 60);
-	}
-
-	public MessageChannel(int channelExpireSeconds)
-	{
-		super();
-
-		// 消息通道只允许超时，不允许被其他情况移除
-		this._cache = Caffeine.newBuilder().maximumSize(Integer.MAX_VALUE)
-				.expireAfterAccess(channelExpireSeconds, TimeUnit.SECONDS)
-				.build(new CacheLoader<String, LinkedBlockingQueue<Object>>()
-				{
-					@Override
-					public LinkedBlockingQueue<Object> load(String key) throws Exception
-					{
-						return new LinkedBlockingQueue<Object>();
-					}
-				});
-	}
-
 	/**
-	 * 推入消息。
+	 * 发送消息至指定通道末尾。
 	 * 
-	 * @param channel
+	 * @param name
+	 *            消息通道名称
 	 * @param messages
 	 */
-	public void push(String channel, Object... messages)
-	{
-		LinkedBlockingQueue<Object> queue = getChannelQueueNonNull(channel);
-
-		for (int i = 0; i < messages.length; i++)
-			queue.add(messages[i]);
-	}
+	public void push(String name, Object... messages);
 
 	/**
-	 * 拉取消息。
+	 * 从指定通道开头读取一条消息并删除它。
 	 * 
 	 * @param <T>
-	 * @param channel
+	 * @param name
+	 *            消息通道名称
 	 * @return 消息对象，返回{@code null}表示无消息
 	 */
-	@SuppressWarnings("unchecked")
-	public <T> T pull(String channel)
-	{
-		LinkedBlockingQueue<Object> queue = getChannelQueueNonNull(channel);
-
-		return (T) queue.poll();
-	}
+	public <T> T poll(String name);
 
 	/**
-	 * 拉取最多指定数量的消息。
+	 * 从指定通道开头读取最多指定数量的消息并删除它们。
 	 * 
 	 * @param <T>
-	 * @param channel
+	 * @param name
+	 *            消息通道名称
 	 * @param count
+	 *            最多数量，{@code -1}表示所有消息
 	 * @return 消息对象列表，返回空列表表示无消息
 	 */
-	public <T> List<T> pull(String channel, int count)
-	{
-		LinkedBlockingQueue<Object> queue = getChannelQueueNonNull(channel);
-
-		List<T> list = new LinkedList<T>();
-
-		for (int i = 0; i < count; i++)
-		{
-			@SuppressWarnings("unchecked")
-			T msg = (T) queue.poll();
-
-			if (msg != null)
-				list.add(msg);
-		}
-
-		return list;
-	}
-
-	protected LinkedBlockingQueue<Object> getChannelQueueNonNull(String channel)
-	{
-		try
-		{
-			return this._cache.get(channel);
-		}
-		catch (Throwable e)
-		{
-			throw new MessageChannelException(e);
-		}
-	}
+	public <T> List<T> poll(String name, int count);
 }

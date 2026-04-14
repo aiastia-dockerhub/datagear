@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -48,7 +48,7 @@
 		</div>
        	<div id="${pid}fileName" class="fileupload-wrapper flex align-items-center mt-1" v-if="!pm.isReadonlyAction">
         	<p-fileupload mode="basic" name="file" :url="pm.uploadFileUrl"
-        		@upload="onUploaded" @select="uploadFileOnSelect" @progress="uploadFileOnProgress"
+        		@upload="onUploaded" @select="uploadFileOnSelect" @progress="uploadFileOnProgress" @error="uploadFileOnError"
         		:auto="true" choose-label="<@spring.message code='select' />" class="mr-2">
 			</p-fileupload>
 			<#include "../../include/page_fileupload.ftl">
@@ -56,20 +56,20 @@
 	</div>
 </div>
 <div class="field grid" v-if="fm.fileSourceType == '${DirectoryFileDataSetEntity.FILE_SOURCE_TYPE_SERVER}'">
-	<label for="${pid}dataSetResDirectory" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+	<label for="${pid}fileSource" class="field-label col-12 mb-2 md:col-3 md:mb-0"
 		title="<@spring.message code='dataSet.directoryOnServer.desc' />">
 		<@spring.message code='directoryOnServer' />
 	</label>
        <div class="field-input col-12 md:col-9">
        	<div class="p-inputgroup">
         	<div class="p-input-icon-right flex-grow-1">
-				<i class="pi pi-times cursor-pointer opacity-60" @click="onDeleteDataSetResDirectory" v-if="!pm.isReadonlyAction">
+				<i class="pi pi-times cursor-pointer opacity-60" @click="onDeleteFileSource" v-if="!pm.isReadonlyAction">
 				</i>
-				<p-inputtext id="${pid}dataSetResDirectory" v-model="fm.dataSetResDirectory.name" type="text" class="input w-full h-full border-noround-right"
-					name="dataSetResDirectory.name" required readonly>
+				<p-inputtext id="${pid}fileSource" v-model="fm.fileSource.name" type="text" class="input w-full h-full border-noround-right"
+					name="fileSource.name" required readonly>
 				</p-inputtext>
 			</div>
-        	<p-button type="button" label="<@spring.message code='select' />" @click="onSelectDataSetResDirectory"
+        	<p-button type="button" label="<@spring.message code='select' />" @click="onSelectFileSource"
         		v-if="!pm.isReadonlyAction">
         	</p-button>
 		</div>
@@ -85,87 +85,14 @@
         	<p-inputtext id="${pid}dataSetResFileName" v-model="fm.dataSetResFileName" type="text" class="input"
         		name="dataSetResFileName" required  maxlength="1000">
         	</p-inputtext>
-        	<p-button type="button" label="<@spring.message code='select' />" @click="onSelectDataSetResFileName"
-        		aria:haspopup="true" aria-controls="${pid}dsrFilesPanel"
-        		v-if="!pm.isReadonlyAction">
+        	<p-button type="button" label="<@spring.message code='select' />" @click="onSelectFileSourceFile" v-if="!pm.isReadonlyAction">
         	</p-button>
-			<p-overlaypanel ref="${pid}dsrFilesPanelEle" append-to="body"
-				:show-close-icon="false" @show="onDsrFilesPanelShow" id="${pid}dsrFilesPanel" class="dsr-files-panel">
-				<div class="pb-2">
-					<label class="text-lg font-bold">
-						<@spring.message code='selectFile' />
-					</label>
-				</div>
-				<div class="panel-content-size-xxs overflow-auto p-2">
-					<p-tree :value="pm.dsrFileNodes"
-						selection-mode="single" v-model:selection-keys="pm.dsrSelectedNodeKeys"
-						@node-expand="onDsrFileNodeExpand" @node-select="onDsrFileNodeSelect"
-						:loading="pm.dsrLoading" class="h-full overflow-auto">
-					</p-tree>
-				</div>
-				<div class="pt-3 text-center">
-					<p-button type="button" @click="onConfirmDataSetResFileName" label="<@spring.message code='confirm' />"></p-button>
-				</div>
-			</p-overlaypanel>
 		</div>
 	</div>
 </div>
 <script>
 (function(po)
 {
-	po.loadDsrFiles = function(node)
-	{
-		var subPath = (node && node.path ? node.path : "");
-		
-		var fm = po.vueFormModel();
-		var pm = po.vuePageModel();
-		
-		pm.dsrLoading = true;
-		po.ajax("/dataSetResDirectory/listFiles",
-		{
-			data: { id: fm.dataSetResDirectory.id, subPath: subPath },
-			success: function(response)
-			{
-				var nodes = po.dsrFileInfosToNodes(subPath, response);
-				
-				if(node)
-					node.children = nodes;
-				else
-					pm.dsrFileNodes = nodes;
-				
-				pm.dsrSelectedNodeKeys = null;
-				pm.dsrSelectedNode = null;
-			},
-			complete: function()
-			{
-				pm.dsrLoading = false;
-			}
-		});
-	};
-	
-	po.dsrFileInfosToNodes = function(subPath, fileInfos)
-	{
-		var re = [];
-		
-		$.each(fileInfos, function(idx, fi)
-		{
-			var myPath = (subPath ? subPath + "/" : "") + fi.name;
-			
-			re.push(
-			{
-				key: myPath,
-				label: fi.name + (fi.directory ? "" : " ("+fi.size+")"),
-				icon: (fi.directory ? "pi pi-folder" : "pi pi-file"),
-				leaf: (fi.directory ? false : true),
-				children: null,
-				fileInfo: fi,
-				path: myPath
-			});
-		});
-		
-		return re;
-	};
-	
 	po.vuePageModel(
 	{
 		fileSourceTypeOptions:
@@ -173,14 +100,8 @@
 			{name: "<@spring.message code='dataSet.FILE_SOURCE_TYPE_UPLOAD' />", value: "${DirectoryFileDataSetEntity.FILE_SOURCE_TYPE_UPLOAD}"},
 			{name: "<@spring.message code='dataSet.FILE_SOURCE_TYPE_SERVER' />", value: "${DirectoryFileDataSetEntity.FILE_SOURCE_TYPE_SERVER}"}
 		],
-		uploadFileUrl: po.concatContextPath("/dataSet/uploadFile"),
-		dsrFileNodes: null,
-		dsrSelectedNodeKeys: null,
-		dsrSelectedNode: null,
-		dsrLoading: false
+		uploadFileUrl: po.concatContextPath("/dataSet/uploadFile")
 	});
-	
-	po.vueRef("${pid}dsrFilesPanelEle", null);
 	
 	po.vueMethod(
 	{
@@ -205,61 +126,38 @@
 			fm.displayName = response.displayName;
 		},
 		
-		onSelectDataSetResDirectory: function(e)
+		onSelectFileSource: function(e)
 		{
-			po.handleOpenSelectAction("/dataSetResDirectory/select", function(dsrd)
+			po.handleOpenSelectAction("/fileSource/select", function(fs)
 			{
 				var fm = po.vueFormModel();
-				fm.dataSetResDirectory = dsrd;
+				fm.fileSource = fs;
 			});
 		},
 		
-		onDeleteDataSetResDirectory: function(e)
+		onDeleteFileSource: function(e)
 		{
 			var fm = po.vueFormModel();
-			fm.dataSetResDirectory = {};
+			fm.fileSource = {};
 		},
 		
-		onSelectDataSetResFileName: function(e)
+		onSelectFileSourceFile: function(e)
 		{
 			var fm = po.vueFormModel();
 			
-			if(!fm.dataSetResDirectory || !fm.dataSetResDirectory.id)
+			if(!fm.fileSource || !fm.fileSource.id)
 				return;
 			
-			po.vueUnref("${pid}dsrFilesPanelEle").show(e);
-		},
-		
-		onDsrFilesPanelShow: function(e)
-		{
-			po.loadDsrFiles();
-		},
-		
-		onDsrFileNodeExpand: function(node)
-		{
-			if(node.children == null)
-				po.loadDsrFiles(node);
-		},
-		
-		onDsrFileNodeSelect: function(node)
-		{
-			var pm = po.vuePageModel();
-			pm.dsrSelectedNode = node;
-		},
-		
-		onConfirmDataSetResFileName: function(e)
-		{
-			var fm = po.vueFormModel();
-			var pm = po.vuePageModel();
-			
-			if(!pm.dsrSelectedNode || pm.dsrSelectedNode.fileInfo.directory)
+			po.handleOpenSelectAction("/fileSource/file/select?id=" + encodeURIComponent(fm.fileSource.id), function(fileInfo)
 			{
-				$.tipInfo("<@spring.message code='pleaseSelectOneFile' />");
-				return;
-			}
-			
-			fm.dataSetResFileName = pm.dsrSelectedNode.path;
-			po.vueUnref("${pid}dsrFilesPanelEle").hide();
+				if(fileInfo.directory)
+				{
+					$.tipInfo("<@spring.message code='pleaseSelectOneFile' />");
+					return false;
+				}
+				
+				fm.dataSetResFileName = fileInfo.path;
+			});
 		}
 	});
 })

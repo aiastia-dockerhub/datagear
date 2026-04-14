@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,7 +20,7 @@
 "我的"、"分享的"、"全部"过滤搜索表单。
 -->
 <#assign AbstractController=statics['org.datagear.web.controller.AbstractController']>
-<#assign DataPermissionEntityService=statics['org.datagear.management.service.DataPermissionEntityService']>
+<#assign DataPermissionSpec=statics['org.datagear.management.util.DataPermissionSpec']>
 <form id="${pid}searchForm" @submit.prevent="onSearchFormSubmit" class="py-1">
 	<div class="p-inputgroup">
 		<p-inputtext type="text" v-model="pm.searchForm.keyword" maxlength="100"></p-inputtext>
@@ -52,34 +52,34 @@
 	
 	po.vuePageModel(
 	{
-		searchForm: { keyword: "", "${AbstractController.DATA_FILTER_PARAM}": "${DataPermissionEntityService.DATA_FILTER_VALUE_ALL}" },
+		searchForm: { keyword: "", "${AbstractController.DATA_FILTER_PARAM}": "${DataPermissionSpec.DATA_FILTER_VALUE_ALL}" },
 		searchFilterLabel: "<@spring.message code='searchFilter.all' />",
 		searchFilterMenuItems:
 		[
 			{
 				label: "<@spring.message code='searchFilter.all' />",
-				value: "${DataPermissionEntityService.DATA_FILTER_VALUE_ALL}",
-				command: function()
+				value: "${DataPermissionSpec.DATA_FILTER_VALUE_ALL}",
+				command: function(e)
 				{
-					po.updateSearchFilterForMenuItem(this);
+					po.updateSearchFilterForMenuItem(e.item);
 					po.submitSearchForm();
 				}
 			},
 			{
 				label: "<@spring.message code='searchFilter.mine' />",
-				value: "${DataPermissionEntityService.DATA_FILTER_VALUE_MINE}",
-				command: function()
+				value: "${DataPermissionSpec.DATA_FILTER_VALUE_MINE}",
+				command: function(e)
 				{
-					po.updateSearchFilterForMenuItem(this);
+					po.updateSearchFilterForMenuItem(e.item);
 					po.submitSearchForm();
 				}
 			},
 			{
 				label: "<@spring.message code='searchFilter.other' />",
-				value: "${DataPermissionEntityService.DATA_FILTER_VALUE_OTHER}",
-				command: function()
+				value: "${DataPermissionSpec.DATA_FILTER_VALUE_OTHER}",
+				command: function(e)
 				{
-					po.updateSearchFilterForMenuItem(this);
+					po.updateSearchFilterForMenuItem(e.item);
 					po.submitSearchForm();
 				}
 			}

@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -19,14 +19,6 @@
 <#--
 页脚
 -->
-<#assign Global=statics['org.datagear.util.Global']>
-<div class="page-foot text-center text-xs opacity-30 text-color-secondary">
-	<span class="text-color-secondary">
-		Copyright 2018-2023 datagear.tech
-	</span>
-	<#--
-	<a href="${Global.WEB_SITE}" target="_blank" class="link text-color-secondary">
-		${Global.WEB_SITE}
-	</a>
-	-->
+<div class="page-foot text-right text-xs opacity-40 text-color-secondary pt-1 pr-1 flex-grow-0">
+	<span class="text-color-secondary">Powered by DataGear</span>
 </div>

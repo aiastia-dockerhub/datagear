@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,10 +21,11 @@
 
 依赖：
 page_boolean_options.ftl
+page_palette.ftl
 -->
 <#assign ChartPluginAttributeType=statics['org.datagear.analysis.ChartPluginAttribute$DataType']>
 <#assign ChartPluginAttributeInputType=statics['org.datagear.analysis.ChartPluginAttribute$InputType']>
-<form id="${pid}chartAttrValuesForm" class="flex flex-column chart-attr-values-form" :class="{readonly: pm.chartAttrValuesForm.readonly}">
+<form id="${pid}chartAttrValuesForm" class="chart-attr-values-form flex flex-column" :class="{readonly: pm.chartAttrValuesForm.readonly}">
 	<div class="page-form-content flex-grow-1 px-2 py-1 overflow-y-auto">
 		<div v-for="(group, groupIdx) in pm.chartAttrValuesForm.groups">
 			<p-divider align="center">
@@ -41,7 +42,7 @@ page_boolean_options.ftl
 				<div class="field-input col-12" v-if="cpa.inputType == pm.ChartPluginAttribute.InputType.RADIO">
 					<div class="input border-1px-transparent p-inputtext p-component px-0 py-0">
 						<div v-for="(ip, ipIdx) in cpa.inputPayload.options" class="inline-block mr-2">
-							<p-radiobutton :id="'${pid}cpattr_'+cpa.name+'_'+ipIdx" :value="ip.value" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]"></p-radiobutton>
+							<p-radiobutton :input-id="'${pid}cpattr_'+cpa.name+'_'+ipIdx" :value="ip.value" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]"></p-radiobutton>
 							<label :for="'${pid}cpattr_'+cpa.name+'_'+ipIdx" class="ml-1">{{ip.name}}</label>
 						</div>
 					</div>
@@ -51,31 +52,56 @@ page_boolean_options.ftl
 				</div>
 				<div class="field-input col-12" v-else-if="cpa.inputType == pm.ChartPluginAttribute.InputType.SELECT">
 					<div v-if="cpa.inputPayload.multiple == true">
-						<p-multiselect :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
-							option-label="name" option-value="value" :show-clear="true" class="input w-full">
-						</p-multiselect>
+						<div v-if="cpa.inputPayload.treeSelect == true">
+							<p-treeselect :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
+								selection-mode="multiple" class="input w-full" placeholder="<@spring.message code='none' />">
+							</p-treeselect>
+						</div>
+						<div v-else>
+							<p-multiselect :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
+								option-label="name" option-value="value" :show-clear="true" class="input w-full">
+							</p-multiselect>
+						</div>
 					</div>
 					<div class="input border-1px-transparent p-inputtext p-component px-0 py-0"
 						v-else-if="cpa.inputPayload.multiple == pm.ChartPluginAttribute.MultipleRepeat">
 						<div v-for="(sv, svIdx) in pm.chartAttrValuesForm.attrValues[cpa.name]" :key="svIdx">
-							<div class="flex mb-1">
-								<p-dropdown :id="'${pid}cpattr_'+cpa.name+'_'+svIdx" v-model="pm.chartAttrValuesForm.attrValues[cpa.name][svIdx]" :options="cpa.inputPayload.options"
-									option-label="name" option-value="value" class="input flex-grow-1 mr-1">
-								</p-dropdown>
-								<p-button type="button" label="<@spring.message code='delete' />" class="p-button-danger"
-									@click="onChartAttrValuesFormRemoveValue($event, cpa.name, svIdx)"
-									v-if="!pm.chartAttrValuesForm.readonly">
-								</p-button>
+							<div class="flex mb-1 gap-2">
+								<div class="flex-grow-1 flex">
+									<p-treeselect :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
+										class="input w-full" placeholder="<@spring.message code='none' />" v-if="cpa.inputPayload.treeSelect == true">
+									</p-treeselect>
+									<p-dropdown :id="'${pid}cpattr_'+cpa.name+'_'+svIdx" v-model="pm.chartAttrValuesForm.attrValues[cpa.name][svIdx]" :options="cpa.inputPayload.options"
+										option-label="name" option-value="value" class="input flex-grow-1 mr-1" v-else>
+									</p-dropdown>
+								</div>
+								<div class="flex gap-1">
+									<p-button type="button" icon="pi pi-plus" severity="secondary"
+										@click="onChartAttrValuesFormInsertValue($event, cpa.name, svIdx)"
+										v-if="!pm.chartAttrValuesForm.readonly">
+									</p-button>
+									<p-button type="button" icon="pi pi-minus" severity="danger"
+										@click="onChartAttrValuesFormRemoveValue($event, cpa.name, svIdx)"
+										v-if="!pm.chartAttrValuesForm.readonly">
+									</p-button>
+								</div>
 							</div>
 						</div>
 						<div class="mt-1" v-if="!pm.chartAttrValuesForm.readonly">
-							<p-button type="button" icon="pi pi-plus" @click="onChartAttrValuesFormAddValue(cpa.name)"></p-button>
+							<p-button type="button" icon="pi pi-plus" severity="secondary" @click="onChartAttrValuesFormAddValue(cpa.name)"></p-button>
 						</div>
 					</div>
 					<div v-else>
-						<p-dropdown :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
-							option-label="name" option-value="value" :show-clear="!cpa.required" class="input w-full">
-						</p-dropdown>
+						<div v-if="cpa.inputPayload.treeSelect == true">
+							<p-treeselect :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
+								class="input w-full" placeholder="<@spring.message code='none' />">
+							</p-treeselect>
+						</div>
+						<div v-else>
+							<p-dropdown :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" :options="cpa.inputPayload.options"
+								option-label="name" option-value="value" :show-clear="!cpa.required" class="input w-full">
+							</p-dropdown>
+						</div>
 					</div>
 		        	<div class="validate-msg" v-if="cpa.required">
 		        		<input :name="cpa.name" required type="text" class="validate-proxy" />
@@ -84,7 +110,7 @@ page_boolean_options.ftl
 				<div class="field-input col-12" v-else-if="cpa.inputType == pm.ChartPluginAttribute.InputType.CHECKBOX">
 					<div class="input border-1px-transparent p-inputtext p-component px-0 py-0">
 						<div v-for="(ip, ipIdx) in cpa.inputPayload.options" class="inline-block mr-2">
-							<p-checkbox :id="'${pid}cpattr_'+cpa.name+'_'+ipIdx" :value="ip.value" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]"></p-checkbox>
+							<p-checkbox :input-id="'${pid}cpattr_'+cpa.name+'_'+ipIdx" :value="ip.value" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]"></p-checkbox>
 							<label :for="'${pid}cpattr_'+cpa.name+'_'+ipIdx" class="ml-1">{{ip.name}}</label>
 						</div>
 					</div>
@@ -94,33 +120,37 @@ page_boolean_options.ftl
 				</div>
 				<div class="field-input col-12" v-else-if="cpa.inputType == pm.ChartPluginAttribute.InputType.COLOR">
 					<div class="input border-1px-transparent p-inputtext p-component px-0 py-0" v-if="cpa.inputPayload.multiple">
-						<div v-for="(color, colorIdx) in pm.chartAttrValuesForm.colorProxy[cpa.name]" :key="colorIdx">
-							<div class="flex mb-1">
-								<p-inputtext :id="'${pid}cpattr_'+cpa.name+'_'+colorIdx" v-model="pm.chartAttrValuesForm.attrValues[cpa.name][colorIdx]" type="text"
-									class="input flex-grow-1 mr-1">
-								</p-inputtext>
-								<p-colorpicker v-model="pm.chartAttrValuesForm.colorProxy[cpa.name][colorIdx]"
-									default-color="FFFFFF" class="flex-grow-0 preview-h-full mr-3"
-									@change="onChartAttrValuesFormColorPickerChange($event, cpa.name, colorIdx)">
-								</p-colorpicker>
-								<p-button type="button" label="<@spring.message code='delete' />" class="p-button-danger"
-									@click="onChartAttrValuesFormRemoveColor($event, cpa.name, colorIdx)"
-									v-if="!pm.chartAttrValuesForm.readonly">
-								</p-button>
+						<div v-for="(color, colorIdx) in pm.chartAttrValuesForm.attrValues[cpa.name]" :key="colorIdx">
+							<div class="flex mb-1 gap-2">
+								<div class="flex-grow-1 flex">
+									<p-inputtext :id="'${pid}cpattr_'+cpa.name+'_'+colorIdx" v-model="pm.chartAttrValuesForm.attrValues[cpa.name][colorIdx]" type="text"
+										class="input flex-grow-1 mr-1">
+									</p-inputtext>
+									<p-button type="button" :style="{'background-color': pm.chartAttrValuesForm.attrValues[cpa.name][colorIdx]}" class="palette-btn surface-border mr-1"
+										@click="showPalettePanel($event, pm.chartAttrValuesForm.attrValues[cpa.name], colorIdx)"></p-button>
+								</div>
+								<div class="flex gap-1">
+									<p-button type="button" icon="pi pi-plus" severity="secondary"
+										@click="onChartAttrValuesFormInsertColor($event, cpa.name, colorIdx)"
+										v-if="!pm.chartAttrValuesForm.readonly">
+									</p-button>
+									<p-button type="button" icon="pi pi-minus" severity="danger"
+										@click="onChartAttrValuesFormRemoveColor($event, cpa.name, colorIdx)"
+										v-if="!pm.chartAttrValuesForm.readonly">
+									</p-button>
+								</div>
 							</div>
 						</div>
 						<div class="mt-1" v-if="!pm.chartAttrValuesForm.readonly">
-							<p-button type="button" icon="pi pi-plus" @click="onChartAttrValuesFormAddColor(cpa.name)"></p-button>
+							<p-button type="button" icon="pi pi-plus" severity="secondary" @click="onChartAttrValuesFormAddColor(cpa.name)"></p-button>
 						</div>
 					</div>
 					<div class="flex" v-else>
 						<p-inputtext :id="'${pid}cpattr_'+cpa.name" v-model="pm.chartAttrValuesForm.attrValues[cpa.name]" type="text"
 							class="input flex-grow-1 mr-1" maxlength="100">
 						</p-inputtext>
-						<p-colorpicker v-model="pm.chartAttrValuesForm.colorProxy[cpa.name]"
-							default-color="FFFFFF" class="flex-grow-0 preview-h-full"
-							@change="onChartAttrValuesFormColorPickerChange($event, cpa.name)">
-						</p-colorpicker>
+						<p-button type="button" :style="{'background-color': pm.chartAttrValuesForm.attrValues[cpa.name]}" class="palette-btn surface-border"
+							@click="showPalettePanel($event, pm.chartAttrValuesForm.attrValues, cpa.name)"></p-button>
 					</div>
 		        	<div class="validate-msg" v-if="cpa.required">
 		        		<input :name="cpa.name" required type="text" class="validate-proxy" />
@@ -145,7 +175,7 @@ page_boolean_options.ftl
 			</div>
 		</div>
 	</div>
-	<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
+	<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 		<p-button type="submit" label="<@spring.message code='confirm' />"></p-button>
 		
 		<p-button v-for="(btn, btnIdx) in pm.chartAttrValuesForm.buttons" :key="btnIdx"
@@ -215,19 +245,16 @@ page_boolean_options.ftl
 			{
 				var inputPayload = (cpa.inputPayload || []);
 				
-				//"DG_MAP"
-				inputPayload = po.trimChartPluginAttributeInputPayloadIfMap(inputPayload);
-				
-				//数组：转换为{multiple: false, options: [...]}格式
-				if($.isArray(inputPayload))
+				//数组、"DG_MAP"：转换为{ multiple: false, options: ... }格式
+				if($.isArray(inputPayload) || (inputPayload == po.ChartPluginAttribute.InputPayload.DG_MAP))
 					inputPayload = { multiple: false, options: inputPayload };
 				
-				//{ options: "DG_MAP" }
-				inputPayload.options = po.trimChartPluginAttributeInputPayloadIfMap(inputPayload.options);
+				//{ options: "DG_MAP" }：转换为实际地图数据options
+				po.trimChartPluginAttributeInputPayloadIfMap(cpa, inputPayload);
 				
 				//默认multiple为false
 				inputPayload.multiple = (inputPayload.multiple == null ? false : inputPayload.multiple);
-				inputPayload.options = po.trimChartPluginAttributeInputOptions(inputPayload.options);
+				po.trimChartPluginAttributeInputOptions(cpa, inputPayload);
 				
 				if(inputType == po.ChartPluginAttribute.InputType.RADIO)
 				{
@@ -273,57 +300,83 @@ page_boolean_options.ftl
 		return cpas;
 	};
 	
-	po.trimChartPluginAttributeInputPayloadIfMap = function(inputPayload)
+	po.trimChartPluginAttributeInputPayloadIfMap = function(chartPluginAttr, inputPayload)
 	{
+		var options = inputPayload.options;
+		
 		//内置地图
-		if(inputPayload == po.ChartPluginAttribute.InputPayload.DG_MAP)
+		if(options == po.ChartPluginAttribute.InputPayload.DG_MAP)
 		{
-			inputPayload = po.getChartPluginAttributeInputPayloadForMap();
-		}
-		
-		return inputPayload;
-	};
-	
-	po.getChartPluginAttributeInputPayloadForMap = function()
-	{
-		var inputPayload = [];
-		
-		$.each(dashboardFactory.builtinChartMaps, function(i, cms)
-		{
-			if(cms && cms.names && cms.names.length > 0)
+			//只有下拉列表才使用树形结构，单选框、复选框只能使用平铺数组
+			if(inputPayload.treeSelect == null
+					&& chartPluginAttr.inputType == po.ChartPluginAttribute.InputType.SELECT)
 			{
-				inputPayload.push({ name: cms.names[0], value: cms.names[0]});
+				inputPayload.treeSelect = true;
 			}
-		});
-		
-		return inputPayload;
+			
+			inputPayload.options = po.getChartPluginAttributeInputOptionsForMap(inputPayload.treeSelect);
+		}
 	};
 	
-	po.trimChartPluginAttributeInputOptions = function(inputOptions)
+	po.getChartPluginAttributeInputOptionsForMap = function(asTree)
 	{
-		inputOptions = (inputOptions || []);
-		
+		//树
+		if(asTree)
+		{
+			var listener =
+			{
+				added: function(node, parent, rootArray)
+				{
+					//转换为UI组件所需的结构
+					node.key = node.mapName;
+					node.label = node.mapLabel;
+					if(parent && !parent.children)
+						parent.children = parent.mapChildren;
+				}
+			};
+			
+			return dashboardFactory.getStdBuiltinChartMapTree(listener);
+		}
+		//数组
+		else
+		{
+			var listener =
+			{
+				added: function(node, rootArray)
+				{
+					//转换为UI组件所需的结构
+					node.value = node.mapName;
+					node.name = node.mapLabel;
+				}
+			};
+			
+			return dashboardFactory.getStdBuiltinChartMapArray(listener);
+		}
+	};
+	
+	po.trimChartPluginAttributeInputOptions = function(chartPluginAttr, inputPayload)
+	{
+		if(!inputPayload.options)
+			inputPayload.options = [];
 		//支持非数组格式
-		if(!$.isArray(inputOptions))
-			inputOptions = [ inputOptions ];
+		if(!$.isArray(inputPayload.options))
+			inputPayload.options = [ inputPayload.options ];
 		
-		var inputOptionsNew = [];
+		var options = inputPayload.options;
 		
 		//转换为标准的[ {name: ..., value: ...}, ... ]格式
-		$.each(inputOptions, function(i, io)
+		$.each(options, function(i, io)
 		{
 			//支持元素为基本类型
 			if(io == null || $.isTypeString(io) || $.isTypeNumber(io) || $.isTypeBoolean(io))
-				io = { name: io, value: io };
+			{
+				options[i] = { name: io, value: io };
+			}
 			
 			//支持{value: ...}格式的元素
 			if(io.name == null)
 				io.name = (io.value == null ? "null" : io.value);
-			
-			inputOptionsNew.push(io);
 		});
-		
-		return inputOptionsNew;
 	};
 	
 	po.toChartPluginAttributeGroups = function(cpas)
@@ -388,50 +441,86 @@ page_boolean_options.ftl
 		{
 			var v = re[cpa.name];
 			
-			if(v == null)
-				return;
+			var inputType = cpa.inputType;
+			var inputPayload = cpa.inputPayload;
+			var isTreeSelect = (inputPayload && inputPayload.treeSelect == true);
+			var isMultipleSelect = (inputPayload && (inputPayload.multiple == true || inputPayload.multiple == po.ChartPluginAttribute.MultipleRepeat));
+			
+			//需先转换树组件Model
+			if(isTreeSelect)
+				v = po.trimChartAttrValueIfTreeModel(v, !isMultipleSelect);
 			
 			//需转换类型
 			v = po.toChartAttrTypeValue(cpa.type, v);
 			
-			var inputType = cpa.inputType;
-			var inputPayload = cpa.inputPayload;
-			
-			//多选输入框应强制转换为数组
-			if(inputPayload && (inputPayload.multiple == true || inputPayload.multiple == po.ChartPluginAttribute.MultipleRepeat)
-					&& !$.isArray(v))
+			if(v != null)
 			{
-				v = [ v ];
-			}
-			
-			//应将值限定为待选值集合内，比如图表插件升级后inputPayload有所删减，那么这里的旧值应删除
-			if(inputPayload && inputPayload.options && $.isArray(inputPayload.options))
-			{
-				if($.isArray(v))
+				//多选输入框应强制转换为数组
+				if(isMultipleSelect && !$.isArray(v))
 				{
-					var vnew = [];
-					$.each(v, function(j, vj)
-					{
-						if($.inArrayById(inputPayload.options, vj, "value") >= 0)
-							vnew.push(vj);
-					});
-					
-					v = vnew;
+					v = [ v ];
 				}
-				else
+				
+				//应将值限定为待选值集合内，比如图表插件升级后inputPayload有所删减，那么这里的旧值应删除
+				if(inputPayload && inputPayload.options && $.isArray(inputPayload.options))
 				{
-					if($.inArrayById(inputPayload.options, v, "value") < 0)
+					if($.isArray(v))
 					{
-						v = null;
+						var vnew = [];
+						$.each(v, function(j, vj)
+						{
+							if(isTreeSelect)
+							{
+								if($.inTreeArrayById(inputPayload.options, vj, "key"))
+									vnew.push(vj);
+							}
+							else
+							{
+								if($.inArrayById(inputPayload.options, vj, "value") >= 0)
+									vnew.push(vj);
+							}
+						});
+						
+						v = vnew;
+					}
+					else
+					{
+						if(isTreeSelect)
+						{
+							if($.inTreeArrayById(inputPayload.options, v, "key") != true)
+								v = null;
+						}
+						else
+						{
+							if($.inArrayById(inputPayload.options, v, "value") < 0)
+								v = null;
+						}
 					}
 				}
 			}
 			
-			if(v != null)
-				re[cpa.name] = v;
+			re[cpa.name] = v;
 		});
 		
 		return re;
+	};
+	
+	//树组件Model结构是：{ v0: true, ... }，需进行转换
+	po.trimChartAttrValueIfTreeModel = function(treeModel, single)
+	{
+		//不是树组件Model的应原样返回
+		if(!treeModel || !$.isPlainObject(treeModel))
+			return treeModel;
+		
+		var values = [];
+		
+		$.each(treeModel, function(p, v)
+		{
+			if(v === true)
+				values.push(p);
+		});
+		
+		return (single ? values[0] : values);
 	};
 	
 	po.toChartAttrTypeValue = function(type, value)
@@ -462,41 +551,49 @@ page_boolean_options.ftl
 			return value;
 	};
 	
-	po.toChartAttrValuesFormColorProxy = function(attrValues, cpas)
+	po.toChartAttrValuesFormModel = function(attrValues, cpas)
 	{
-		attrValues = (attrValues || {});
+		var formValues = $.extend(true, {}, (attrValues || {}));
 		
-		var colorProxy = {};
+		if(!cpas || cpas.length == 0)
+			return attrValues;
 		
 		$.each(cpas, function(i, cpa)
 		{
-			var inputType = cpa.inputType;
-			var inputPayload = cpa.inputPayload;
+			var v = formValues[cpa.name];
 			
-			if(inputType == po.ChartPluginAttribute.InputType.COLOR)
-			{
-				var v = attrValues[cpa.name];
-				if(v)
-				{
-					if($.isArray(v))
-					{
-						var vNew = [];
-						$.each(v, function(j, vj)
-						{
-							vNew.push(chartFactory.colorToHexStr(vj));
-						});
-						
-						v = vNew;
-					}
-					else
-						v = chartFactory.colorToHexStr(v);
-					
-					colorProxy[cpa.name] = v;
-				}
-			}
+			if(v == null)
+				return;
+			
+			var inputPayload = cpa.inputPayload;
+			var isTreeSelect = (inputPayload && inputPayload.treeSelect == true);
+			
+			//转换为树组件Model
+			if(isTreeSelect)
+				formValues[cpa.name] = po.chartAttrValueToTreeModel(v);
 		});
 		
-		return colorProxy;
+		return formValues;
+	};
+	
+	//插件属性值转换为树组件Model，它的模型结构是：{ v0: true, ... }
+	po.chartAttrValueToTreeModel = function(value)
+	{
+		if(value != null && $.isPlainObject(value))
+			return value;
+		
+		var re = {};
+		
+		if(value != null)
+		{
+			value = ($.isArray(value) ? value : [ value ]);
+			$.each(value, function(i, v)
+			{
+				re[v] = true;
+			});
+		}
+		
+		return re;
 	};
 	
 	po.validateChartAttrValuesRequired = function(cpas, attrValues)
@@ -528,8 +625,7 @@ page_boolean_options.ftl
 			groups: [],
 			attrValues: {},
 			readonly: false,
-			buttons: [],
-			colorProxy: {}
+			buttons: []
 		}
 	});
 	
@@ -577,34 +673,14 @@ page_boolean_options.ftl
 	po.setChartAttrValuesFormAttrValues = function(attrValues)
 	{
 		var pm = po.vuePageModel();
+		var cpas = pm.chartAttrValuesForm.attributes;
+		var formValues = po.toChartAttrValuesFormModel(attrValues, cpas);
 		
-		pm.chartAttrValuesForm.attrValues = $.extend(true, {}, (attrValues || {}));
-		pm.chartAttrValuesForm.colorProxy = po.toChartAttrValuesFormColorProxy(pm.chartAttrValuesForm.attrValues, pm.chartAttrValuesForm.attributes);
+		pm.chartAttrValuesForm.attrValues = formValues;
 	};
 	
 	po.vueMethod(
 	{
-		onChartAttrValuesFormColorPickerChange: function(e, propName, idx)
-		{
-			var pm = po.vuePageModel();
-			var proxy = pm.chartAttrValuesForm.colorProxy;
-			var attrValues = pm.chartAttrValuesForm.attrValues;
-			
-			//XXX 使用e.value在第一次时返回的值不是新值！？
-			var pickColor = (idx != null ? "#"+proxy[propName][idx] : "#"+proxy[propName]);
-			
-			if(idx != null)
-			{
-				pickColor = (pickColor ? pickColor : attrValues[propName][idx]);
-				attrValues[propName][idx] = chartFactory.colorToHexStr(pickColor, true);
-			}
-			else
-			{
-				pickColor = (pickColor ? pickColor : attrValues[propName]);
-				attrValues[propName] = chartFactory.colorToHexStr(pickColor, true);
-			}
-		},
-		
 		onChartAttrValuesFormAddValue: function(propName)
 		{
 			var pm = po.vuePageModel();
@@ -620,33 +696,41 @@ page_boolean_options.ftl
 		{
 			var pm = po.vuePageModel();
 			var attrValues = pm.chartAttrValuesForm.attrValues;
-			
 			attrValues[propName].splice(idx, 1);
+		},
+		
+		onChartAttrValuesFormInsertValue: function(e, propName, idx)
+		{
+			var pm = po.vuePageModel();
+			var attrValues = pm.chartAttrValuesForm.attrValues;
+			//不在idx+1位置插入，这样无法在第一个之前插入
+			attrValues[propName].splice(idx, 0, "");
 		},
 		
 		onChartAttrValuesFormAddColor: function(propName)
 		{
 			var pm = po.vuePageModel();
-			var proxy = pm.chartAttrValuesForm.colorProxy;
 			var attrValues = pm.chartAttrValuesForm.attrValues;
 			
-			if(!proxy[propName])
-				proxy[propName] = [];
 			if(!attrValues[propName])
 				attrValues[propName] = [];
 			
-			proxy[propName].push("");
 			attrValues[propName].push("");
 		},
 		
 		onChartAttrValuesFormRemoveColor: function(e, propName, idx)
 		{
 			var pm = po.vuePageModel();
-			var proxy = pm.chartAttrValuesForm.colorProxy;
 			var attrValues = pm.chartAttrValuesForm.attrValues;
-			
-			proxy[propName].splice(idx, 1);
 			attrValues[propName].splice(idx, 1);
+		},
+		
+		onChartAttrValuesFormInsertColor: function(e, propName, idx)
+		{
+			var pm = po.vuePageModel();
+			var attrValues = pm.chartAttrValuesForm.attrValues;
+			//不在idx+1位置插入，这样无法在第一个之前插入
+			attrValues[propName].splice(idx, 0, "");
 		}
 	});
 })

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,8 +31,10 @@ import org.datagear.util.Global;
  */
 public class HtmlChartRenderContext extends DefaultRenderContext
 {
+	private static final long serialVersionUID = 1L;
+
 	/**输出流*/
-	private Writer writer;
+	private transient Writer writer;
 
 	/** 图表的HTML元素ID */
 	private String chartElementId = genIdentifier("ele");

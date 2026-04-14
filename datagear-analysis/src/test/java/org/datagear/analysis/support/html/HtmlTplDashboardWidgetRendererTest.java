@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -110,7 +110,7 @@ public class HtmlTplDashboardWidgetRendererTest
 	private class TestHtmlTplDashboardWidgetRenderer extends HtmlTplDashboardWidgetRenderer
 	{
 		@Override
-		public String simpleTemplateContent(String htmlCharset, String... chartWidgetId)
+		public String simpleTemplate(SimpleHtmlTplOption option)
 		{
 			return null;
 		}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -19,8 +19,6 @@ package org.datagear.analysis.support.html;
 
 import java.io.Reader;
 import java.io.Writer;
-import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
 
 import org.datagear.analysis.DashboardTheme;
@@ -36,7 +34,9 @@ import org.datagear.util.StringUtil;
  */
 public class HtmlTplDashboardRenderContext extends TplDashboardRenderContext
 {
-	private List<HtmlTplDashboardImport> importList = Collections.emptyList();
+	private static final long serialVersionUID = 1L;
+
+	private HtmlTplDashboardImportBuilder importBuilder = null;
 	
 	private HtmlTitleHandler htmlTitleHandler = null;
 	
@@ -73,20 +73,20 @@ public class HtmlTplDashboardRenderContext extends TplDashboardRenderContext
 	public HtmlTplDashboardRenderContext(HtmlTplDashboardRenderContext renderContext)
 	{
 		super(renderContext);
-		this.importList = renderContext.getImportList();
+		this.importBuilder = renderContext.getImportBuilder();
 		this.htmlTitleHandler = renderContext.getHtmlTitleHandler();
 		this.dashboardTheme = renderContext.getDashboardTheme();
 		this.locale = renderContext.getLocale();
 	}
 
-	public List<HtmlTplDashboardImport> getImportList()
+	public HtmlTplDashboardImportBuilder getImportBuilder()
 	{
-		return importList;
+		return importBuilder;
 	}
 
-	public void setImportList(List<HtmlTplDashboardImport> importList)
+	public void setImportBuilder(HtmlTplDashboardImportBuilder importBuilder)
 	{
-		this.importList = importList;
+		this.importBuilder = importBuilder;
 	}
 
 	public HtmlTitleHandler getHtmlTitleHandler()

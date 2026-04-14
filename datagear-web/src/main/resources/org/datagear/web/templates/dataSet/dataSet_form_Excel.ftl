@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DataSetEntity=statics['org.datagear.management.domain.DataSetEntity']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -99,14 +100,13 @@
 					</p-selectbutton>
 				</div>
 			</div>
-			<#include "include/dataSet_form_param_property.ftl">
+			<#include "include/dataSet_form_param_field.ftl">
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
-			<#include "include/dataSet_form_preview.ftl">
-			<p-button type="submit" label="<@spring.message code='save' />" class="hide-if-readonly"></p-button>
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
+			<#include "include/dataSet_form_submit_btn.ftl">
 		</div>
 	</form>
-	<#include "include/dataSet_form_param_property_form.ftl">
+	<#include "include/dataSet_form_param_field_form.ftl">
 </div>
 <#include "../include/page_form.ftl">
 <#include "../include/page_simple_form.ftl">
@@ -125,7 +125,7 @@
 	
 	po.previewUrl = function()
 	{
-		var url = "/dataSet/previewExcel";
+		var url = "/dataSet/preview/${DataSetEntity.DATA_SET_TYPE_Excel}";
 		url = $.addParam(url, "originalFileName", po.originalFileName);
 		
 		return url;
@@ -135,7 +135,7 @@
 	{
 		fingerprint.fileSourceType = dataSet.fileSourceType;
 		fingerprint.fileName = dataSet.fileName;
-		fingerprint.dataSetResDirectoryId = dataSet.dataSetResDirectory.id;
+		fingerprint.fileSourceId = dataSet.fileSource.id;
 		fingerprint.dataSetResFileName = dataSet.dataSetResFileName;
 		fingerprint.sheetName = dataSet.sheetName;
 		fingerprint.sheetIndex = dataSet.sheetIndex;
@@ -152,7 +152,7 @@
 	};
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
-	formModel.dataSetResDirectory = (!formModel.dataSetResDirectory ? {} : formModel.dataSetResDirectory);
+	formModel.fileSource = (!formModel.fileSource ? {} : formModel.fileSource);
 	po.inflateDataSetModel(formModel);
 	
 	po.originalFileName = (formModel.fileName || "");
@@ -180,10 +180,9 @@
 		//用于兼容旧版本的工作表序号功能，参考AbstractExcelDataSet.getSheetIndex()
 		enableSheetIndex: (formModel.sheetIndex != null && formModel.sheetIndex > 0)
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

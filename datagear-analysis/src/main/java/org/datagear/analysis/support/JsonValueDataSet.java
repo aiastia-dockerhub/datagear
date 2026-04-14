@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,15 +17,12 @@
 
 package org.datagear.analysis.support;
 
-import java.io.Reader;
 import java.util.List;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
-import org.datagear.analysis.support.AbstractJsonDataSet.JsonDataSetResource;
-import org.datagear.analysis.support.JsonValueDataSet.JsonValueDataSetResource;
-import org.datagear.util.IOUtil;
+import org.datagear.analysis.support.datasetres.JsonValueDataSetResource;
 
 /**
  * JSON字符串值数据集。
@@ -38,6 +35,8 @@ import org.datagear.util.IOUtil;
  */
 public class JsonValueDataSet extends AbstractJsonDataSet<JsonValueDataSetResource>
 {
+	private static final long serialVersionUID = 1L;
+
 	private String value;
 
 	public JsonValueDataSet()
@@ -51,9 +50,9 @@ public class JsonValueDataSet extends AbstractJsonDataSet<JsonValueDataSetResour
 		this.value = value;
 	}
 
-	public JsonValueDataSet(String id, String name, List<DataSetProperty> properties, String value)
+	public JsonValueDataSet(String id, String name, List<DataSetField> fields, String value)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.value = value;
 	}
 
@@ -75,61 +74,9 @@ public class JsonValueDataSet extends AbstractJsonDataSet<JsonValueDataSetResour
 	}
 
 	@Override
-	protected JsonValueDataSetResource getResource(DataSetQuery query, List<DataSetProperty> properties,
-			boolean resolveProperties) throws Throwable
+	protected JsonValueDataSetResource getResource(DataSetQuery query) throws Throwable
 	{
 		String json = resolveTemplateJson(this.value, query);
-		return new JsonValueDataSetResource(json, getDataJsonPath());
-	}
-
-	/**
-	 * JSON文本值数据集资源。
-	 * 
-	 * @author datagear@163.com
-	 *
-	 */
-	public static class JsonValueDataSetResource extends JsonDataSetResource
-	{
-		private static final long serialVersionUID = 1L;
-
-		public JsonValueDataSetResource()
-		{
-			super();
-		}
-
-		public JsonValueDataSetResource(String resolvedTemplate, String dataJsonPath)
-		{
-			super(resolvedTemplate, dataJsonPath);
-		}
-
-		@Override
-		public Reader getReader() throws Throwable
-		{
-			return IOUtil.getReader(super.getResolvedTemplate());
-		}
-
-		@Override
-		public boolean isIdempotent()
-		{
-			return true;
-		}
-
-		@Override
-		public int hashCode()
-		{
-			return super.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj)
-		{
-			if (this == obj)
-				return true;
-			if (!super.equals(obj))
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			return true;
-		}
+		return new JsonValueDataSetResource(json, getResultJsonRule());
 	}
 }

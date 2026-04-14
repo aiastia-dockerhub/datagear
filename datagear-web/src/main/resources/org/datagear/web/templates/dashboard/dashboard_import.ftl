@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DashboardVersion=statics['org.datagear.web.analysis.DashboardVersion']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -40,7 +41,7 @@
 		        <div class="field-input col-12 md:col-9">
 		        	<div id="${pid}file" class="fileupload-wrapper flex align-items-center mt-1" v-if="!pm.isReadonlyAction">
 			        	<p-fileupload mode="basic" name="file" :url="pm.uploadFileUrl"
-			        		@upload="onUploaded" @select="uploadFileOnSelect" @progress="uploadFileOnProgress"
+			        		@upload="onUploaded" @select="uploadFileOnSelect" @before-upload="onBeforeUpload" @progress="uploadFileOnProgress" @error="uploadFileOnError"
 			        		:auto="true" choose-label="<@spring.message code='select' />" class="mr-2">
 			        	</p-fileupload>
 						<#include "../include/page_fileupload.ftl">
@@ -102,6 +103,24 @@
 					</div>
 				</div>
 			</div>
+			<!--
+			<div class="field grid">
+				<label for="${pid}name" class="field-label col-12 mb-2 md:col-3 md:mb-0">
+					<@spring.message code='dashboard.version' />
+				</label>
+		        <div class="field-input col-12 md:col-9">
+		        	<p-dropdown v-model="fm.version" :options="pm.versionDropdownItems" option-label="label" option-value="value"
+		        		@change="onVersionChange" class="input w-full">
+		        	</p-dropdown>
+		        	<div class="validate-msg">
+		        		<input name="version" required type="text" class="validate-proxy" />
+		        	</div>
+		        	<div class="desc text-color-secondary">
+		        		<small><@spring.message code='dashboard.version.desc' /></small>
+		        	</div>
+		        </div>
+			</div>
+			-->
 			<div class="field grid">
 				<label class="field-label col-12 mb-2 md:col-3 md:mb-0">
 				</label>
@@ -118,7 +137,7 @@
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -139,11 +158,24 @@
 	po.vuePageModel(
 	{
 		availableCharsetNames: availableCharsetNames,
-		uploadFileUrl: po.concatContextPath("/dashboard/uploadImportFile")
+		uploadFileUrl: po.concatContextPath("/dashboard/uploadImportFile"),
+		versionDropdownItems:
+		[
+			{
+				label: "${DashboardVersion.V_1_0}",
+				value: "${DashboardVersion.V_1_0}"
+			}
+		]
 	});
 	
 	po.vueMethod(
 	{
+		onBeforeUpload: function(e)
+		{
+			var fm = po.vueFormModel();
+			if(fm.zipFileNameEncoding)
+				e.formData.append("zipFileNameEncoding", fm.zipFileNameEncoding);
+		},
 		onUploaded: function(e)
 		{
 			var fm = po.vueFormModel();
@@ -170,10 +202,9 @@
 			});
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

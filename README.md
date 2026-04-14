@@ -12,47 +12,59 @@
 
 DataGear是一款开源免费的数据可视化分析平台，自由制作任何您想要的数据看板，支持接入SQL、CSV、Excel、HTTP接口、JSON等多种数据源。
 
-## [DataGear 4.5.1 已发布，欢迎官网下载使用！](http://www.datagear.tech)
+系统主要功能包括：数据源管理、SQL工作台、数据导入/导出、项目管理、数据集管理、图表管理、看板管理、用户管理、角色管理、数据源驱动管理、图表插件管理等。
 
-## 系统特点
+## [DataGear 5.5.0 已发布，欢迎官网下载使用！](http://www.datagear.tech)
 
-- 友好接入的数据源
-<br>支持运行时接入任意提供JDBC驱动的数据库，包括MySQL、Oracle、PostgreSQL、SQL Server等关系数据库，以及Elasticsearch、ClickHouse、Hive等大数据引擎
+## [DataGear企业版 1.5.0 正式发布，欢迎试用！](http://www.datagear.tech/pro/)
 
-- 多样动态的数据集
-<br>支持创建SQL、CSV、Excel、HTTP接口、JSON数据集，并可设置为动态的参数化数据集，可定义文本框、下拉框、日期框、时间框等类型的数据集参数，灵活筛选满足不同业务需求的数据
+# 特点
 
-- 强大丰富的数据图表
-<br>数据图表可聚合绑定多个不同格式的数据集，轻松定义同比、环比图表，内置折线图、柱状图、饼图、地图、雷达图、漏斗图、散点图、K线图、桑基图等70+开箱即用的图表，并且支持自定义图表配置项，支持编写和上传自定义图表插件
+- 安全稳定
+<br>
+数年持续开发迭代，稳定运行数千小时无异常，功能流畅不卡顿
+<br>
+私有化部署，单体应用，轻量架构，安装简单，运行环境和数据全掌控
+<br>
+基于角色的权限控制策略，数据默认私有，可分享共用，保护数据安全
+<br>
+越权访问校验、SQL防注入、数据源防护、敏感信息加密存储、日志脱敏处理
 
-- 自由开放的数据看板
-<br>数据看板采用原生的HTML网页作为模板，支持导入任意HTML网页，支持以可视化方式进行看板设计和编辑，也支持使用JavaScript、CSS等web前端技术自由编辑看板源码，内置丰富的API，可制作图表联动、数据钻取、异步加载、交互表单等个性化的数据看板。
+- 功能丰富
+<br>
+数据源管理支持数据增删改查、导入导出、SQL工作台
+<br>
+数据集支持SQL/HTTP/CSV/Excel/JSON/文件，支持定义参数和参数化语法
+<br>
+图表支持在一个内绑定多个不同来源的数据集，内置70+开箱即用的常用图表
+<br>
+数据看板支持导入HTML模板、可视/源码编辑模式、手机/平板/桌面/大屏多端响应式布局、分享密码、iframe嵌入
+<br>
+用户管理、角色管理、数据源驱动管理、图表插件管理等功能
 
-## 官网
+- 易于扩展
+<br>
+支持运行时添加数据源驱动，接入任何提供JDBC驱动库的数据库，包括但不限于MySQL、PostgreSQL、Oracle、SQL Server、Elasticsearch、ClickHouse， 以及OceanBase、TiDB、人大金仓、达梦等众多国产数据库
+<br>
+支持编写和上传自定义图表插件，扩展系统图表类型，也支持重写和扩展内置图表插件、自定义图表选项，个性化图表展示效果
+
+- 自由制作
+<br>
+数据看板采用原生的HTML网页作为模板，支持导入任意HTML/JavaScript/CSS，支持可视化设计，同时支持自由编辑源码
+<br>
+支持引入Vue、React、Bootstrap、Tailwind CSS等web前端框架，制作具有丰富交互效果、多端适配的数据看板
+<br>
+内置丰富的数据看板API，可制作图表联动、数据钻取、异步加载、交互表单等个性化数据看板
+
+# 功能
+
+![screenshot/architecture.png](screenshot/architecture.png)
+
+# 官网
 
 [http://www.datagear.tech](http://www.datagear.tech)
 
-## 文档
-
-[http://www.datagear.tech/documentation](http://www.datagear.tech/documentation)
-
-## 示例
-
-[https://my.oschina.net/u/4035217](https://my.oschina.net/u/4035217)
-
-## 源码
-
-Gitee：[https://gitee.com/datagear/datagear](https://gitee.com/datagear/datagear)
-
-Github：[https://github.com/datageartech/datagear](https://github.com/datageartech/datagear)
-
-## 交流
-
-QQ群：[916083747（已满）](https://jq.qq.com/?_wv=1027&k=ODxiKOOy)、[1128360199（已满）](https://jq.qq.com/?_wv=1027&k=XkQ4ARMY)、[541252568](https://jq.qq.com/?_wv=1027&k=F7dwDVLO)
-
-留言板：[http://www.datagear.tech/messageboard](http://www.datagear.tech/messageboard/)
-
-## 界面
+# 界面
 
 数据源管理
 
@@ -91,7 +103,7 @@ SQL数据集
 ![screenshot/dashboard-link-load-chart.gif](screenshot/dashboard-link-load-chart.gif)
 
 
-## 技术栈（前后端一体）
+# 技术栈（前后端一体）
 
 - 后端
   <br>
@@ -101,7 +113,7 @@ SQL数据集
   <br>
   jQuery、Vue3、PrimeVue、CodeMirror、ECharts、DataTables
 
-## 模块介绍
+# 模块介绍
 
 - datagear-analysis
   <br>数据分析底层模块，定义数据集、图表、看板API
@@ -127,22 +139,25 @@ SQL数据集
 - datagear-web
   <br>系统web模块，定义web控制器、操作页面
 
-## 依赖
+- datagear-webapp
+  <br>系统web应用模块，定义程序启动类
+
+# 依赖
 
 	Java 8+
 	Servlet 3.1+
 
-## 编译
+# 编译
 
-### 准备单元测试环境
+## 准备单元测试环境
 
-1. 安装 MySQL-8.0 数据库，并将`root`用户的密码设置为：`root`（或者修改`test/config/jdbc.properties`配置）
+1. 安装`MySQL-8.0`数据库，并将`root`用户的密码设置为：`root`（或者修改`test/config/test.properties`配置）
 
 2. 新建测试数据库，名称取为：`dg_test`
 
-3. 使用`test/sql/test-sql-script-mysql.sql`脚本初始化`dg_test`库
+3. 使用`test/sql/test-mysql.sql`脚本初始化`dg_test`库
 
-### 执行编译命令
+## 执行编译命令
 
 	mvn clean package
 
@@ -150,13 +165,13 @@ SQL数据集
 
 	mvn clean package -DskipTests
 
-编译完成后，将在`datagear-web/target/datagear-[version]-packages/`内生成程序包。
+编译完成后，将在`datagear-webapp/target/datagear-[version]-packages/`内生成程序包。
 
-## 调试
+# 调试
 	
 1. 将`datagear`以maven工程导入至IDE工具
 
-2. 以调试模式运行datagear-web模块的启动类：`org.datagear.web.DataGearApplication`
+2. 以调试模式运行`datagear-webapp`模块的启动类`org.datagear.webapp.DataGearApplication`
 
 3. 打开浏览器，输入：`http://localhost:50401`
 	
@@ -175,15 +190,15 @@ SQL数据集
 
 	UPDATE DATAGEAR_VERSION SET VERSION_VALUE='当前版本号'
 	
-例如，对于`4.1.0`版本，应执行：
+例如，对于`4.6.0`版本，应执行：
 
-	UPDATE DATAGEAR_VERSION SET VERSION_VALUE='4.1.0'
+	UPDATE DATAGEAR_VERSION SET VERSION_VALUE='4.6.0'
 
 系统自带了一个可用于为内置数据库执行SQL语句的简单工具类`org.datagear.web.util.DerbySqlClient`，可以在IDE中直接运行。注意：运行前需要先停止DataGear程序。
 
-## 版权和许可
+# 版权和许可
 
-Copyright 2018-2023 datagear.tech
+Copyright 2018-2025 datagear.tech
 
 DataGear is free software: you can redistribute it and/or modify it under the terms of
 the GNU Lesser General Public License as published by the Free Software Foundation,

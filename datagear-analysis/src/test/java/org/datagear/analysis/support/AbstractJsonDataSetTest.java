@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,8 +22,9 @@ import static org.junit.Assert.assertEquals;
 import java.util.List;
 import java.util.Map;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
+import org.datagear.analysis.DataSetResult;
 import org.junit.Test;
 
 /**
@@ -41,35 +42,34 @@ public class AbstractJsonDataSetTest
 
 		JsonValueDataSet dataSet = new JsonValueDataSet(JsonValueDataSet.class.getSimpleName(),
 				JsonValueDataSet.class.getSimpleName(), jsonString);
-
-		dataSet.setDataJsonPath("path0.path1[0].path2");
+		dataSet.setResultJsonRule(new ResultJsonRule("path0.path1[0].path2"));
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(new DataSetQuery());
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 
 		assertEquals(jsonString, result.getTemplateResult());
 
 		{
-			assertEquals(3, properties.size());
+			assertEquals(3, fields.size());
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.NUMBER, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.NUMBER, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(2);
-				assertEquals("size", property.getName());
-				assertEquals(DataSetProperty.DataType.NUMBER, property.getType());
+				DataSetField field = fields.get(2);
+				assertEquals("size", field.getName());
+				assertEquals(DataSetField.DataType.NUMBER, field.getType());
 			}
 		}
 
@@ -83,6 +83,37 @@ public class AbstractJsonDataSetTest
 				assertEquals(11, ((Number) row.get("value")).intValue());
 				assertEquals(12, ((Number) row.get("size")).intValue());
 			}
+		}
+	}
+
+	@Test
+	public void resolveTest_additionJsonPath()
+	{
+		String jsonString = "{ items: [ { name:'aaa', value: 11, size: 12 }, { name:'bbb', value: 21, size: 22 } ], total: 50, page: 1, pageSize: 20 }";
+
+		JsonValueDataSet dataSet = new JsonValueDataSet(JsonValueDataSet.class.getSimpleName(),
+				JsonValueDataSet.class.getSimpleName(), jsonString);
+		dataSet.setResultJsonRule(
+				new ResultJsonRule("items", "{reTotal: 'total', rePageSize: 'pageSize', reData: 'items[0,1].name'}"));
+
+		TemplateResolvedDataSetResult result = dataSet.resolve(new DataSetQuery());
+		DataSetResult dr = result.getResult();
+
+		{
+			Integer v = dr.getAddition("reTotal");
+			assertEquals(50, v.intValue());
+		}
+
+		{
+			Integer v = dr.getAddition("rePageSize");
+			assertEquals(20, v.intValue());
+		}
+
+		{
+			List<String> v = dr.getAddition("reData");
+			assertEquals(2, v.size());
+			assertEquals("aaa", v.get(0));
+			assertEquals("bbb", v.get(1));
 		}
 	}
 }

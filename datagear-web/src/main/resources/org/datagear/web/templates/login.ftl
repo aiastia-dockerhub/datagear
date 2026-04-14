@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -45,7 +45,7 @@
 								</label>
 						        <div class="field-input col-12 md:col-9">
 						        	<p-inputtext id="${pid}name" v-model="fm.name" type="text" class="input w-full"
-						        		name="name" required maxlength="20">
+						        		name="name" required maxlength="50" autofocus>
 						        	</p-inputtext>
 						        </div>
 							</div>
@@ -55,8 +55,8 @@
 								</label>
 						        <div class="field-input col-12 md:col-9">
 						        	<p-password id="${pid}password" v-model="fm.password" toggle-mask :feedback="false"
-						        		input-class="w-full" class="input w-full"
-						        		name="password" required maxlength="50">
+						        		input-class="w-full" class="input w-full" required
+						        		:pt="{input:{name:'password',maxlength:'50'}}">
 						        	</p-password>
 						        </div>
 							</div>
@@ -65,24 +65,26 @@
 									<@spring.message code='checkCode' />
 								</label>
 						        <div class="field-input col-12 md:col-9">
-						        	<p-inputtext id="${pid}checkCode" v-model="fm.checkCode" type="text" class="input w-6"
-						        		name="checkCode" required maxlength="10">
-						        	</p-inputtext>
-						        	<img class="checkCodeImg ml-1 vertical-align-middle" style="height:1.5rem;" />
+						        	<div class="flex align-items-center gap-1">
+							        	<p-inputtext id="${pid}checkCode" v-model="fm.checkCode" type="text" class="input w-6"
+							        		name="checkCode" required maxlength="10">
+							        	</p-inputtext>
+							        	<img class="checkCodeImg" />
+						        	</div>
 						        </div>
 							</div>
 						</div>
-						<div class="page-form-foot flex-grow-0 pt-3 text-center">
+						<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 							<p-button type="submit" label="<@spring.message code='login' />"></p-button>
 						</div>
 						<div class="page-form-foot flex-grow-0 pt-3 text-right text-color-secondary">
-							<p-checkbox id="${pid}remremberLogin" v-model="fm.rememberMe" :binary="true" name="remremberLogin"></p-checkbox>
+							<p-checkbox input-id="${pid}remremberLogin" v-model="fm.rememberMe" :binary="true" name="remremberLogin"></p-checkbox>
 							<label for="${pid}remremberLogin" class="ml-1"><@spring.message code='remremberLogin' /></label>
 							
-							<a href="${contextPath}/resetPassword" class="link ml-3"><@spring.message code='forgetPassword' /></a>
+							<a href="${contextPath}/resetPassword" class="link text-color-secondary ml-3"><@spring.message code='forgetPassword' /></a>
 						</div>
 						<div class="page-form-foot flex-grow-0 pt-3 text-right text-color-secondary" v-if="!pm.disableRegister">
-							<a href="${contextPath}/register" class="link ml-3"><@spring.message code='module.register' /></a>
+							<a href="${contextPath}/register" class="link text-color-secondary ml-3"><@spring.message code='module.register' /></a>
 						</div>
 					</form>
 					</template>
@@ -99,6 +101,7 @@
 	
 	po.disableLoginCheckCode = ("${(configProperties.disableLoginCheckCode)?string('true','false')}" == "true");
 	po.disableRegister = ("${(configProperties.disableRegister)?string('true','false')}" == "true");
+	po.customRedirect = "${redirect!''}";
 	
 	po.vuePageModel(
 	{
@@ -113,11 +116,35 @@
 		type: "POST",
 		contentType: $.CONTENT_TYPE_FORM,
 		tipSuccess: false,
-		success: function()
+		success: function(response)
 		{
-			(window.top ? window.top : window).location.href="${contextPath}/";
+			po.handleLoginSuccess(response);
+		},
+		error: function(jqXHR)
+		{
+			if(!po.disableLoginCheckCode)
+			{
+				po.element(".checkCodeImg").click();
+			}
 		}
 	});
+	
+	po.handleLoginSuccess = function(response)
+	{
+		var url = "${contextPath}/";
+		
+		if(po.customRedirect)
+		{
+			url = po.customRedirect;
+		}
+		else
+		{
+			if(response && response.data && response.data.redirectUrl)
+				url = response.data.redirectUrl;
+		}
+		
+		(window.top ? window.top : window).location.href = url;
+	};
 	
 	if(!po.disableLoginCheckCode)
 	{
@@ -130,10 +157,9 @@
 			.click();
 		});
 	}
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "include/page_vue_mount.ftl">
 </body>
 </html>

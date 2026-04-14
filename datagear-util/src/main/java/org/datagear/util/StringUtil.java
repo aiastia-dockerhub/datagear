@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -18,13 +18,15 @@
 package org.datagear.util;
 
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.StringTokenizer;
 
 /**
  * 字符串工具类。
@@ -71,6 +73,39 @@ public class StringUtil
 	}
 
 	/**
+	 * 数组是否为{@code null}、空。
+	 * 
+	 * @param obj
+	 * @return
+	 */
+	public static boolean isEmpty(Object[] obj)
+	{
+		return (obj == null || obj.length == 0);
+	}
+
+	/**
+	 * 集合是否为{@code null}、空。
+	 * 
+	 * @param obj
+	 * @return
+	 */
+	public static boolean isEmpty(Collection<?> obj)
+	{
+		return (obj == null || obj.isEmpty());
+	}
+
+	/**
+	 * 映射表是否为{@code null}、空。
+	 * 
+	 * @param obj
+	 * @return
+	 */
+	public static boolean isEmpty(Map<?, ?> obj)
+	{
+		return (obj == null || obj.isEmpty());
+	}
+
+	/**
 	 * 判断对象、字符串、数组、集合、Map是否为{@code null}、空、空元素。
 	 * 
 	 * @param obj
@@ -84,27 +119,19 @@ public class StringUtil
 		}
 		else if (obj instanceof String)
 		{
-			String str = (String) obj;
-			return (str == null || str.isEmpty());
+			return isEmpty((String) obj);
 		}
 		else if (obj instanceof Object[])
 		{
-			Object[] array = (Object[]) obj;
-
-			return (array.length == 0);
+			return isEmpty((Object[]) obj);
 		}
 		else if (obj instanceof Collection<?>)
 		{
-			@SuppressWarnings("unchecked")
-			Collection<Object> collection = (Collection<Object>) obj;
-
-			return (collection.isEmpty());
+			return isEmpty((Collection<?>) obj);
 		}
 		else if (obj instanceof Map<?, ?>)
 		{
-			Map<?, ?> map = (Map<?, ?>) obj;
-
-			return map.isEmpty();
+			return isEmpty((Map<?, ?>) obj);
 		}
 		else
 			return false;
@@ -128,33 +155,125 @@ public class StringUtil
 	}
 
 	/**
-	 * 拆分字符串。
+	 * 简单拆分字符串，空片段将被忽略。
 	 * 
 	 * @param text
+	 *            允许{@code null}
 	 * @param splitter
 	 * @param trim
 	 * @return
 	 */
 	public static String[] split(String text, String splitter, boolean trim)
 	{
-		if (trim)
-		{
-			text = text.trim();
+		List<String> re = splitOfList(text, splitter, trim);
+		return re.toArray(new String[re.size()]);
+	}
 
-			if (text.isEmpty())
-				return new String[0];
+	/**
+	 * 拆分字符串，空片段将被忽略，并删除元素两边的空格。
+	 * <p>
+	 * 如果{@code s}为{@code null}，返回空列表。
+	 * </p>
+	 * 
+	 * @param str
+	 * @param splitter
+	 * @return
+	 */
+	public static List<String> splitWithTrim(String str, String splitter)
+	{
+		return splitOfList(str, splitter, true);
+	}
+
+	protected static List<String> splitOfList(String text, String splitter, boolean trim)
+	{
+		if (isEmpty(text))
+			return Collections.emptyList();
+
+		StringTokenizer st = new StringTokenizer(text, splitter);
+		List<String> tokens = new ArrayList<>();
+
+		while (st.hasMoreTokens())
+		{
+			String token = st.nextToken();
+			if (trim)
+				token = token.trim();
+
+			// 忽略空片段
+			if (!token.isEmpty())
+			{
+				tokens.add(token);
+			}
 		}
 
-		if (text.startsWith(splitter))
-			text = text.substring(splitter.length());
-		if (text.endsWith(splitter))
-			text = text.substring(0, text.length() - splitter.length());
+		return tokens;
+	}
 
-		String[] array = text.split(splitter);
-		for (int i = 0; i < array.length; i++)
-			array[i] = (trim ? array[i].trim() : array[i]);
+	/**
+	 * 分隔字符串同时处理'\'转义，空片段将被忽略。
+	 * <p>
+	 * 如果{@code s}为{@code null}、{@code ""}，返回空列表。
+	 * </p>
+	 * 
+	 * @param str
+	 *            允许{@code null}
+	 * @param splitter
+	 *            分隔符
+	 * @param trim
+	 *            是否删除片段首尾空格
+	 * @return
+	 */
+	public static List<String> splitWithEscape(String str, char splitter, boolean trim)
+	{
+		if (splitter == '\\')
+			throw new IllegalArgumentException("Splitter must not be '\\'");
 
-		return array;
+		if (isEmpty(str))
+			return Collections.emptyList();
+
+		List<String> re = new ArrayList<>();
+
+		char[] cs = str.toCharArray();
+		StringBuilder segment = new StringBuilder();
+		boolean escapeMode = false;
+
+		for (int i = 0; i < cs.length; i++)
+		{
+			char c = cs[i];
+
+			if (escapeMode)
+			{
+				segment.append(c);
+				escapeMode = false;
+			}
+			else if (c == '\\')
+			{
+				escapeMode = true;
+			}
+			else if (c == splitter)
+			{
+				String sv = segment.toString();
+				if (trim)
+					sv = sv.trim();
+
+				if (!sv.isEmpty())
+					re.add(sv);
+
+				segment.setLength(0);
+			}
+			else
+			{
+				segment.append(c);
+			}
+		}
+
+		String sv = segment.toString();
+		if (trim)
+			sv = sv.trim();
+
+		if (!sv.isEmpty())
+			re.add(sv);
+
+		return re;
 	}
 
 	/**
@@ -366,30 +485,6 @@ public class StringUtil
 	}
 
 	/**
-	 * 拆分字符串，并删除元素两边的空格。
-	 * <p>
-	 * 如果{@code s}为{@code null}，返回空列表。
-	 * </p>
-	 * 
-	 * @param str
-	 * @param splitter
-	 * @return
-	 */
-	@SuppressWarnings("unchecked")
-	public static List<String> splitWithTrim(String str, String splitter)
-	{
-		if (str == null)
-			return Collections.EMPTY_LIST;
-
-		String[] strs = str.split(splitter);
-
-		for (int i = 0; i < strs.length; i++)
-			strs[i] = strs[i].trim();
-
-		return Arrays.asList(strs);
-	}
-
-	/**
 	 * 在数组中查找元素索引。
 	 * 
 	 * @param array
@@ -421,6 +516,7 @@ public class StringUtil
 	 * 脱敏处理字符串，生成类似{@code "abc****def"}的字符串。
 	 * 
 	 * @param str
+	 *            允许{@code null}
 	 * @param prefixCount
 	 * @param suffixCount
 	 * @param maskCount
@@ -461,9 +557,82 @@ public class StringUtil
 	}
 
 	/**
+	 * 脱敏处理邮箱字符串中的用户名部分（{@linkplain '@'}之前），生成类似{@code "abc****def"}的字符串。
+	 * 
+	 * @param email
+	 *            允许{@code null}
+	 * @param prefixCount
+	 * @param suffixCount
+	 * @param maskCount
+	 * @return
+	 */
+	public static String maskEmail(String email, int prefixCount, int suffixCount, int maskCount)
+	{
+		if (email == null)
+			return mask(email, prefixCount, suffixCount, maskCount);
+
+		String prefix = email;
+		String suffix = "";
+		
+		int idx = email.indexOf('@');
+		if(idx > 0)
+		{
+			prefix = email.substring(0, idx);
+			suffix = email.substring(idx);
+		}
+
+		prefix = mask(prefix, prefixCount, suffixCount, maskCount);
+
+		return prefix + suffix;
+	}
+
+	/**
+	 * 脱敏处理JDBC URL字符串。
+	 * 
+	 * @param url
+	 *            允许{@code null}
+	 * @param prefixCount
+	 * @param suffixCount
+	 * @param maskCount
+	 * @return
+	 */
+	public static String maskJdbcUrl(String url, int prefixCount, int suffixCount, int maskCount)
+	{
+		if (url == null)
+			return mask(url, prefixCount, suffixCount, maskCount);
+
+		String prefix = "";
+		String suffix = url;
+
+		// JDBC规范格式：jdbc:<subprotocol>:<subname>
+		// 这里仅对<subname>脱敏处理
+
+		int idx = url.indexOf(':');
+
+		if (idx > 0)
+		{
+			int idx2 = url.indexOf(':', idx + 1);
+
+			if (idx2 > idx)
+				idx = idx2;
+		}
+
+		if (idx > 0 && idx < url.length())
+		{
+			prefix = url.substring(0, idx + 1);
+			suffix = url.substring(idx + 1);
+		}
+
+		suffix = mask(suffix, prefixCount, suffixCount, maskCount);
+
+		return prefix + suffix;
+	}
+
+	/**
 	 * 解码URL。
 	 * 
 	 * @param url
+	 *            允许{@code null}
 	 * @param encoding
 	 * @return
 	 * @throws UnsupportedEncodingException
@@ -477,9 +646,34 @@ public class StringUtil
 	}
 
 	/**
+	 * 解码URL。
+	 * <p>
+	 * 此方法内部出现的{@linkplain UnsupportedEncodingException}异常将被包裹为{@linkplain UnsupportedOperationException}。
+	 * </p>
+	 * 
+	 * @param url
+	 *            允许{@code null}
+	 * @param encoding
+	 * @return
+	 * @throws UnsupportedOperationException
+	 */
+	public static String decodeURLUnchecked(String url, String encoding) throws UnsupportedOperationException
+	{
+		try
+		{
+			return decodeURL(url, encoding);
+		}
+		catch (UnsupportedEncodingException e)
+		{
+			throw new UnsupportedOperationException(e);
+		}
+	}
+
+	/**
 	 * 编码URL。
 	 * 
 	 * @param url
+	 *            允许{@code null}
 	 * @param encoding
 	 * @return
 	 * @throws UnsupportedEncodingException
@@ -490,6 +684,30 @@ public class StringUtil
 			return null;
 
 		return URLEncoder.encode(url, encoding);
+	}
+
+	/**
+	 * 编码URL。
+	 * <p>
+	 * 此方法内部出现的{@linkplain UnsupportedEncodingException}异常将被包裹为{@linkplain UnsupportedOperationException}。
+	 * </p>
+	 * 
+	 * @param url
+	 *            允许{@code null}
+	 * @param encoding
+	 * @return
+	 * @throws UnsupportedOperationException
+	 */
+	public static String encodeURLUnchecked(String url, String encoding) throws UnsupportedOperationException
+	{
+		try
+		{
+			return encodeURL(url, encoding);
+		}
+		catch (UnsupportedEncodingException e)
+		{
+			throw new UnsupportedOperationException(e);
+		}
 	}
 
 	/**
@@ -520,7 +738,7 @@ public class StringUtil
 				if (node.length() > 0)
 				{
 					re.append(encodeURL(node.toString(), encoding));
-					node.delete(0, node.length());
+					node.setLength(0);
 				}
 
 				re.append(c);
@@ -537,6 +755,56 @@ public class StringUtil
 		}
 
 		return re.toString();
+	}
+
+	/**
+	 * 编码路径URL。
+	 * <p>
+	 * 将字符串中除了'/'的字符都进行URL编码。
+	 * </p>
+	 * <p>
+	 * 此方法内部出现的{@linkplain UnsupportedEncodingException}异常将被包裹为{@linkplain UnsupportedOperationException}。
+	 * </p>
+	 * 
+	 * @param url
+	 *            允许{@code null}
+	 * @param encoding
+	 * @return
+	 * @throws UnsupportedOperationException
+	 */
+	public static String encodePathURLUnchecked(String url, String encoding) throws UnsupportedOperationException
+	{
+		try
+		{
+			return encodePathURL(url, encoding);
+		}
+		catch (UnsupportedEncodingException e)
+		{
+			throw new UnsupportedOperationException(e);
+		}
+	}
+
+	/**
+	 * 将指定URI转换为RFC 2396规范编码的URI。
+	 * <p>
+	 * 例如：
+	 * </p>
+	 * <p>
+	 * <code>http://中文.def.com/中文一/ghi?param1=中文二&amp;param2=b#中文三</code>
+	 * </p>
+	 * <p>
+	 * 将被转换为：
+	 * </p>
+	 * <p>
+	 * <code>http://%E4%B8%AD%E6%96%87.def.com/%E4%B8%AD%E6%96%87%E4%B8%80/ghi?param1=%E4%B8%AD%E6%96%87%E4%BA%8C&amp;param2=b#%E4%B8%AD%E6%96%87%E4%B8%89</code>
+	 * </p>
+	 * 
+	 * @param uri
+	 * @return
+	 */
+	public static String toAsciiURI(String uri)
+	{
+		return URI.create(uri).toASCIIString();
 	}
 
 	/**
@@ -578,5 +846,44 @@ public class StringUtil
 			return false;
 
 		return (v.intValue() > 0);
+	}
+
+	/**
+	 * 转换为字符串。
+	 * 
+	 * @param o
+	 * @return 当{@code o}为{@code null}时将返回{@code null}
+	 * @see {@linkplain #toString(Object, String)}
+	 */
+	public static String toString(Object o)
+	{
+		return toString(o, null);
+	}
+
+	/**
+	 * 转换为字符串。
+	 * <p>
+	 * 如果不是{@linkplain String}类型，将调用{@linkplain Object#toString()}。
+	 * </p>
+	 * 
+	 * @param o
+	 * @param nullValue
+	 *            当{@code o}为{@code null}时的返回值
+	 * @return
+	 */
+	public static String toString(Object o, String nullValue)
+	{
+		if (o == null)
+		{
+			return nullValue;
+		}
+		else if (o instanceof String)
+		{
+			return (String) o;
+		}
+		else
+		{
+			return o.toString();
+		}
 	}
 }

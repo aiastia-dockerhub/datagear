@@ -8,13 +8,13 @@
 			(
 			HCW_ID, HCW_NAME, HCW_PLUGIN_ID, HCW_UPDATE_INTERVAL, HCW_CREATE_USER_ID,
 			HCW_CREATE_TIME, HCW_AP_ID, HCW_RD_FORMAT,
-			HCW_ATTR_VALUES, HCW_OPTIONS
+			HCW_ATTR_VALUES, HCW_OPTIONS, HCW_DESC
 			)
 		VALUES
 			(
-			#{entity.id}, #{entity.name}, #{entity.htmlChartPlugin.id}, #{entity.updateInterval}, #{entity.createUser.id},
+			#{entity.id}, #{entity.name}, #{entity.pluginVo.id}, #{entity.updateInterval}, #{entity.createUser.id},
 			#{entity.createTime}, #{entity.analysisProject.id, jdbcType=VARCHAR}, #{entity.resultDataFormat, jdbcType=VARCHAR},
-			#{entity.attrValuesJson, jdbcType=VARCHAR}, #{entity.options, jdbcType=VARCHAR} 
+			#{entity.attrValuesJson, jdbcType=VARCHAR}, #{entity.options, jdbcType=VARCHAR}, #{entity.description, jdbcType=VARCHAR} 
 			)
 	</insert>
 	
@@ -22,24 +22,27 @@
 		INSERT INTO DATAGEAR_HCW_DS
 			(
 			HCW_ID, DS_ID, DS_PROPERTY_SIGNS, DS_ALIAS, DS_ATTACHMENT,
-			DS_QUERY, DS_PROPERTY_ALIASES, DS_PROPERTY_ORDERS, DS_ORDER
+			DS_QUERY, DS_PROPERTY_ALIASES, DS_PROPERTY_ORDERS, DS_ORDER,
+			DS_DATASET_SIGNS
 			)
 		VALUES
 			(
-			#{entity.widgetId}, #{entity.dataSetId}, #{entity.propertySignsJson, jdbcType=VARCHAR}, #{entity.alias, jdbcType=VARCHAR}, #{entity.attachment, jdbcType=VARCHAR},
-			#{entity.queryJson, jdbcType=VARCHAR}, #{entity.propertyAliasesJson, jdbcType=VARCHAR}, #{entity.propertyOrdersJson, jdbcType=VARCHAR}, #{entity.order}
+			#{entity.widgetId}, #{entity.dataSetId}, #{entity.fieldSignsJson, jdbcType=VARCHAR}, #{entity.alias, jdbcType=VARCHAR}, #{entity.attachment, jdbcType=VARCHAR},
+			#{entity.queryJson, jdbcType=VARCHAR}, #{entity.fieldAliasesJson, jdbcType=VARCHAR}, #{entity.fieldOrdersJson, jdbcType=VARCHAR}, #{entity.order},
+			#{entity.dataSetSignsJson, jdbcType=VARCHAR}
 			)
 	</insert>
 	
 	<update id="update">
 		UPDATE DATAGEAR_HTML_CHART_WIDGET SET
 			HCW_NAME = #{entity.name},
-			HCW_PLUGIN_ID = #{entity.htmlChartPlugin.id},
+			HCW_PLUGIN_ID = #{entity.pluginVo.id},
 			HCW_UPDATE_INTERVAL = #{entity.updateInterval},
 			HCW_AP_ID = #{entity.analysisProject.id, jdbcType=VARCHAR},
 			HCW_RD_FORMAT = #{entity.resultDataFormat, jdbcType=VARCHAR},
 			HCW_ATTR_VALUES = #{entity.attrValuesJson, jdbcType=VARCHAR},
-			HCW_OPTIONS = #{entity.options, jdbcType=VARCHAR}
+			HCW_OPTIONS = #{entity.options, jdbcType=VARCHAR},
+			HCW_DESC = #{entity.description, jdbcType=VARCHAR}
 		WHERE
 			HCW_ID = #{entity.id}
 	</update>
@@ -79,17 +82,20 @@
 		SELECT
 			HCW_ID AS ${_iq_}widgetId${_iq_},
 			DS_ID AS ${_iq_}dataSetId${_iq_},
-			DS_PROPERTY_SIGNS AS ${_iq_}propertySignsJson${_iq_},
+			DS_PROPERTY_SIGNS AS ${_iq_}fieldSignsJson${_iq_},
 			DS_ALIAS AS ${_iq_}alias${_iq_},
 			DS_ATTACHMENT AS ${_iq_}attachment${_iq_},
 			DS_QUERY AS ${_iq_}queryJson${_iq_},
-			DS_PROPERTY_ALIASES AS ${_iq_}propertyAliasesJson${_iq_},
-			DS_PROPERTY_ORDERS AS ${_iq_}propertyOrdersJson${_iq_},
-			DS_ORDER AS ${_iq_}order${_iq_}
+			DS_PROPERTY_ALIASES AS ${_iq_}fieldAliasesJson${_iq_},
+			DS_PROPERTY_ORDERS AS ${_iq_}fieldOrdersJson${_iq_},
+			DS_ORDER AS ${_iq_}order${_iq_},
+			DS_DATASET_SIGNS AS ${_iq_}dataSetSignsJson${_iq_}
 		FROM
 			DATAGEAR_HCW_DS
 		WHERE
 			HCW_ID = #{widgetId}
+		ORDER BY
+			DS_ORDER ASC
 	</select>
 	
 	<select id="getDataIdPermissions" resultType="org.datagear.management.domain.DataIdPermission">
@@ -191,7 +197,7 @@
 		SELECT
 			A.HCW_ID AS ${_iq_}id${_iq_},
 			A.HCW_NAME AS ${_iq_}name${_iq_},
-			A.HCW_PLUGIN_ID AS ${_iq_}htmlChartPlugin.id${_iq_},
+			A.HCW_PLUGIN_ID AS ${_iq_}pluginVo.id${_iq_},
 			A.HCW_PLUGIN_ID AS ${_iq_}chartPluginName${_iq_},/*默认设置为插件ID，避免页面排序报错*/
 			A.HCW_UPDATE_INTERVAL AS ${_iq_}updateInterval${_iq_},
 			A.HCW_CREATE_USER_ID AS ${_iq_}createUser.id${_iq_},
@@ -200,6 +206,7 @@
 			A.HCW_RD_FORMAT AS ${_iq_}resultDataFormat${_iq_},
 			A.HCW_ATTR_VALUES AS ${_iq_}attrValuesJson${_iq_},
 			A.HCW_OPTIONS AS ${_iq_}options${_iq_},
+			A.HCW_DESC AS ${_iq_}description${_iq_},
 			AP.*
 		FROM
 			DATAGEAR_HTML_CHART_WIDGET A
@@ -218,7 +225,9 @@
 		<if test="queryKeyword != null">
 		AND
 		(
-			${_iq_}id${_iq_} LIKE #{queryKeyword} OR ${_iq_}name${_iq_} LIKE #{queryKeyword}
+			${_iq_}id${_iq_} LIKE #{queryKeyword}
+			OR ${_iq_}name${_iq_} LIKE #{queryKeyword}
+			OR ${_iq_}description${_iq_} LIKE #{queryKeyword}
 			OR ${_iq_}analysisProject.name${_iq_} LIKE #{queryKeyword}
 		)
 		</if>

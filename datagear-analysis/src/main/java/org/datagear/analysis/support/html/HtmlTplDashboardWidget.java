@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -37,9 +37,11 @@ import org.datagear.util.StringUtil;
  */
 public class HtmlTplDashboardWidget extends TplDashboardWidget
 {
-	private HtmlTplDashboardWidgetRenderer renderer;
+	private static final long serialVersionUID = 1L;
 
-	private TplDashboardWidgetResManager resManager;
+	private transient HtmlTplDashboardWidgetRenderer renderer;
+
+	private transient TplDashboardWidgetResManager resManager;
 
 	public HtmlTplDashboardWidget()
 	{
@@ -105,7 +107,7 @@ public class HtmlTplDashboardWidget extends TplDashboardWidget
 		}
 		finally
 		{
-			if (fullRenderContext != rawRenderContext)
+			if (fullRenderContext != null && fullRenderContext != rawRenderContext)
 				IOUtil.close(fullRenderContext.getTemplateReader());
 		}
 	}

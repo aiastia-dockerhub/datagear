@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -107,11 +107,14 @@ public class HtmlChartPluginLoader
 
 	private JsonChartPluginPropertiesResolver jsonChartPluginPropertiesResolver = new JsonChartPluginPropertiesResolver();
 
+	private HtmlChartPluginScriptObjectWriter htmlChartPluginScriptObjectWriter = HtmlChartPluginScriptObjectWriter.INSTANCE;
+
+	private HtmlRenderContextScriptObjectWriter htmlRenderContextScriptObjectWriter = HtmlRenderContextScriptObjectWriter.INSTANCE;
+
+	private HtmlChartScriptObjectWriter htmlChartScriptObjectWriter = HtmlChartScriptObjectWriter.INSTANCE;
+
 	/** 文件编码 */
 	private String encoding = IOUtil.CHARSET_UTF_8;
-
-	/** 临时文件目录，用于存放临时文件 */
-	private File tmpDirectory = null;
 
 	public HtmlChartPluginLoader()
 	{
@@ -139,6 +142,38 @@ public class HtmlChartPluginLoader
 		this.jsonChartPluginPropertiesResolver = jsonChartPluginPropertiesResolver;
 	}
 
+	public HtmlChartPluginScriptObjectWriter getHtmlChartPluginScriptObjectWriter()
+	{
+		return htmlChartPluginScriptObjectWriter;
+	}
+
+	public void setHtmlChartPluginScriptObjectWriter(
+			HtmlChartPluginScriptObjectWriter htmlChartPluginScriptObjectWriter)
+	{
+		this.htmlChartPluginScriptObjectWriter = htmlChartPluginScriptObjectWriter;
+	}
+
+	public HtmlRenderContextScriptObjectWriter getHtmlRenderContextScriptObjectWriter()
+	{
+		return htmlRenderContextScriptObjectWriter;
+	}
+
+	public void setHtmlRenderContextScriptObjectWriter(
+			HtmlRenderContextScriptObjectWriter htmlRenderContextScriptObjectWriter)
+	{
+		this.htmlRenderContextScriptObjectWriter = htmlRenderContextScriptObjectWriter;
+	}
+
+	public HtmlChartScriptObjectWriter getHtmlChartScriptObjectWriter()
+	{
+		return htmlChartScriptObjectWriter;
+	}
+
+	public void setHtmlChartScriptObjectWriter(HtmlChartScriptObjectWriter htmlChartScriptObjectWriter)
+	{
+		this.htmlChartScriptObjectWriter = htmlChartScriptObjectWriter;
+	}
+
 	public String getEncoding()
 	{
 		return encoding;
@@ -147,16 +182,6 @@ public class HtmlChartPluginLoader
 	public void setEncoding(String encoding)
 	{
 		this.encoding = encoding;
-	}
-
-	public File getTmpDirectory()
-	{
-		return tmpDirectory;
-	}
-
-	public void setTmpDirectory(File tmpDirectory)
-	{
-		this.tmpDirectory = tmpDirectory;
 	}
 
 	/**
@@ -242,22 +267,22 @@ public class HtmlChartPluginLoader
 	}
 
 	/**
-	 * 从指定目录加载单个{@linkplain HtmlChartPlugin}，如果目录结构不合法，将返回{@code null}。
+	 * 从指定目录加载单个{@linkplain HtmlChartPlugin}。
 	 * 
 	 * @param directory
-	 * @return
+	 * @return {@code null}表示目录结构不合法
 	 * @throws HtmlChartPluginLoadException
 	 */
 	public HtmlChartPlugin load(File directory) throws HtmlChartPluginLoadException
 	{
-		return loadSingleForDirectory(directory, null);
+		return loadSingleForDirectory(directory);
 	}
 
 	/**
-	 * 从指定ZIP文件加载单个{@linkplain HtmlChartPlugin}，如果ZIP文件结构不合法，将返回{@code null}。
+	 * 从指定ZIP文件加载单个{@linkplain HtmlChartPlugin}。
 	 * 
 	 * @param zip
-	 * @return
+	 * @return {@code null}表示ZIP结构不合法
 	 * @throws HtmlChartPluginLoadException
 	 */
 	public HtmlChartPlugin loadZip(File zip) throws HtmlChartPluginLoadException
@@ -266,11 +291,37 @@ public class HtmlChartPluginLoader
 	}
 
 	/**
-	 * 从指定文件加载单个{@linkplain HtmlChartPlugin}，如果文件结构不合法，将返回{@code null}。
+	 * 从指定ZIP输入流加载单个{@linkplain HtmlChartPlugin}。
+	 * <p>
+	 * 注意：此方法不会初始化{@linkplain HtmlChartPlugin#getResources()}。
+	 * </p>
+	 * 
+	 * @param in
+	 * @return {@code null}表示ZIP结构不合法
+	 * @throws HtmlChartPluginLoadException
+	 */
+	public HtmlChartPlugin loadZip(ZipInputStream in) throws HtmlChartPluginLoadException
+	{
+		try
+		{
+			return loadSingleForZipInputStream(in);
+		}
+		catch (HtmlChartPluginLoadException e)
+		{
+			throw e;
+		}
+		catch (Exception e)
+		{
+			throw new HtmlChartPluginLoadException(e);
+		}
+	}
+
+	/**
+	 * 从指定文件加载单个{@linkplain HtmlChartPlugin}。
 	 * 
 	 * @param file
 	 *            插件文件夹、插件ZIP包
-	 * @return
+	 * @return {@code null}表示目录结构不合法
 	 * @throws HtmlChartPluginLoadException
 	 */
 	public HtmlChartPlugin loadFile(File file) throws HtmlChartPluginLoadException
@@ -278,7 +329,7 @@ public class HtmlChartPluginLoader
 		HtmlChartPlugin plugin = null;
 
 		if (file.isDirectory())
-			plugin = loadSingleForDirectory(file, null);
+			plugin = loadSingleForDirectory(file);
 		else if (isZipFile(file))
 			plugin = loadSingleForZip(file);
 		else
@@ -317,61 +368,150 @@ public class HtmlChartPluginLoader
 		return plugins;
 	}
 
+	/**
+	 * 设置插件资源{@linkplain HtmlChartPlugin#setResources(List)}。
+	 * 
+	 * @param plugin     插件
+	 * @param pluginFile 用于加载上述插件的ZIP文件、文件夹
+	 * @throws HtmlChartPluginLoadException
+	 */
+	public void inflateResources(HtmlChartPlugin plugin, File pluginFile) throws HtmlChartPluginLoadException
+	{
+		try
+		{
+			inflateChartPluginResources(plugin, pluginFile);
+		}
+		catch(HtmlChartPluginLoadException e)
+		{
+			throw e;
+		}
+		catch(Exception e)
+		{
+			throw new HtmlChartPluginLoadException(e);
+		}
+	}
+
 	protected HtmlChartPlugin loadFileExt(File file) throws HtmlChartPluginLoadException
 	{
 		return null;
 	}
 
+	/**
+	 * 从指定ZIP加载单个{@linkplain HtmlChartPlugin}。
+	 * 
+	 * @param zip
+	 * @return {@code null}表示文件不合法
+	 * @throws HtmlChartPluginLoadException
+	 */
 	protected HtmlChartPlugin loadSingleForZip(File zip) throws HtmlChartPluginLoadException
 	{
+		HtmlChartPlugin plugin = createHtmlChartPlugin();
+
 		ZipInputStream in = null;
 
 		try
 		{
 			in = IOUtil.getZipInputStream(zip);
+			plugin = loadSingleForZipInputStream(in);
+		}
+		catch (HtmlChartPluginLoadException e)
+		{
+			throw e;
 		}
 		catch (Exception e)
 		{
-			IOUtil.close(in);
-			throw new HtmlChartPluginLoadException(e);
-		}
-
-		try
-		{
-			File tmpDirectory = createTmpWorkDirectory();
-			IOUtil.unzip(in, tmpDirectory);
-			HtmlChartPlugin chartPlugin = loadSingleForDirectory(tmpDirectory, zip);
-			FileUtil.deleteFile(tmpDirectory);
-
-			return chartPlugin;
-		}
-		catch (IOException e)
-		{
-			throw new HtmlChartPluginLoadException(e);
+			throw new HtmlChartPluginLoadException(e, zip.getName());
 		}
 		finally
 		{
 			IOUtil.close(in);
 		}
+
+		if (plugin != null)
+		{
+			try
+			{
+				inflateChartPluginResources(plugin, zip);
+			}
+			catch (HtmlChartPluginLoadException e)
+			{
+				throw e;
+			}
+			catch (Exception e)
+			{
+				throw new HtmlChartPluginLoadException(e, zip.getName());
+			}
+		}
+
+		return plugin;
 	}
 
 	/**
-	 * 从指定目录加载单个{@linkplain HtmlChartPlugin}，返回{@code null}表示文件不合法。
+	 * 从指定ZIP输入流加载单个{@linkplain HtmlChartPlugin}。
+	 * <p>
+	 * 注意：此方法不会初始化{@linkplain HtmlChartPlugin#getResources()}。
+	 * </p>
+	 * 
+	 * @param in
+	 * @return {@code null}表示文件不合法
+	 * @throws Exception
+	 */
+	protected HtmlChartPlugin loadSingleForZipInputStream(ZipInputStream in) throws Exception
+	{
+		HtmlChartPlugin plugin = createHtmlChartPlugin();
+
+		JsDefContent jsDefContent = null;
+
+		ZipEntry zipEntry = null;
+		while ((zipEntry = in.getNextEntry()) != null)
+		{
+			String name = zipEntry.getName();
+
+			if (zipEntry.isDirectory())
+				;
+			else if (name.equals(FILE_NAME_PLUGIN))
+			{
+				Reader pluginIn = IOUtil.getReader(in, this.encoding);
+				jsDefContent = this.htmlChartPluginJsDefResolver.resolve(pluginIn);
+				inflateChartPluginProperties(plugin, jsDefContent);
+			}
+			else if (name.equals(FILE_NAME_RENDERER))
+			{
+				if (jsDefContent == null || !jsDefContent.hasPluginRenderer())
+				{
+					Reader rendererIn = IOUtil.getReader(in, this.encoding);
+					String rendererCodeValue = IOUtil.readString(rendererIn, false);
+					plugin.setRenderer(new StringJsChartRenderer(JsChartRenderer.CODE_TYPE_INVOKE, rendererCodeValue));
+				}
+			}
+
+			in.closeEntry();
+		}
+
+		// 设置为加载时间而不取文件上次修改时间，因为文件上次修改时间可能错乱
+		plugin.setLastModified(System.currentTimeMillis());
+
+		if (StringUtil.isEmpty(plugin.getId()) || StringUtil.isEmpty(plugin.getNameLabel()))
+			plugin = null;
+
+		return plugin;
+	}
+
+	/**
+	 * 从指定目录加载单个{@linkplain HtmlChartPlugin}。
 	 * 
 	 * @param directory
-	 * @param pluginZip
-	 *            当{@code directory}是由ZIP包解压而得时的原始ZIP包，否则为{@code null}
-	 * @return
+	 * @return {@code null}表示文件不合法
 	 * @throws HtmlChartPluginLoadException
 	 */
-	protected HtmlChartPlugin loadSingleForDirectory(File directory, File pluginZip) throws HtmlChartPluginLoadException
+	protected HtmlChartPlugin loadSingleForDirectory(File directory) throws HtmlChartPluginLoadException
 	{
 		File pluginFile = FileUtil.getFile(directory, FILE_NAME_PLUGIN);
 
 		if (!pluginFile.exists())
 			return null;
 
-		HtmlChartPlugin plugin = null;
+		HtmlChartPlugin plugin = createHtmlChartPlugin();
 
 		Reader pluginIn = null;
 		Reader rendererIn = null;
@@ -380,43 +520,20 @@ public class HtmlChartPluginLoader
 		{
 			pluginIn = IOUtil.getReader(pluginFile, this.encoding);
 			JsDefContent jsDefContent = this.htmlChartPluginJsDefResolver.resolve(pluginIn);
+			inflateChartPluginProperties(plugin, jsDefContent);
 			
-			if (!StringUtil.isEmpty(jsDefContent.getPluginJson()))
+			if (!jsDefContent.hasPluginRenderer())
 			{
-				String rendererCodeType = "";
-				String rendererCodeValue = "";
-				
-				// 内联渲染器格式应该优先使用
-				if(jsDefContent.hasPluginRenderer())
+				File rendererFile = FileUtil.getFile(directory, FILE_NAME_RENDERER);
+				if (rendererFile.exists())
 				{
-					rendererCodeType = JsChartRenderer.CODE_TYPE_OBJECT;
-					rendererCodeValue = jsDefContent.getPluginRenderer();
-				}
-				else
-				{
-					File rendererFile = FileUtil.getFile(directory, FILE_NAME_RENDERER);
-					if(rendererFile.exists())
-					{
-						rendererCodeType = JsChartRenderer.CODE_TYPE_INVOKE;
-
-						rendererIn = IOUtil.getReader(rendererFile, this.encoding);
-						rendererCodeValue = IOUtil.readString(rendererIn, false);
-					}
-				}
-				
-				if (!StringUtil.isEmpty(rendererCodeType) && !StringUtil.isEmpty(rendererCodeValue))
-				{
-					plugin = createHtmlChartPlugin();
-	
-					this.jsonChartPluginPropertiesResolver.resolveChartPluginProperties(plugin,
-							jsDefContent.getPluginJson());
-					plugin.setRenderer(new StringJsChartRenderer(rendererCodeType, rendererCodeValue));
-					inflateChartPluginResources(plugin, (pluginZip == null ? directory : pluginZip));
-	
-					if (StringUtil.isEmpty(plugin.getId()) || StringUtil.isEmpty(plugin.getNameLabel()))
-						plugin = null;
+					rendererIn = IOUtil.getReader(rendererFile, this.encoding);
+					String rendererCodeValue = IOUtil.readString(rendererIn, false);
+					plugin.setRenderer(new StringJsChartRenderer(JsChartRenderer.CODE_TYPE_INVOKE, rendererCodeValue));
 				}
 			}
+
+			inflateChartPluginResources(plugin, directory);
 		}
 		catch (HtmlChartPluginLoadException e)
 		{
@@ -424,7 +541,7 @@ public class HtmlChartPluginLoader
 		}
 		catch (Exception e)
 		{
-			throw new HtmlChartPluginLoadException(e);
+			throw new HtmlChartPluginLoadException(e, directory.getName());
 		}
 		finally
 		{
@@ -433,10 +550,31 @@ public class HtmlChartPluginLoader
 		}
 
 		// 设置为加载时间而不取文件上次修改时间，因为文件上次修改时间可能错乱
-		if (plugin != null)
-			plugin.setLastModified(System.currentTimeMillis());
+		plugin.setLastModified(System.currentTimeMillis());
+
+		if (StringUtil.isEmpty(plugin.getId()) || StringUtil.isEmpty(plugin.getNameLabel()))
+			plugin = null;
 
 		return plugin;
+	}
+
+	protected void inflateChartPluginProperties(HtmlChartPlugin plugin, JsDefContent jsDefContent) throws Exception
+	{
+		if (!StringUtil.isEmpty(jsDefContent.getPluginJson()))
+		{
+			this.jsonChartPluginPropertiesResolver.resolveChartPluginProperties(plugin, jsDefContent.getPluginJson());
+
+			// 内联渲染器格式
+			if (jsDefContent.hasPluginRenderer())
+			{
+				String rendererCodeValue = jsDefContent.getPluginRenderer();
+				plugin.setRenderer(new StringJsChartRenderer(JsChartRenderer.CODE_TYPE_OBJECT, rendererCodeValue));
+			}
+		}
+
+		plugin.setPluginWriter(getHtmlChartPluginScriptObjectWriter());
+		plugin.setRenderContextWriter(getHtmlRenderContextScriptObjectWriter());
+		plugin.setChartWriter(getHtmlChartScriptObjectWriter());
 	}
 
 	protected void inflateChartPluginResources(HtmlChartPlugin plugin, File pluginFile) throws Exception
@@ -546,13 +684,5 @@ public class HtmlChartPluginLoader
 	protected HtmlChartPlugin createHtmlChartPlugin()
 	{
 		return new HtmlChartPlugin();
-	}
-
-	protected File createTmpWorkDirectory() throws IOException
-	{
-		if (this.tmpDirectory != null)
-			return FileUtil.generateUniqueDirectory(this.tmpDirectory);
-		else
-			return FileUtil.createTempDirectory();
 	}
 }

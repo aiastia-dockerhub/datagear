@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -24,7 +24,7 @@ import java.sql.Statement;
 import java.util.List;
 
 /**
- * 查询结果集。
+ * SQL查询结果。
  * 
  * @author datagear@163.com
  *
@@ -35,7 +35,7 @@ public class QueryResultSet implements Closeable
 
 	private ResultSet resultSet;
 
-	private List<Object> params;
+	private List<Object> params = null;
 
 	public QueryResultSet()
 	{

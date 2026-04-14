@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,8 +17,6 @@
 
 package org.datagear.analysis.support;
 
-import java.io.Serializable;
-
 import org.datagear.analysis.DataSet;
 import org.datagear.analysis.DataSetException;
 import org.datagear.analysis.DataSetQuery;
@@ -33,7 +31,7 @@ import org.datagear.analysis.DataSetResult;
  * @author datagear@163.com
  *
  */
-public class ProfileDataSet extends AbstractDataSet implements Serializable
+public class ProfileDataSet extends AbstractDataSet
 {
 	private static final long serialVersionUID = 1L;
 
@@ -43,7 +41,7 @@ public class ProfileDataSet extends AbstractDataSet implements Serializable
 
 	public ProfileDataSet(DataSet dataSet)
 	{
-		super(dataSet.getId(), dataSet.getName(), dataSet.getProperties());
+		super(dataSet.getId(), dataSet.getName(), dataSet.getFields());
 		setMutableModel(dataSet.isMutableModel());
 		setParams(dataSet.getParams());
 	}

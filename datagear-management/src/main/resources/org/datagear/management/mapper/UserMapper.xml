@@ -30,9 +30,6 @@
 	<update id="update">
 		UPDATE DATAGEAR_USER SET
 			USER_NAME = #{entity.name},
-			<if test="entity.password != null and entity.password != ''">
-			USER_PASSWORD = #{entity.password},
-			</if>
 			USER_REAL_NAME = #{entity.realName},
 			USER_EMAIL = #{entity.email},
 			USER_IS_ADMIN = #{entity.admin, jdbcType=VARCHAR}
@@ -84,6 +81,22 @@
 			DATAGEAR_ROLE_USER
 		WHERE
 			RU_USER_ID = #{userId}
+	</select>
+	
+	<select id="getPasswordById" resultType="string">
+		SELECT
+			T.USER_PASSWORD
+		FROM
+			DATAGEAR_USER T
+		WHERE
+			T.USER_ID = #{id}
+	</select>
+	
+	<select id="getUserCount" resultType="int">
+		SELECT
+			COUNT(*)
+		FROM
+			DATAGEAR_USER T
 	</select>
 	
 	<select id="query" resultType="org.datagear.management.domain.User">

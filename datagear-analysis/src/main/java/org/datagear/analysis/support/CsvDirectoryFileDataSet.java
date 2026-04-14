@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,7 +21,7 @@ import java.io.File;
 import java.util.List;
 
 import org.datagear.analysis.DataSet;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.util.FileUtil;
 
@@ -36,6 +36,8 @@ import org.datagear.util.FileUtil;
  */
 public class CsvDirectoryFileDataSet extends AbstractCsvFileDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	/** CSV文件所在的目录 */
 	private File directory;
 
@@ -54,10 +56,10 @@ public class CsvDirectoryFileDataSet extends AbstractCsvFileDataSet
 		this.fileName = fileName;
 	}
 
-	public CsvDirectoryFileDataSet(String id, String name, List<DataSetProperty> properties, File directory,
+	public CsvDirectoryFileDataSet(String id, String name, List<DataSetField> fields, File directory,
 			String fileName)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.directory = directory;
 		this.fileName = fileName;
 	}
@@ -83,9 +85,9 @@ public class CsvDirectoryFileDataSet extends AbstractCsvFileDataSet
 	}
 
 	@Override
-	protected File getCsvFile(DataSetQuery query) throws Throwable
+	protected FileResolvedInfo getCsvFile(DataSetQuery query) throws Throwable
 	{
-		File jsonFile = FileUtil.getFile(this.directory, this.fileName);
-		return jsonFile;
+		File file = FileUtil.getFile(this.directory, this.fileName);
+		return new FileResolvedInfo(file, this.fileName);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -69,6 +69,9 @@ public interface DriverEntityManager
 
 	/**
 	 * 获取所有{@linkplain DriverEntity}。
+	 * <p>
+	 * 通常是不可修改的列表。
+	 * </p>
 	 * 
 	 * @return
 	 * @throws DriverEntityManagerException
@@ -82,6 +85,14 @@ public interface DriverEntityManager
 	 * @throws DriverEntityManagerException
 	 */
 	long getLastModified() throws DriverEntityManagerException;
+
+	/**
+	 * 获取驱动库上次变更时间。
+	 * 
+	 * @return {@code -1}表示没有
+	 * @throws DriverEntityManagerException
+	 */
+	long getLastModified(DriverEntity driverEntity) throws DriverEntityManagerException;
 
 	/**
 	 * 添加驱动程序库。
@@ -153,7 +164,7 @@ public interface DriverEntityManager
 	Driver getDriver(DriverEntity driverEntity) throws DriverEntityManagerException;
 
 	/**
-	 * 释放指定{@linkplain DriverEntity}的资源。
+	 * 释放指定{@linkplain DriverEntity}的资源，但不删除{@linkplain DriverEntity}。
 	 * 
 	 * @param driverEntity
 	 * @throws DriverEntityManagerException
@@ -161,7 +172,7 @@ public interface DriverEntityManager
 	void release(DriverEntity driverEntity) throws DriverEntityManagerException;
 
 	/**
-	 * 释放所有资源。
+	 * 释放所有{@linkplain DriverEntity}的资源，但不删除任何{@linkplain DriverEntity}。
 	 */
 	void releaseAll();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,7 +20,9 @@ package org.datagear.connection;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.sql.Driver;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.datagear.util.FileUtil;
 import org.slf4j.Logger;
@@ -42,8 +44,7 @@ public class PathDriverFactory
 	/** 驱动程序库路径 */
 	private File path;
 
-	private PathDriverClassLoader pathDriverClassLoader;
-
+	private PathClassLoader pathClassLoader;
 	private Object driverTool;
 
 	public PathDriverFactory(String path)
@@ -62,6 +63,31 @@ public class PathDriverFactory
 		return path;
 	}
 
+	public void setPath(File path)
+	{
+		this.path = path;
+	}
+
+	protected PathClassLoader getPathClassLoader()
+	{
+		return this.pathClassLoader;
+	}
+
+	protected void setPathClassLoader(PathClassLoader pathClassLoader)
+	{
+		this.pathClassLoader = pathClassLoader;
+	}
+
+	protected Object getDriverTool()
+	{
+		return driverTool;
+	}
+
+	protected void setDriverTool(Object driverTool)
+	{
+		this.driverTool = driverTool;
+	}
+
 	/**
 	 * 初始化。
 	 * 
@@ -69,14 +95,14 @@ public class PathDriverFactory
 	 */
 	public synchronized void init() throws PathDriverFactoryException
 	{
-		if (this.pathDriverClassLoader != null)
+		if (this.pathClassLoader != null)
 			return;
 
-		this.pathDriverClassLoader = initPathClassLoader(this.path);
+		this.pathClassLoader = initPathClassLoader(this.path);
 
 		try
 		{
-			Class<?> driverToolClass = this.pathDriverClassLoader.loadClass(DriverTool.class.getName());
+			Class<?> driverToolClass = this.pathClassLoader.loadClass(DriverTool.class.getName());
 			this.driverTool = driverToolClass.newInstance();
 		}
 		catch (ClassNotFoundException e)
@@ -94,32 +120,49 @@ public class PathDriverFactory
 	}
 
 	/**
-	 * 释放资源。
+	 * 初始化{@linkplain PathClassLoader}。
 	 * 
-	 * @throws PathDriverFactoryException
+	 * @param path
+	 * @return
 	 */
-	public synchronized void release() throws PathDriverFactoryException
+	protected PathClassLoader initPathClassLoader(File path)
+	{
+		Set<String> outsideForceLoads = new HashSet<>();
+		outsideForceLoads.add(DriverTool.class.getName());
+
+		PathClassLoader classLoader = new PathClassLoader(path);
+		classLoader.setOutsideForceLoads(outsideForceLoads);
+
+		return classLoader;
+	}
+
+	/**
+	 * 释放资源。
+	 * <p>
+	 * 此方法不会抛出任何异常。
+	 * </p>
+	 */
+	public synchronized void release()
 	{
 		try
 		{
 			releaseJdbcDrivers();
 		}
-		finally
+		catch (Throwable t)
 		{
+			if (LOGGER.isErrorEnabled())
+				LOGGER.error("release error", t);
 		}
-	}
 
-	/**
-	 * 初始化{@linkplain PathDriverClassLoader}。
-	 * 
-	 * @param path
-	 * @return
-	 */
-	protected PathDriverClassLoader initPathClassLoader(File path)
-	{
-		PathDriverClassLoader classLoader = new PathDriverClassLoader(path);
-
-		return classLoader;
+		try
+		{
+			this.pathClassLoader.close();
+		}
+		catch (Throwable t)
+		{
+			if (LOGGER.isErrorEnabled())
+				LOGGER.error("release error", t);
+		}
 	}
 
 	/**
@@ -127,9 +170,9 @@ public class PathDriverFactory
 	 * 
 	 * @return
 	 */
-	public long getPathLastModified()
+	public long getLastModified()
 	{
-		return getPathLastModified(this.path);
+		return FileUtil.lastModifiedOfPath(this.path);
 	}
 
 	/**
@@ -143,7 +186,7 @@ public class PathDriverFactory
 	{
 		try
 		{
-			Class.forName(driverClassName, true, this.pathDriverClassLoader);
+			Class.forName(driverClassName, true, this.pathClassLoader);
 		}
 		catch (ClassNotFoundException e)
 		{
@@ -230,40 +273,6 @@ public class PathDriverFactory
 		{
 			throw new PathDriverFactoryException(e);
 		}
-	}
-
-	protected PathDriverClassLoader getPathDriverClassLoader()
-	{
-		return this.pathDriverClassLoader;
-	}
-
-	/**
-	 * 获取路径的上次修改时间。
-	 * 
-	 * @param path
-	 * @return
-	 */
-	protected long getPathLastModified(File path)
-	{
-		long pathLastModified = path.lastModified();
-
-		if (path.isDirectory())
-		{
-			File[] children = path.listFiles();
-
-			if (children != null)
-			{
-				for (File child : children)
-				{
-					long childLastModified = child.lastModified();
-
-					if (childLastModified > pathLastModified)
-						pathLastModified = childLastModified;
-				}
-			}
-		}
-
-		return pathLastModified;
 	}
 
 	@Override

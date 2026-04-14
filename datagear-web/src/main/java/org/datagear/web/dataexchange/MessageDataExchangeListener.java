@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -33,6 +33,10 @@ import org.datagear.dataexchange.UnsupportedExchangeException;
 import org.datagear.dataexchange.support.IllegalJsonDataFormatException;
 import org.datagear.dataexchange.support.TableMismatchException;
 import org.datagear.web.util.MessageChannel;
+import org.datagear.web.util.msg.ExceptionMessage;
+import org.datagear.web.util.msg.Message;
+import org.datagear.web.util.msg.StartMessage;
+import org.datagear.web.util.msg.SuccessMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
@@ -47,7 +51,9 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 {
 	protected static final Logger LOGGER = LoggerFactory.getLogger(MessageDataExchangeListener.class);
 
-	public static final String EXCEPTION_DISPLAY_MESSAGE_KEY = "dataExchange.error.";
+	public static final String EXCEPTION_MESSAGE_KEY_PREFIX = "dataExchange.error.";
+
+	private String exceptionMessageKeyPrefix = EXCEPTION_MESSAGE_KEY_PREFIX;
 
 	private MessageChannel messageChannel;
 
@@ -72,6 +78,16 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 		this.dataExchangeServerChannel = dataExchangeServerChannel;
 		this.messageSource = messageSource;
 		this.locale = locale;
+	}
+
+	public String getExceptionMessageKeyPrefix()
+	{
+		return exceptionMessageKeyPrefix;
+	}
+
+	public void setExceptionMessageKeyPrefix(String exceptionMessageKeyPrefix)
+	{
+		this.exceptionMessageKeyPrefix = exceptionMessageKeyPrefix;
 	}
 
 	public MessageChannel getMessageChannel()
@@ -142,17 +158,17 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 	/**
 	 * 发送消息。
 	 * 
-	 * @param dataExchangeMessage
+	 * @param message
 	 */
-	protected void sendMessage(DataExchangeMessage dataExchangeMessage)
+	protected void sendMessage(Message message)
 	{
 		try
 		{
-			this.messageChannel.push(this.dataExchangeServerChannel, dataExchangeMessage);
+			this.messageChannel.push(this.dataExchangeServerChannel, message);
 		}
 		catch (Throwable t)
 		{
-			LOGGER.error("send message error", dataExchangeMessage);
+			LOGGER.error("Send message error", message);
 		}
 	}
 
@@ -248,7 +264,7 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 	 */
 	protected String buildDataExchangeExceptionI18nCode(DataExchangeException e)
 	{
-		return EXCEPTION_DISPLAY_MESSAGE_KEY + e.getClass().getSimpleName();
+		return this.exceptionMessageKeyPrefix + e.getClass().getSimpleName();
 	}
 
 	/**
@@ -271,6 +287,16 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 	}
 
 	/**
+	 * 获取{@linkplain #onStart()}的执行时间。
+	 * 
+	 * @return
+	 */
+	protected long getStartTime()
+	{
+		return this._startTime;
+	}
+
+	/**
 	 * 计算耗时毫秒数。
 	 * 
 	 * @return
@@ -285,7 +311,10 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 	 * 
 	 * @return
 	 */
-	protected abstract DataExchangeMessage buildStartMessage();
+	protected Message buildStartMessage()
+	{
+		return new StartMessage();
+	}
 
 	/**
 	 * 构建异常消息。
@@ -293,19 +322,62 @@ public abstract class MessageDataExchangeListener implements DataExchangeListene
 	 * @param e
 	 * @return
 	 */
-	protected abstract DataExchangeMessage buildExceptionMessage(DataExchangeException e);
+	protected Message buildExceptionMessage(DataExchangeException e)
+	{
+		return new ExceptionMessage(resolveDataExchangeExceptionI18n(e));
+	}
 
 	/**
 	 * 构建成功消息。
 	 * 
 	 * @return
 	 */
-	protected abstract DataExchangeMessage buildSuccessMessage();
+	protected Message buildSuccessMessage()
+	{
+		return new SuccessMessage();
+	}
 
 	/**
 	 * 构建完成消息。
 	 * 
 	 * @return
 	 */
-	protected abstract DataExchangeMessage buildFinishMessage();
+	protected Message buildFinishMessage()
+	{
+		return new FinishMessage(evalDuration());
+	}
+
+	/**
+	 * 数据交换完成消息。
+	 * 
+	 * @author datagear@163.com
+	 *
+	 */
+	public static class FinishMessage extends org.datagear.web.util.msg.FinishMessage
+	{
+		private static final long serialVersionUID = 1L;
+
+		private long duration;
+
+		public FinishMessage()
+		{
+			super();
+		}
+
+		public FinishMessage(long duration)
+		{
+			super();
+			this.duration = duration;
+		}
+
+		public long getDuration()
+		{
+			return duration;
+		}
+
+		public void setDuration(long duration)
+		{
+			this.duration = duration;
+		}
+	}
 }

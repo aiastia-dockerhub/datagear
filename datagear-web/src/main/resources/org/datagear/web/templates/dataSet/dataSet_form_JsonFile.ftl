@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DataSetEntity=statics['org.datagear.management.domain.DataSetEntity']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -35,25 +36,35 @@
 			<#include "include/dataSet_form_name.ftl">
 			<#include "include/dataSet_form_file_source.ftl">
 			<div class="field grid">
-				<label for="${pid}dataJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
-					title="<@spring.message code='jsonFileDataSet.dataJsonPath.desc' />">
+				<label for="${pid}resultJsonRuleDataJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='dataSet.resultJsonRule.dataJsonPath.desc' />">
 					<@spring.message code='dataJsonPath' />
 				</label>
 				<div class="field-input col-12 md:col-9">
-					<p-inputtext id="${pid}dataJsonPath" v-model="fm.dataJsonPath" type="text" class="input w-full"
-						name="dataJsonPath" maxlength="200">
+					<p-inputtext id="${pid}resultJsonRuleDataJsonPath" v-model="fm.resultJsonRule.dataJsonPath" type="text" class="input w-full"
+						name="resultJsonRule.dataJsonPath" maxlength="200">
+					</p-inputtext>
+				</div>
+			</div>
+			<div class="field grid">
+				<label for="${pid}resultJsonRuleAdditionJsonPath" class="field-label col-12 mb-2 md:col-3 md:mb-0"
+					title="<@spring.message code='dataSet.resultJsonRule.additionJsonPath.desc' />">
+					<@spring.message code='additionDataConfig' />
+				</label>
+				<div class="field-input col-12 md:col-9">
+					<p-inputtext id="${pid}resultJsonRuleAdditionJsonPath" v-model="fm.resultJsonRule.additionJsonPath" type="text" class="input w-full"
+						name="resultJsonRule.additionJsonPath" maxlength="500">
 					</p-inputtext>
 				</div>
 			</div>
 			<#include "include/dataSet_form_encoding.ftl">
-			<#include "include/dataSet_form_param_property.ftl">
+			<#include "include/dataSet_form_param_field.ftl">
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
-			<#include "include/dataSet_form_preview.ftl">
-			<p-button type="submit" label="<@spring.message code='save' />" class="hide-if-readonly"></p-button>
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
+			<#include "include/dataSet_form_submit_btn.ftl">
 		</div>
 	</form>
-	<#include "include/dataSet_form_param_property_form.ftl">
+	<#include "include/dataSet_form_param_field_form.ftl">
 </div>
 <#include "../include/page_form.ftl">
 <#include "../include/page_simple_form.ftl">
@@ -72,7 +83,7 @@
 	
 	po.previewUrl = function()
 	{
-		var url = "/dataSet/previewJsonFile";
+		var url = "/dataSet/preview/${DataSetEntity.DATA_SET_TYPE_JsonFile}";
 		url = $.addParam(url, "originalFileName", po.originalFileName);
 		
 		return url;
@@ -82,9 +93,9 @@
 	{
 		fingerprint.fileSourceType = dataSet.fileSourceType;
 		fingerprint.fileName = dataSet.fileName;
-		fingerprint.dataSetResDirectoryId = dataSet.dataSetResDirectory.id;
+		fingerprint.fileSourceId = dataSet.fileSource.id;
 		fingerprint.dataSetResFileName = dataSet.dataSetResFileName;
-		fingerprint.dataJsonPath = dataSet.dataJsonPath;
+		fingerprint.resultJsonRuleJson = $.toJsonString(dataSet.resultJsonRule);
 		fingerprint.encoding = dataSet.encoding;
 	};
 	
@@ -95,7 +106,8 @@
 	};
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
-	formModel.dataSetResDirectory = (!formModel.dataSetResDirectory ? {} : formModel.dataSetResDirectory);
+	formModel.fileSource = (!formModel.fileSource ? {} : formModel.fileSource);
+	formModel.resultJsonRule = (formModel.resultJsonRule == null ? {} : formModel.resultJsonRule);
 	po.inflateDataSetModel(formModel);
 	
 	po.originalFileName = (formModel.fileName || "");
@@ -116,10 +128,9 @@
 	{
 		originalFileName: po.originalFileName
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

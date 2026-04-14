@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -29,11 +29,11 @@
 </head>
 <body class="m-0 surface-ground">
 <#include "include/page_obj.ftl">
-<div id="${pid}">
+<div id="${pid}" class="page-main">
 	<div class="flex flex-column h-screen m-0">
 		<#include "include/page_main_header.ftl">
-		<div class="page-main-content flex-grow-1 p-0">
-			<div class="grid h-full m-0 flex-nowrap">
+		<div class="page-main-content flex-grow-1 overflow-auto p-0">
+			<div class="grid m-0 flex-nowrap h-full">
 				<div class="page-main-menu col-fixed px-0 pb-0">
 					<div class="grid grid-nogutter flex-column align-items-center p-card h-full border-noround-left border-noround-bottom">
 						<div class="col-fixed">
@@ -41,8 +41,8 @@
 								class="p-button-sm p-button-secondary p-button-rounded p-button-text opacity-40 my-1 p-1">
 							</p-button>
 						</div>
-						<div class="col">
-							<p-tabmenu :model="pm.mainMenu.items" v-model:active-index="pm.mainMenu.active"
+						<div class="col overflow-auto">
+							<p-tabmenu :model="pm.mainMenu.items" v-model:active-index="pm.mainMenu.active" id="${pid}mainMenu"
 								@tab-change="onMainMenuTabChange" class="vertical-tabmenu" :class="{collapse: pm.mainMenu.collapse}">
 							</p-tabmenu>
 						</div>
@@ -50,16 +50,20 @@
 				</div>
 				<div id="${pid}mainPanels" class="page-main-panels col overflow-auto pb-0 pr-0">
 					<div id="${pid}mainPanelHome" class="page-main-panel p-card w-full h-full p-3 border-noround-bottom border-noround-right">
-						<div class="flex flex-column align-items-center justify-content-center h-full opacity-20">
-							<div class="py-1">
-								<@spring.message code='app.name' />
-							</div>
-							<div class="py-1">
-								<@spring.message code='app.shortDesc' />
-							</div>
-							<div class="py-1">
-								${Global.WEB_SITE}
-							</div>
+						<div class="flex flex-column align-items-center justify-content-center h-full">
+							<#if welcomeContent??>
+								${welcomeContent?no_esc}
+							<#else>
+								<div class="py-1 opacity-20">
+									<@spring.message code='app.name' />
+								</div>
+								<div class="py-1 opacity-20">
+									<@spring.message code='app.shortDesc' />
+								</div>
+								<div class="py-1 opacity-20">
+									${Global.WEB_SITE}
+								</div>
+							</#if>
 						</div>
 					</div>
 				</div>
@@ -71,41 +75,58 @@
 <script>
 (function(po)
 {
-	po.mainMenuCollapseCookieName="MAIN_MENU_COLLAPSE";
+	po.mainMenuCollapseName="${Global.NAME_SHORT_UCUS}MAIN_MENU_COLLAPSE";
+	po.modulePermissions = $.unescapeHtmlForJson(<@writeJson var=modulePermissions />);
+	
+	//定义系统自定义欢迎内容配置中可用的变量
+	po.vueReactive("welcome",
+	{
+		user:
+		{
+			name: "${(currentUser.name)?js_string?no_esc}", realName: "${(currentUser.realName)?js_string?no_esc}",
+			anonymous: ("${currentUser.anonymous?string('true','false')}" == "true"),
+			admin: ("${currentUser.admin?string('true','false')}" == "true")
+		}
+	});
 	
 	po.vuePageModel(
 	{
 		mainMenu:
 		{
 			active: -1,
-			collapse: ($.cookie(po.mainMenuCollapseCookieName) == "true"),
+			collapse: ($.localStorageItem(po.mainMenuCollapseName) === "true"),
 			//这里都使用根路径，因为需要支持拖拽新窗口打开
 			items:
 			[
 				{
-					label: "<@spring.message code='module.schema' />",
+					label: "<@spring.message code='module.dtbsSource' />",
 					icon: 'pi pi-fw pi-database',
-					url: po.concatContextPath("/schema/query")
+					url: po.concatContextPath("/dtbsSource/manage"),
+					visible: po.modulePermissions.dtbsSourcePermission.visible
 				},
 				{
 					label: "<@spring.message code='module.analysisProject' />",
-					icon: 'pi pi-fw pi-folder',
-					url: po.concatContextPath("/analysisProject/pagingQuery")
+					icon: 'pi pi-fw pi-th-large',
+					url: po.concatContextPath("/analysisProject/manage"),
+					visible: po.modulePermissions.analysisProjectPermission.visible
 				},
 				{
 					label: "<@spring.message code='module.dataSet' />",
 					icon: 'pi pi-fw pi-table',
-					url: po.concatContextPath("/dataSet/pagingQuery")
+					url: po.concatContextPath("/dataSet/manage"),
+					visible: po.modulePermissions.dataSetPermission.visible
 				},
 				{
 					label: "<@spring.message code='module.chart' />",
 					icon: 'pi pi-fw pi-chart-line',
-					url: po.concatContextPath("/chart/pagingQuery")
+					url: po.concatContextPath("/chart/manage"),
+					visible: po.modulePermissions.chartPermission.visible
 				},
 				{
 					label: "<@spring.message code='module.dashboard' />",
 					icon: 'pi pi-fw pi-images',
-					url: po.concatContextPath("/dashboard/pagingQuery")
+					url: po.concatContextPath("/dashboard/manage"),
+					visible: po.modulePermissions.dashboardPermission.visible
 				}
 			]
 		}
@@ -117,20 +138,22 @@
 		{
 			var pm = po.vuePageModel();
 			pm.mainMenu.collapse = !pm.mainMenu.collapse;
-			
-			$.cookie(po.mainMenuCollapseCookieName, (pm.mainMenu.collapse ? "true" : "false"),
-					{ expires : 365, path: po.concatContextPath("/") });
+			$.localStorageItem(po.mainMenuCollapseName, (pm.mainMenu.collapse ? "true" : "false"));
 		},
 		onMainMenuTabChange: function(e)
 		{
 			e.originalEvent.preventDefault();
-			
-			var mainMenu = po.vuePageModel().mainMenu;
-			var item = mainMenu.items[e.index];
-			
-			po.showMainPanel("mainMenuTab"+item.label, item.url, item.label);
+			po.showMainPanelOfIndex(e.index);
 		}
 	});
+	
+	po.showMainPanelOfIndex = function(menuIndex)
+	{
+		var pm = po.vuePageModel();
+		pm.mainMenu.active = menuIndex;
+		var item = pm.mainMenu.items[menuIndex];
+		po.showMainPanel("mainMenuTab"+item.label, item.url, item.label);
+	};
 	
 	po.showMainPanel = function(name, url)
 	{
@@ -165,9 +188,47 @@
 		}
 	};
 	
-	po.vueMount();
+	po.vueMounted(function()
+	{
+		var pm = po.vuePageModel();
+		var mainMenu = pm.mainMenu;
+		var mainMenuItems = mainMenu.items;
+		var hasVisible = false;
+		
+		for(var i=0; i<mainMenuItems.length; i++)
+		{
+			if(mainMenuItems[i].visible !== false)
+			{
+				hasVisible = true;
+				break;
+			}
+		}
+		
+		//没有任何模块权限，添加一个提示菜单
+		if(!hasVisible)
+		{
+			mainMenuItems.push(
+			{
+				label: "<@spring.message code='noAuthorization' />",
+				icon: 'pi pi-fw pi-exclamation-triangle',
+				disabled: true
+			});
+		}
+		
+		//悬浮提示
+		po.vueNextTick(function()
+		{
+			var mainMenu = po.elementOfId("${pid}mainMenu");
+			$("a.p-menuitem-link", mainMenu).each(function()
+			{
+				var item = $(this);
+				item.attr("title", item.attr("aria-label"));
+			});
+		});
+	});
 })
 (${pid});
 </script>
+<#include "include/page_vue_mount.ftl">
 </body>
 </html>

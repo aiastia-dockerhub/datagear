@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.datagear.analysis.DataSet;
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.util.FileUtil;
 
@@ -37,6 +37,8 @@ import org.datagear.util.FileUtil;
  */
 public class JsonDirectoryFileDataSet extends AbstractJsonFileDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	/** JSON文件所在的目录 */
 	private File directory;
 
@@ -55,10 +57,10 @@ public class JsonDirectoryFileDataSet extends AbstractJsonFileDataSet
 		this.fileName = fileName;
 	}
 
-	public JsonDirectoryFileDataSet(String id, String name, List<DataSetProperty> properties, File directory,
+	public JsonDirectoryFileDataSet(String id, String name, List<DataSetField> fields, File directory,
 			String fileName)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.directory = directory;
 		this.fileName = fileName;
 	}
@@ -84,9 +86,9 @@ public class JsonDirectoryFileDataSet extends AbstractJsonFileDataSet
 	}
 
 	@Override
-	protected File getJsonFile(DataSetQuery query) throws DataSetException
+	protected FileResolvedInfo getJsonFile(DataSetQuery query) throws DataSetException
 	{
 		File jsonFile = FileUtil.getFile(this.directory, this.fileName);
-		return jsonFile;
+		return new FileResolvedInfo(jsonFile, this.fileName);
 	}
 }

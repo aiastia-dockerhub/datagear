@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,12 +20,13 @@ package org.datagear.analysis.support.html;
 import java.io.IOException;
 import java.io.Writer;
 
-import org.datagear.analysis.ChartDataSet;
 import org.datagear.analysis.DataSet;
+import org.datagear.analysis.DataSetBind;
 import org.datagear.analysis.DataSetException;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.support.AbstractDataSet;
+import org.datagear.analysis.support.DataFormat;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -37,6 +38,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  */
 public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 {
+	public static final HtmlChartScriptObjectWriter INSTANCE = new HtmlChartScriptObjectWriter();
+
 	public HtmlChartScriptObjectWriter()
 	{
 		super();
@@ -67,7 +70,7 @@ public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 	 */
 	public void write(Writer out, HtmlChart chart, String renderContextVarName, String pluginVarName) throws IOException
 	{
-		chart = new HtmlChartJson(chart, renderContextVarName, pluginVarName);
+		chart = toHtmlChartJson(chart, renderContextVarName, pluginVarName);
 
 		out.write("var " + chart.getVarName() + "=");
 		writeNewLine(out);
@@ -101,9 +104,22 @@ public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 	public void writeJson(Writer out, HtmlChart chart, String renderContextVarName, String pluginVarName)
 			throws IOException
 	{
-		chart = new HtmlChartJson(chart, renderContextVarName, pluginVarName);
+		chart = toHtmlChartJson(chart, renderContextVarName, pluginVarName);
 
 		writeJsonObject(out, chart);
+	}
+
+	/**
+	 * 转换为{@linkplain HtmlChartJson}。
+	 * 
+	 * @param chart
+	 * @param renderContextVarName
+	 * @param pluginVarName
+	 * @return
+	 */
+	protected HtmlChartJson toHtmlChartJson(HtmlChart chart, String renderContextVarName, String pluginVarName)
+	{
+		return new HtmlChartJson(chart, renderContextVarName, pluginVarName);
 	}
 
 	/**
@@ -114,32 +130,71 @@ public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 	 */
 	protected static class HtmlChartJson extends HtmlChart
 	{
+		private static final long serialVersionUID = 1L;
+
 		public HtmlChartJson(HtmlChart htmlChart, String renderContextVarName, String pluginVarName)
 		{
 			super(htmlChart);
-			setChartDataSets(ChartDataSetJson.valuesOf(htmlChart.getChartDataSets()));
-			setPlugin(new RefHtmlChartPlugin(pluginVarName));
-			setRenderContext(new RefRenderContext(renderContextVarName));
+			setDataSetBinds(toDataSetBindJsons(htmlChart.getDataSetBinds()));
+			setPlugin(toRefHtmlChartPlugin(pluginVarName));
+			setRenderContext(toRefRenderContext(renderContextVarName));
+		}
+
+		protected DataSetBindJson[] toDataSetBindJsons(DataSetBind[] dataSetBinds)
+		{
+			if (dataSetBinds == null)
+				return null;
+
+			DataSetBindJson[] re = new DataSetBindJson[dataSetBinds.length];
+
+			for (int i = 0; i < dataSetBinds.length; i++)
+				re[i] = toDataSetBindJson(dataSetBinds[i]);
+
+			return re;
+		}
+
+		protected DataSetBindJson toDataSetBindJson(DataSetBind dataSetBind)
+		{
+			return new DataSetBindJson(dataSetBind);
+		}
+
+		protected RefHtmlChartPlugin toRefHtmlChartPlugin(String pluginVarName)
+		{
+			return new RefHtmlChartPlugin(pluginVarName);
+		}
+
+		protected RefRenderContext toRefRenderContext(String renderContextVarName)
+		{
+			return new RefRenderContext(renderContextVarName);
 		}
 	}
 
 	/**
-	 * 用于输出JSON的{@linkplain ChartDataSet}。
+	 * 用于输出JSON的{@linkplain DataSetBind}。
 	 * 
 	 * @author datagear@163.com
 	 *
 	 */
-	protected static class ChartDataSetJson extends ChartDataSet
+	protected static class DataSetBindJson extends DataSetBind
 	{
-		public ChartDataSetJson(ChartDataSet chartDataSet)
+		private static final long serialVersionUID = 1L;
+
+		public DataSetBindJson(DataSetBind dataSetBind)
 		{
-			super(new DataSetJson(chartDataSet.getDataSet()));
-			setPropertySigns(chartDataSet.getPropertySigns());
-			setAlias(chartDataSet.getAlias());
-			setAttachment(chartDataSet.isAttachment());
-			setQuery(chartDataSet.getQuery());
-			setPropertyAliases(chartDataSet.getPropertyAliases());
-			setPropertyOrders(chartDataSet.getPropertyOrders());
+			super();
+			setDataSet(toDataSetJson(dataSetBind.getDataSet()));
+			setDataSetSigns(dataSetBind.getDataSetSigns());
+			setFieldSigns(dataSetBind.getFieldSigns());
+			setAlias(dataSetBind.getAlias());
+			setAttachment(dataSetBind.isAttachment());
+			setQuery(dataSetBind.getQuery());
+			setFieldAliases(dataSetBind.getFieldAliases());
+			setFieldOrders(dataSetBind.getFieldOrders());
+		}
+
+		protected DataSetJson toDataSetJson(DataSet dataSet)
+		{
+			return new DataSetJson(dataSet);
 		}
 
 		@JsonIgnore
@@ -147,19 +202,6 @@ public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 		public DataSetResult getResult()
 		{
 			throw new UnsupportedOperationException();
-		}
-
-		public static ChartDataSetJson[] valuesOf(ChartDataSet[] chartDataSets)
-		{
-			if (chartDataSets == null)
-				return null;
-
-			ChartDataSetJson[] jsonDataSets = new ChartDataSetJson[chartDataSets.length];
-
-			for (int i = 0; i < chartDataSets.length; i++)
-				jsonDataSets[i] = new ChartDataSetJson(chartDataSets[i]);
-
-			return jsonDataSets;
 		}
 	}
 
@@ -171,16 +213,26 @@ public class HtmlChartScriptObjectWriter extends AbstractHtmlScriptObjectWriter
 	 */
 	protected static class DataSetJson extends AbstractDataSet
 	{
+		private static final long serialVersionUID = 1L;
+
 		public DataSetJson(DataSet dataSet)
 		{
-			super(dataSet.getId(), dataSet.getName(), dataSet.getProperties());
+			super(dataSet.getId(), dataSet.getName(), dataSet.getFields());
 			setMutableModel(dataSet.isMutableModel());
 			setParams(dataSet.getParams());
-			
-			if(dataSet instanceof AbstractDataSet)
-				setDataFormat(((AbstractDataSet) dataSet).getDataFormat());
 		}
 
+		/**
+		 * JSON输出不需要底层数据转换格式信息
+		 */
+		@JsonIgnore
+		@Override
+		public DataFormat getDataFormat()
+		{
+			return super.getDataFormat();
+		}
+
+		@JsonIgnore
 		@Override
 		public DataSetResult getResult(DataSetQuery query) throws DataSetException
 		{

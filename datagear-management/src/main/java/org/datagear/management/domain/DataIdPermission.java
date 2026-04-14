@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -27,7 +27,7 @@ import org.springframework.beans.BeanUtils;
  * @author datagear@163.com
  *
  */
-public class DataIdPermission implements DataPermissionAware, Serializable, CloneableEntity
+public class DataIdPermission implements DataPermissionEntity, Serializable, CloneableEntity
 {
 	private static final long serialVersionUID = 1L;
 

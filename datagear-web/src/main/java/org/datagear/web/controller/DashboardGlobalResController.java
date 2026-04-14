@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -35,18 +35,23 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.datagear.persistence.PagingQuery;
 import org.datagear.util.FileUtil;
 import org.datagear.util.IOUtil;
+import org.datagear.util.KeywordMatcher;
+import org.datagear.util.KeywordMatcher.MatchValue;
 import org.datagear.util.StringUtil;
-import org.datagear.web.config.CoreConfig;
-import org.datagear.web.util.KeywordMatcher;
+import org.datagear.util.dirquery.DirectoryPagingQuery;
+import org.datagear.util.dirquery.DirectoryQuerySupport;
+import org.datagear.util.dirquery.ResultFileInfo;
+import org.datagear.util.query.PagingData;
+import org.datagear.web.config.CoreConfigSupport;
 import org.datagear.web.util.OperationMessage;
 import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -66,11 +71,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class DashboardGlobalResController extends AbstractController implements ServletContextAware
 {
 	@Autowired
-	@Qualifier(CoreConfig.NAME_DASHBOARD_GLOBAL_RES_ROOT_DIRECTORY)
+	@Qualifier(CoreConfigSupport.NAME_DASHBOARD_GLOBAL_RES_ROOT_DIRECTORY)
 	private File dashboardGlobalResRootDirectory;
 
 	@Autowired
 	private File tempDirectory;
+
+	private KeywordMatcher keywordMatcher = new KeywordMatcher();
 
 	private ServletContext servletContext;
 
@@ -99,6 +106,16 @@ public class DashboardGlobalResController extends AbstractController implements 
 		this.tempDirectory = tempDirectory;
 	}
 
+	public KeywordMatcher getKeywordMatcher()
+	{
+		return keywordMatcher;
+	}
+
+	public void setKeywordMatcher(KeywordMatcher keywordMatcher)
+	{
+		this.keywordMatcher = keywordMatcher;
+	}
+
 	public ServletContext getServletContext()
 	{
 		return servletContext;
@@ -111,19 +128,31 @@ public class DashboardGlobalResController extends AbstractController implements 
 	}
 
 	@RequestMapping("/add")
-	public String add(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
+	public String add(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+			@RequestParam(value = "dir", required = false) String dir)
 			throws Exception
 	{
-		setFormModel(model, new DashboardGlobalResSaveForm(), REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE);
+		setFormAction(model, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE);
+
+		dir = FileUtil.toDisplayPath(dir, true);
+
+		DashboardGlobalResSaveForm form = new DashboardGlobalResSaveForm();
+		form.setSavePath(dir);
+		setFormModel(model, form);
+		model.addAttribute("defaultDir", dir);
 
 		return "/dashboardGlobalRes/dashboardGlobalRes_form";
 	}
 
 	@RequestMapping("/upload")
-	public String upload(HttpServletRequest request, org.springframework.ui.Model model)
+	public String upload(HttpServletRequest request, org.springframework.ui.Model model,
+			@RequestParam(value = "dir", required = false) String dir)
 	{
+		dir = FileUtil.toDisplayPath(dir, true);
+
 		addAttributeForWriteJson(model, "availableCharsetNames", getAvailableCharsetNames());
 		model.addAttribute("zipFileNameEncodingDefault", IOUtil.CHARSET_UTF_8);
+		model.addAttribute("defaultDir", dir);
 
 		setFormAction(model, REQUEST_ACTION_UPLOAD, SUBMIT_ACTION_SAVE_UPLOAD);
 
@@ -165,7 +194,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 				throw new IllegalInputException();
 
 			File resFile = FileUtil.getFile(this.dashboardGlobalResRootDirectory, savePath, true);
-			IOUtil.copy(file, resFile, false);
+			IOUtil.copy(file, resFile);
 		}
 
 		return optSuccessResponseEntity(request);
@@ -180,19 +209,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 		String fileName = multipartFile.getOriginalFilename();
 		File file = FileUtil.getFile(tmpDirectory, fileName);
 
-		InputStream in = null;
-		OutputStream out = null;
-		try
-		{
-			in = multipartFile.getInputStream();
-			out = IOUtil.getOutputStream(file);
-			IOUtil.write(in, out);
-		}
-		finally
-		{
-			IOUtil.close(in);
-			IOUtil.close(out);
-		}
+		writeMultipartFile(multipartFile, file);
 
 		String uploadFilePath = FileUtil.getRelativePath(this.tempDirectory, file);
 
@@ -207,6 +224,8 @@ public class DashboardGlobalResController extends AbstractController implements 
 	public String edit(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
 			@RequestParam("path") String path) throws Exception
 	{
+		setFormAction(model, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE);
+
 		File file = FileUtil.getFile(this.dashboardGlobalResRootDirectory, path);
 
 		if (!file.exists())
@@ -219,8 +238,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 		formModel.setSavePath(path);
 		formModel.setInitSavePath(path);
 		formModel.setResourceContent(resourceContent);
-		
-		setFormModel(model, formModel, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE);
+		setFormModel(model, formModel);
 
 		return "/dashboardGlobalRes/dashboardGlobalRes_form";
 	}
@@ -256,6 +274,107 @@ public class DashboardGlobalResController extends AbstractController implements 
 		{
 			File initFile = FileUtil.getFile(this.dashboardGlobalResRootDirectory, form.getInitSavePath());
 			FileUtil.deleteFile(initFile);
+		}
+
+		return optSuccessResponseEntity(request);
+	}
+
+	@RequestMapping("/rename")
+	public String rename(HttpServletRequest request, Model model, @RequestParam("path") String path)
+	{
+		setFormAction(model, REQUEST_ACTION_EDIT, "saveRename");
+
+		File file = FileUtil.getFile(this.dashboardGlobalResRootDirectory, path, false);
+		FileRenameForm form = new FileRenameForm(path, file.getName());
+
+		setFormModel(model, form);
+
+		return "/dashboardGlobalRes/dashboardGlobalRes_rename";
+	}
+
+	@RequestMapping(value = "/saveRename", produces = CONTENT_TYPE_JSON)
+	@ResponseBody
+	public ResponseEntity<OperationMessage> saveRename(HttpServletRequest request, Model model,
+			@RequestBody FileRenameForm form) throws Exception
+	{
+		if (isEmpty(form.getPath()) || isEmpty(form.getName()) || FileUtil.hasPathSeparator(form.getName()))
+			throw new IllegalInputException();
+
+		File file = FileUtil.getFile(this.dashboardGlobalResRootDirectory, form.getPath(), false);
+
+		// 文件不存在忽略即可
+		if (file.exists())
+		{
+			if (FileUtil.getSibling(file, form.getName()).exists())
+			{
+				return optFailResponseEntity(request, "file.error.targetFileExists");
+			}
+			else
+			{
+				FileUtil.rename(file, form.getName());
+			}
+		}
+
+		return optSuccessResponseEntity(request);
+	}
+
+	@RequestMapping("/move")
+	public String move(HttpServletRequest request, Model model, @RequestParam("path") String path)
+	{
+		setFormAction(model, REQUEST_ACTION_EDIT, "saveMove");
+
+		File file = FileUtil.getFile(this.dashboardGlobalResRootDirectory, path, false);
+
+		String targetDir = path;
+		if (file.exists() && !file.isDirectory())
+		{
+			File parent = file.getParentFile();
+			targetDir = FileUtil.getRelativePath(this.dashboardGlobalResRootDirectory, parent);
+		}
+
+		targetDir = FileUtil.toDisplayPath(targetDir, true, true);
+		FileMoveForm form = new FileMoveForm(path, targetDir);
+		setFormModel(model, form);
+
+		return "/dashboardGlobalRes/dashboardGlobalRes_move";
+	}
+
+	@RequestMapping(value = "/saveMove", produces = CONTENT_TYPE_JSON)
+	@ResponseBody
+	public ResponseEntity<OperationMessage> saveMove(HttpServletRequest request, Model model,
+			@RequestBody FileMoveForm form) throws Exception
+	{
+		if (isEmpty(form.getPath()) || isEmpty(form.getDirectory()))
+			throw new IllegalInputException();
+
+		if (FileUtil.toDisplayPath(form.getDirectory(), true, true)
+				.startsWith(FileUtil.toDisplayPath(form.getPath(), false)))
+		{
+			return optFailResponseEntity(request, "file.error.moveToSubDirNotAllowed");
+		}
+
+		File file = FileUtil.getFile(this.dashboardGlobalResRootDirectory, form.getPath(), false);
+
+		// 文件不存在忽略即可
+		if (file.exists())
+		{
+			File targetDirectory = FileUtil.getFile(this.dashboardGlobalResRootDirectory, form.getDirectory(), false);
+
+			if (!targetDirectory.exists())
+				targetDirectory = FileUtil.getDirectory(this.dashboardGlobalResRootDirectory, form.getDirectory(),
+						true);
+
+			if (!targetDirectory.isDirectory())
+			{
+				return optFailResponseEntity(request, "file.error.tagetFileNotDir");
+			}
+
+			if (FileUtil.getFile(targetDirectory, file.getName()).exists())
+			{
+				return optFailResponseEntity(request, "file.error.fileExistsInTargetDir");
+			}
+
+			FileUtil.moveToDir(file, targetDirectory);
 		}
 
 		return optSuccessResponseEntity(request);
@@ -309,7 +428,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 		if (!file.exists())
 			throw new RecordNotFoundException();
 
-		String responseFileName = toResponseAttachmentFileName(request, response, file.getName());
+		String responseFileName = file.getName();
 
 		if (file.isDirectory())
 		{
@@ -318,7 +437,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 		}
 
 		response.setCharacterEncoding(IOUtil.CHARSET_UTF_8);
-		response.setHeader("Content-Disposition", "attachment; filename=" + responseFileName);
+		setDownloadResponseHeader(request, response, responseFileName);
 		OutputStream out = response.getOutputStream();
 
 		if (file.isDirectory())
@@ -356,23 +475,40 @@ public class DashboardGlobalResController extends AbstractController implements 
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping("/query")
-	public String query(HttpServletRequest request, org.springframework.ui.Model model)
+	@RequestMapping("/manage")
+	public String manage(HttpServletRequest request, org.springframework.ui.Model model)
 	{
-		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_QUERY);
-		setReadonlyActionByRole(model, WebUtils.getUser());
+		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_MANAGE);
+		setReadonlyAction(model);
 		return "/dashboardGlobalRes/dashboardGlobalRes_table";
 	}
 
-	@RequestMapping(value = "/queryData", produces = CONTENT_TYPE_JSON)
+	@RequestMapping("/select")
+	public String select(HttpServletRequest request, org.springframework.ui.Model model,
+			@RequestParam(value = "onlyDirectory", required = false) String onlyDirectory)
+	{
+		setSelectAction(request, model);
+		model.addAttribute("onlyDirectory", StringUtil.toBoolean(onlyDirectory));
+
+		return "/dashboardGlobalRes/dashboardGlobalRes_table";
+	}
+
+	@RequestMapping(value = "/pagingQueryData", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
-	public List<DashboardGlobalResItem> queryData(HttpServletRequest request, HttpServletResponse response,
-			final org.springframework.ui.Model springModel, @RequestBody(required = false) PagingQuery pagingQueryParam)
+	public PagingData<ResultFileInfo> pagingQueryData(HttpServletRequest request, HttpServletResponse response,
+			final org.springframework.ui.Model springModel,
+			@RequestBody(required = false) DirectoryPagingQuery pagingQueryParam)
 			throws Exception
 	{
-		final PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
+		final DirectoryPagingQuery pagingQuery = inflateDirectoryPagingQuery(request, pagingQueryParam);
+		DirectoryQuerySupport qs = getDirectoryQuerySupport();
 
-		return findDashboardGlobalResItems(pagingQuery.getKeyword());
+		return qs.pagingQuery(pagingQuery);
+	}
+
+	protected DirectoryQuerySupport getDirectoryQuerySupport()
+	{
+		return new DirectoryQuerySupport(getDashboardGlobalResRootDirectory());
 	}
 
 	protected List<DashboardGlobalResItem> findDashboardGlobalResItems(String keyword)
@@ -391,8 +527,7 @@ public class DashboardGlobalResController extends AbstractController implements 
 		if (StringUtil.isEmpty(keyword))
 			return resItems;
 
-		return KeywordMatcher.<DashboardGlobalResItem> match(resItems, keyword,
-				new KeywordMatcher.MatchValue<DashboardGlobalResItem>()
+		return this.keywordMatcher.match(resItems, keyword, new MatchValue<DashboardGlobalResItem>()
 				{
 					@Override
 					public String[] get(DashboardGlobalResItem t)
@@ -595,6 +730,92 @@ public class DashboardGlobalResController extends AbstractController implements 
 		public void setInitSavePath(String initSavePath)
 		{
 			this.initSavePath = initSavePath;
+		}
+	}
+
+	public static class FileRenameForm implements ControllerForm
+	{
+		private static final long serialVersionUID = 1L;
+
+		/** 原路径 */
+		private String path;
+
+		/** 新名称 */
+		private String name;
+
+		public FileRenameForm()
+		{
+			super();
+		}
+
+		public FileRenameForm(String path, String name)
+		{
+			super();
+			this.path = path;
+			this.name = name;
+		}
+
+		public String getPath()
+		{
+			return path;
+		}
+
+		public void setPath(String path)
+		{
+			this.path = path;
+		}
+
+		public String getName()
+		{
+			return name;
+		}
+
+		public void setName(String name)
+		{
+			this.name = name;
+		}
+	}
+
+	public static class FileMoveForm implements ControllerForm
+	{
+		private static final long serialVersionUID = 1L;
+
+		/** 原路径 */
+		private String path;
+
+		/** 目标目录 */
+		private String directory;
+
+		public FileMoveForm()
+		{
+			super();
+		}
+
+		public FileMoveForm(String path, String directory)
+		{
+			super();
+			this.path = path;
+			this.directory = directory;
+		}
+
+		public String getPath()
+		{
+			return path;
+		}
+
+		public void setPath(String path)
+		{
+			this.path = path;
+		}
+
+		public String getDirectory()
+		{
+			return directory;
+		}
+
+		public void setDirectory(String directory)
+		{
+			this.directory = directory;
 		}
 	}
 }

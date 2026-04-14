@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -37,15 +37,15 @@ import org.datagear.analysis.support.AbstractChartPlugin;
 import org.datagear.analysis.support.ConcurrentChartPluginManager;
 import org.datagear.util.FileUtil;
 import org.datagear.util.IOUtil;
+import org.datagear.util.LastModifiedService;
 import org.datagear.util.StringUtil;
-import org.datagear.util.version.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * 基于文件目录的{@linkplain ChartPluginManager}。
  * <p>
- * 此类管理指定目录下符合{@linkplain HtmlChartPluginLoader}规范的{@linkplain HtmlChartPlugin}，并会在文件修改时及时刷新。
+ * 此类管理指定目录下符合{@linkplain HtmlChartPluginLoader}规范的{@linkplain HtmlChartPlugin}，并会在修改操作时及时刷新。
  * </p>
  * <p>
  * 此类是线程安全的。
@@ -58,39 +58,43 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 {
 	private static final Logger LOGGER = LoggerFactory.getLogger(DirectoryHtmlChartPluginManager.class);
 
+	protected static final String LAST_MODIFIED_NAME = DirectoryHtmlChartPluginManager.class.getName();
+
 	/** 插件文件主目录 */
 	private File directory;
 
 	private HtmlChartPluginLoader htmlChartPluginLoader;
 
+	private LastModifiedService lastModifiedService;
+
 	/** 临时文件目录，用于存放临时文件 */
 	private File tmpDirectory = null;
 
-	private long readCheckForReloadTimeThreashold = (LOGGER.isDebugEnabled() ? 0 : 5 * 60 * 1000);
-
-	private Map<String, String> pluginIdFileNameMap = new HashMap<>();
-
-	private Map<String, FileCheckTime> fileNameCheckTimeMap = new HashMap<>();
-
-	private volatile long _prevReadCheckForReloadTime = 0;
+	private Map<String, String> _pluginIdFileNameMap = new HashMap<>();
+	private Map<String, FileCheckTime> _fileNameCheckTimeMap = new HashMap<>();
+	private volatile long _lastModified = LastModifiedService.LAST_MODIFIED_INIT;
 
 	public DirectoryHtmlChartPluginManager()
 	{
 		super();
 	}
 
-	public DirectoryHtmlChartPluginManager(File directory, HtmlChartPluginLoader htmlChartPluginLoader)
+	public DirectoryHtmlChartPluginManager(File directory, HtmlChartPluginLoader htmlChartPluginLoader,
+			LastModifiedService lastModifiedService)
 	{
 		super();
 		this.directory = directory;
 		this.htmlChartPluginLoader = htmlChartPluginLoader;
+		this.lastModifiedService = lastModifiedService;
 	}
 
-	public DirectoryHtmlChartPluginManager(String directory, HtmlChartPluginLoader htmlChartPluginLoader)
+	public DirectoryHtmlChartPluginManager(String directory, HtmlChartPluginLoader htmlChartPluginLoader,
+			LastModifiedService lastModifiedService)
 	{
 		super();
 		this.directory = FileUtil.getDirectory(directory);
 		this.htmlChartPluginLoader = htmlChartPluginLoader;
+		this.lastModifiedService = lastModifiedService;
 	}
 
 	public File getDirectory()
@@ -123,6 +127,16 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		this.htmlChartPluginLoader = htmlChartPluginLoader;
 	}
 
+	public LastModifiedService getLastModifiedService()
+	{
+		return lastModifiedService;
+	}
+
+	public void setLastModifiedService(LastModifiedService lastModifiedService)
+	{
+		this.lastModifiedService = lastModifiedService;
+	}
+
 	public void setTmpDirectory(File tmpDirectory)
 	{
 		this.tmpDirectory = tmpDirectory;
@@ -133,34 +147,34 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		this.tmpDirectory = FileUtil.getDirectory(tmpDirectory);
 	}
 
-	public long getReadCheckForReloadTimeThreashold()
-	{
-		return readCheckForReloadTimeThreashold;
-	}
-
-	public void setReadCheckForReloadTimeThreashold(long readCheckForReloadTimeThreashold)
-	{
-		this.readCheckForReloadTimeThreashold = readCheckForReloadTimeThreashold;
-	}
-
 	protected Map<String, String> getPluginIdFileNameMap()
 	{
-		return pluginIdFileNameMap;
+		return _pluginIdFileNameMap;
 	}
 
 	protected void setPluginIdFileNameMap(Map<String, String> pluginIdFileNameMap)
 	{
-		this.pluginIdFileNameMap = pluginIdFileNameMap;
+		this._pluginIdFileNameMap = pluginIdFileNameMap;
 	}
 
 	protected Map<String, FileCheckTime> getFileNameCheckTimeMap()
 	{
-		return fileNameCheckTimeMap;
+		return _fileNameCheckTimeMap;
 	}
 
 	protected void setFileNameCheckTimeMap(Map<String, FileCheckTime> fileNameCheckTimeMap)
 	{
-		this.fileNameCheckTimeMap = fileNameCheckTimeMap;
+		this._fileNameCheckTimeMap = fileNameCheckTimeMap;
+	}
+
+	protected long getLastModified()
+	{
+		return _lastModified;
+	}
+
+	protected void setLastModified(long _lastModified)
+	{
+		this._lastModified = _lastModified;
 	}
 
 	/**
@@ -183,7 +197,6 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	public ChartPlugin get(String id)
 	{
 		readCheckForReload();
-
 		return super.get(id);
 	}
 
@@ -191,7 +204,6 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	public <T extends ChartPlugin> List<T> getAll(Class<? super T> renderContextType)
 	{
 		readCheckForReload();
-
 		return super.getAll(renderContextType);
 	}
 
@@ -199,8 +211,25 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	public List<ChartPlugin> getAll()
 	{
 		readCheckForReload();
-
 		return super.getAll();
+	}
+
+	@Override
+	public boolean register(ChartPlugin chartPlugin)
+	{
+		boolean re = super.register(chartPlugin);
+		this.updateLastModified();
+
+		return re;
+	}
+
+	@Override
+	public ChartPlugin[] remove(String... ids)
+	{
+		ChartPlugin[] re = super.remove(ids);
+		this.updateLastModified();
+
+		return re;
 	}
 
 	/**
@@ -223,13 +252,14 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		try
 		{
 			writeLock.lock();
-
 			upload(file, ids, 0);
 		}
 		finally
 		{
 			writeLock.unlock();
 		}
+
+		updateLastModified();
 
 		return ids;
 	}
@@ -256,7 +286,7 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 				File pluginFile = getPluginFile(id);
 
 				if (pluginFile.exists())
-					IOUtil.copy(pluginFile, tmpDirectory, true);
+					IOUtil.copyInto(pluginFile, tmpDirectory);
 			}
 
 			IOUtil.writeFileToZipOutputStream(out, tmpDirectory, "");
@@ -325,6 +355,8 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		if (!isLegalChartPlugin(uploadPlugin))
 			return null;
 
+		HtmlChartPlugin re = null;
+
 		String pluginFileName = uploadPluginFile.getName();
 
 		File sameName = FileUtil.getFile(this.directory, pluginFileName, false);
@@ -332,8 +364,8 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		// 不存在同名的文件，则拷贝并执行加载
 		if (!sameName.exists())
 		{
-			IOUtil.copy(uploadPluginFile, this.directory, true);
-			return registerHtmlChartPlugin(uploadPlugin, sameName);
+			IOUtil.copyInto(uploadPluginFile, this.directory);
+			re = registerHtmlChartPlugin(uploadPlugin, sameName);
 		}
 		else
 		{
@@ -344,8 +376,8 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 			if (loadedPlugin == null)
 			{
 				FileUtil.deleteFile(sameName);
-				IOUtil.copy(uploadPluginFile, this.directory, true);
-				return registerHtmlChartPlugin(uploadPlugin, sameName);
+				IOUtil.copyInto(uploadPluginFile, this.directory);
+				re = registerHtmlChartPlugin(uploadPlugin, sameName);
 			}
 			else
 			{
@@ -355,22 +387,28 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 					if (canReplaceForSameId(uploadPlugin, loadedPlugin))
 					{
 						FileUtil.deleteFile(sameName);
-						IOUtil.copy(uploadPluginFile, this.directory, true);
-						return registerHtmlChartPlugin(uploadPlugin, sameName);
+						IOUtil.copyInto(uploadPluginFile, this.directory);
+						re = registerHtmlChartPlugin(uploadPlugin, sameName);
 					}
-					else
-						return null;
 				}
 				// 不同ID的插件，则删除它，载入新的
 				else
 				{
 					removeChartPlugin(loadedPluginId);
 
-					IOUtil.copy(uploadPluginFile, this.directory, true);
-					return registerHtmlChartPlugin(uploadPlugin, sameName);
+					IOUtil.copyInto(uploadPluginFile, this.directory);
+					re = registerHtmlChartPlugin(uploadPlugin, sameName);
 				}
 			}
 		}
+
+		// 需要重新初始化插件资源，因为文件路径已经改变
+		if (re != null)
+		{
+			this.htmlChartPluginLoader.inflateResources(re, sameName);
+		}
+
+		return re;
 	}
 
 	@Override
@@ -387,22 +425,22 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	{
 		super.removeAllChartPlugins();
 
-		Set<String> pluginIds = this.pluginIdFileNameMap.keySet();
+		Set<String> pluginIds = this._pluginIdFileNameMap.keySet();
 		for (String pluginId : pluginIds)
 			deletePluginFile(pluginId);
 	}
 
 	protected void deletePluginFile(String pluginId)
 	{
-		String fileName = this.pluginIdFileNameMap.remove(pluginId);
+		String fileName = this._pluginIdFileNameMap.remove(pluginId);
 		File file = FileUtil.getFile(this.directory, fileName, false);
 		FileUtil.deleteFile(file);
-		this.fileNameCheckTimeMap.remove(fileName);
+		this._fileNameCheckTimeMap.remove(fileName);
 	}
 
 	protected File getPluginFile(String pluginId)
 	{
-		String fileName = this.pluginIdFileNameMap.get(pluginId);
+		String fileName = this._pluginIdFileNameMap.get(pluginId);
 		File file = FileUtil.getFile(this.directory, fileName, false);
 
 		return file;
@@ -416,13 +454,18 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	 */
 	protected String getFilePluginId(String fileName)
 	{
-		for (Map.Entry<String, String> pluginIdFileName : this.pluginIdFileNameMap.entrySet())
+		for (Map.Entry<String, String> pluginIdFileName : this._pluginIdFileNameMap.entrySet())
 		{
 			if (fileName.equals(pluginIdFileName.getValue()))
 				return pluginIdFileName.getKey();
 		}
 
 		return null;
+	}
+
+	protected void updateLastModified()
+	{
+		this.lastModifiedService.setLastModifiedNow(LAST_MODIFIED_NAME);
 	}
 
 	/**
@@ -432,16 +475,17 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 	 */
 	protected boolean readCheckForReload()
 	{
-		long currentTime = System.currentTimeMillis();
+		if (this.lastModifiedService.isModified(LAST_MODIFIED_NAME, this._lastModified))
+		{
+			this._lastModified = this.lastModifiedService.getLastModified(LAST_MODIFIED_NAME);
+			checkForReload();
 
-		// 不需频繁重新检查
-		if (currentTime - this._prevReadCheckForReloadTime < this.readCheckForReloadTimeThreashold)
+			return true;
+		}
+		else
+		{
 			return false;
-
-		this._prevReadCheckForReloadTime = currentTime;
-		checkForReload();
-
-		return true;
+		}
 	}
 
 	/**
@@ -461,7 +505,7 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 		{
 			readLock.lock();
 
-			for (Map.Entry<String, FileCheckTime> entry : this.fileNameCheckTimeMap.entrySet())
+			for (Map.Entry<String, FileCheckTime> entry : this._fileNameCheckTimeMap.entrySet())
 			{
 				FileCheckTime fileCheckTime = entry.getValue();
 
@@ -483,7 +527,7 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 			}
 			else
 			{
-				Collection<FileCheckTime> fileCheckTimes = this.fileNameCheckTimeMap.values();
+				Collection<FileCheckTime> fileCheckTimes = this._fileNameCheckTimeMap.values();
 
 				for (File child : children)
 				{
@@ -519,8 +563,8 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 			if (hasDelete)
 			{
 				super.removeAllChartPlugins();
-				this.pluginIdFileNameMap.clear();
-				this.fileNameCheckTimeMap.clear();
+				this._pluginIdFileNameMap.clear();
+				this._fileNameCheckTimeMap.clear();
 			}
 
 			for (FileCheckTime reload : reloads)
@@ -576,25 +620,15 @@ public class DirectoryHtmlChartPluginManager extends ConcurrentChartPluginManage
 			if (registerChartPlugin(plugin))
 			{
 				inflateCagetory(plugin);
-				this.pluginIdFileNameMap.put(plugin.getId(), fileName);
+				this._pluginIdFileNameMap.put(plugin.getId(), fileName);
 			}
 			else
 				plugin = null;
 		}
 
-		this.fileNameCheckTimeMap.put(fileName, new FileCheckTime(file));
+		this._fileNameCheckTimeMap.put(fileName, new FileCheckTime(file));
 
 		return plugin;
-	}
-
-	@Override
-	protected boolean canReplaceForSameId(ChartPlugin my, Version myVersion, ChartPlugin old, Version oldVersion)
-	{
-		// 调试模式下总替换
-		if (LOGGER.isDebugEnabled())
-			return true;
-
-		return super.canReplaceForSameId(my, myVersion, old, oldVersion);
 	}
 
 	protected void inflateCagetory(HtmlChartPlugin plugin)

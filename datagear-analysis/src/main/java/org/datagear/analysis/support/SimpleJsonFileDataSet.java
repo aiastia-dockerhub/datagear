@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,7 +21,7 @@ import java.io.File;
 import java.util.List;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 
 /**
@@ -35,6 +35,8 @@ import org.datagear.analysis.DataSetQuery;
  */
 public class SimpleJsonFileDataSet extends AbstractJsonFileDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	/** JSON文件 */
 	private File file;
 
@@ -49,9 +51,9 @@ public class SimpleJsonFileDataSet extends AbstractJsonFileDataSet
 		this.file = file;
 	}
 
-	public SimpleJsonFileDataSet(String id, String name, List<DataSetProperty> properties, File file)
+	public SimpleJsonFileDataSet(String id, String name, List<DataSetField> fields, File file)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.file = file;
 	}
 
@@ -66,8 +68,8 @@ public class SimpleJsonFileDataSet extends AbstractJsonFileDataSet
 	}
 
 	@Override
-	protected File getJsonFile(DataSetQuery query) throws DataSetException
+	protected FileResolvedInfo getJsonFile(DataSetQuery query) throws DataSetException
 	{
-		return this.file;
+		return new FileResolvedInfo(this.file);
 	}
 }

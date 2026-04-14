@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,15 +17,16 @@
 
 package org.datagear.web.controller;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
-import org.datagear.management.domain.User;
+import org.datagear.util.StringUtil;
 import org.datagear.web.security.LoginCheckCodeErrorException;
+import org.datagear.web.util.DetectNewVersionScriptResolver;
 import org.datagear.web.util.OperationMessage;
 import org.datagear.web.util.WebUtils;
 import org.datagear.web.util.accesslatch.AccessLatch;
@@ -35,8 +36,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.web.WebAttributes;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.security.web.savedrequest.SavedRequest;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 
@@ -54,6 +58,16 @@ public class LoginController extends AbstractController
 	 * 登录页
 	 */
 	public static final String LOGIN_PAGE = "/login";
+
+	/**
+	 * 登录成功页
+	 */
+	public static final String LOGIN_PAGE_SUCCESS = "/login/success";
+
+	/**
+	 * 登录错误页
+	 */
+	public static final String LOGIN_PAGE_ERROR = "/login/error";
 
 	/**
 	 * 登录参数：用户名
@@ -77,11 +91,24 @@ public class LoginController extends AbstractController
 
 	public static final String CHECK_CODE_MODULE_LOGIN = "LOGIN";
 
+	/**
+	 * 登录成功后跳转页参数名。
+	 * <p>
+	 * 注意：不要修改此值，因为可能会被外部系统使用。
+	 * </p>
+	 */
+	public static final String REDIRECT_PARAM_NAME = "redirect";
+
 	@Autowired
 	private IpLoginLatch ipLoginLatch;
 
 	@Autowired
 	private UsernameLoginLatch usernameLoginLatch;
+
+	@Autowired
+	private DetectNewVersionScriptResolver detectNewVersionScriptResolver;
+
+	private RequestCache requestCache = new HttpSessionRequestCache();
 
 	public LoginController()
 	{
@@ -108,41 +135,102 @@ public class LoginController extends AbstractController
 		this.usernameLoginLatch = usernameLoginLatch;
 	}
 
+	public DetectNewVersionScriptResolver getDetectNewVersionScriptResolver()
+	{
+		return detectNewVersionScriptResolver;
+	}
+
+	public void setDetectNewVersionScriptResolver(DetectNewVersionScriptResolver detectNewVersionScriptResolver)
+	{
+		this.detectNewVersionScriptResolver = detectNewVersionScriptResolver;
+	}
+
+	public RequestCache getRequestCache()
+	{
+		return requestCache;
+	}
+
+	public void setRequestCache(RequestCache requestCache)
+	{
+		this.requestCache = requestCache;
+	}
+
 	/**
 	 * 打开登录界面。
 	 * 
 	 * @return
 	 */
 	@RequestMapping
-	public String login(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
+	public String login(HttpServletRequest request, HttpServletResponse response, Model model)
 	{
-		User user = new User();
-		user.setName(resolveLoginUsername(request, response));
+		setFormAction(model, "login", "doLogin");
+
+		LoginForm form = createLoginForm(request, response, model);
+		setFormModel(model, form);
+		this.detectNewVersionScriptResolver.enableIf(request);
 		
-		setFormModel(model, user, "login", "doLogin");
-		WebUtils.setEnableDetectNewVersionRequest(request);
-		
+		String redirect = request.getParameter(REDIRECT_PARAM_NAME);
+		if (!StringUtil.isEmpty(redirect))
+			model.addAttribute("redirect", redirect);
+
 		return "/login";
+	}
+
+	protected LoginForm createLoginForm(HttpServletRequest request, HttpServletResponse response, Model model)
+	{
+		LoginForm form = new LoginForm();
+		form.setName(resolveLoginUsername(request, response));
+
+		return form;
 	}
 
 	@RequestMapping(value = "/success", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> loginSuccess(HttpServletRequest request, HttpServletResponse response)
 	{
-		return optSuccessDataResponseEntity(request, "loginSuccess");
+		ResponseEntity<OperationMessage> responseEntity = optSuccessDataResponseEntity(request, "loginSuccess");
+
+		Map<String, Object> data = new HashMap<String, Object>();
+
+		String redirectUrl = WebUtils.getIndexPath(request);
+
+		// 参考：
+		// org.springframework.security.web.access.ExceptionTranslationFilter.sendStartAuthentication()
+		// org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler
+		SavedRequest savedRequest = this.requestCache.getRequest(request, response);
+		if (savedRequest != null)
+			redirectUrl = savedRequest.getRedirectUrl();
+
+		data.put("redirectUrl", redirectUrl);
+
+		responseEntity.getBody().setData(data);
+
+		return responseEntity;
 	}
 
 	@RequestMapping(value = "/error", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> loginError(HttpServletRequest request, HttpServletResponse response)
 	{
-		AuthenticationException ae = getAuthenticationExceptionWithRemove(request);
-		if (ae != null)
+		AuthenticationException exception = getAuthenticationException(request, true);
+		return handleLoginError(request, response, exception);
+	}
+
+	/**
+	 * 处理登录错误。
+	 * 
+	 * @param request
+	 * @param response
+	 * @param exception
+	 *            可能为{@code null}
+	 * @return
+	 */
+	protected ResponseEntity<OperationMessage> handleLoginError(HttpServletRequest request,
+			HttpServletResponse response, AuthenticationException exception)
+	{
+		if (exception instanceof LoginCheckCodeErrorException)
 		{
-			if (ae instanceof LoginCheckCodeErrorException)
-			{
-				return optFailResponseEntity(request, HttpStatus.UNAUTHORIZED, "checkCodeError");
-			}
+			return optFailResponseEntity(request, HttpStatus.UNAUTHORIZED, "checkCodeError");
 		}
 
 		int ipLoginRemain = this.ipLoginLatch.remain(request);
@@ -176,25 +264,6 @@ public class LoginController extends AbstractController
 		}
 	}
 
-	protected AuthenticationException getAuthenticationExceptionWithRemove(HttpServletRequest request)
-	{
-		// 参考org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler.saveException()
-
-		AuthenticationException authenticationException = (AuthenticationException) request
-				.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
-
-		if (authenticationException == null)
-		{
-			authenticationException = (AuthenticationException) request.getSession()
-					.getAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
-
-			if (authenticationException != null)
-				request.getSession().removeAttribute(WebAttributes.AUTHENTICATION_EXCEPTION);
-		}
-
-		return authenticationException;
-	}
-
 	protected String resolveLoginUsername(HttpServletRequest request, HttpServletResponse response)
 	{
 		HttpSession session = request.getSession();
@@ -208,45 +277,61 @@ public class LoginController extends AbstractController
 		return username;
 	}
 
-	/**
-	 * 将用户名编码为可存储至Cookie的字符串。
-	 * 
-	 * @param username
-	 * @return
-	 */
-	public static String encodeCookieUserName(String username)
+	public static class LoginForm implements ControllerForm
 	{
-		if (username == null || username.isEmpty())
-			return username;
+		private static final long serialVersionUID = 1L;
 
-		try
-		{
-			return URLEncoder.encode(username, "UTF-8");
-		}
-		catch (UnsupportedEncodingException e)
-		{
-			throw new ControllerException(e);
-		}
-	}
+		private String name = "";
 
-	/**
-	 * 将{@linkplain #encodeCookieUserName(String)}的用户名解码。
-	 * 
-	 * @param username
-	 * @return
-	 */
-	public static String decodeCookieUserName(String username)
-	{
-		if (username == null || username.isEmpty())
-			return username;
+		private String password = "";
 
-		try
+		private String checkCode = "";
+
+		private boolean rememberMe = false;
+
+		public LoginForm()
 		{
-			return WebUtils.decodeURL(username);
+			super();
 		}
-		catch (UnsupportedEncodingException e)
+
+		public String getName()
 		{
-			throw new ControllerException(e);
+			return name;
+		}
+
+		public void setName(String name)
+		{
+			this.name = name;
+		}
+
+		public String getPassword()
+		{
+			return password;
+		}
+
+		public void setPassword(String password)
+		{
+			this.password = password;
+		}
+
+		public String getCheckCode()
+		{
+			return checkCode;
+		}
+
+		public void setCheckCode(String checkCode)
+		{
+			this.checkCode = checkCode;
+		}
+
+		public boolean isRememberMe()
+		{
+			return rememberMe;
+		}
+
+		public void setRememberMe(boolean rememberMe)
+		{
+			this.rememberMe = rememberMe;
 		}
 	}
 }

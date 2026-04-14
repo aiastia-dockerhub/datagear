@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,8 +20,9 @@ package org.datagear.management.domain;
 import java.util.Date;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.support.SqlDataSet;
+import org.datagear.management.util.DtbsSourceConnectionFactory;
 import org.datagear.util.resource.ConnectionFactory;
 import org.springframework.beans.BeanUtils;
 
@@ -39,7 +40,7 @@ public class SqlDataSetEntity extends SqlDataSet implements DataSetEntity, Clone
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -49,50 +50,48 @@ public class SqlDataSetEntity extends SqlDataSet implements DataSetEntity, Clone
 	public SqlDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
-	public SqlDataSetEntity(String id, String name, List<DataSetProperty> properties,
-			SchemaConnectionFactory connectionFactory, String sql, User createUser)
+	public SqlDataSetEntity(String id, String name, List<DataSetField> fields,
+			DtbsSourceConnectionFactory connectionFactory, String sql, User createUser)
 	{
-		super(id, name, properties, connectionFactory, sql);
-		this.createTime = new Date();
+		super(id, name, fields, connectionFactory, sql);
 		this.createUser = createUser;
 	}
 
 	@Override
-	public SchemaConnectionFactory getConnectionFactory()
+	public DtbsSourceConnectionFactory getConnectionFactory()
 	{
-		return (SchemaConnectionFactory) super.getConnectionFactory();
+		return (DtbsSourceConnectionFactory) super.getConnectionFactory();
 	}
 
 	@Override
 	public void setConnectionFactory(ConnectionFactory connectionFactory)
 	{
-		if (connectionFactory != null && !(connectionFactory instanceof SchemaConnectionFactory))
+		if (connectionFactory != null && !(connectionFactory instanceof DtbsSourceConnectionFactory))
 			throw new IllegalArgumentException();
 
 		super.setConnectionFactory(connectionFactory);
 	}
 
 	/**
-	 * 获取{@linkplain SchemaConnectionFactory}。
+	 * 获取{@linkplain DtbsSourceConnectionFactory}。
 	 * <p>
 	 * 注意：
 	 * </p>
 	 * <p>
-	 * 此方法与{@linkplain #getConnectionFactory()}功能一致，另参考{@linkplain #setShmConFactory(SchemaConnectionFactory)}。
+	 * 此方法与{@linkplain #getConnectionFactory()}功能一致，另参考{@linkplain #setDtbsCnFty(DtbsSourceConnectionFactory)}。
 	 * </p>
 	 * 
 	 * @return
 	 */
-	public SchemaConnectionFactory getShmConFactory()
+	public DtbsSourceConnectionFactory getDtbsCnFty()
 	{
 		return getConnectionFactory();
 	}
 
 	/**
-	 * 设置{@linkplain SchemaConnectionFactory}。
+	 * 设置{@linkplain DtbsSourceConnectionFactory}。
 	 * <p>
 	 * 注意：
 	 * </p>
@@ -103,11 +102,11 @@ public class SqlDataSetEntity extends SqlDataSet implements DataSetEntity, Clone
 	 * 此方法名不应过长，某些数据库对标识符长度有限制，过长可能导致底层ORM的SQL语法错误（比如Oracle-12.2及以下版本限定标识符最长30个字符）。
 	 * </p>
 	 * 
-	 * @param schemaConnectionFactory
+	 * @param connectionFactory
 	 */
-	public void setShmConFactory(SchemaConnectionFactory schemaConnectionFactory)
+	public void setDtbsCnFty(DtbsSourceConnectionFactory connectionFactory)
 	{
-		setConnectionFactory(schemaConnectionFactory);
+		setConnectionFactory(connectionFactory);
 	}
 
 	@Override
@@ -171,14 +170,6 @@ public class SqlDataSetEntity extends SqlDataSet implements DataSetEntity, Clone
 		this.analysisProject = analysisProject;
 	}
 	
-	public void clearSchemaPassword()
-	{
-		SchemaConnectionFactory connectionFactory = getConnectionFactory();
-		Schema schema = (connectionFactory == null ? null : connectionFactory.getSchema());
-		if(schema != null)
-			schema.clearPassword();
-	}
-
 	@Override
 	public SqlDataSetEntity clone()
 	{

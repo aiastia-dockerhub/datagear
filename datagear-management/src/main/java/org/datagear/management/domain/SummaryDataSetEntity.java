@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -44,7 +44,7 @@ public class SummaryDataSetEntity extends AbstractDataSet implements DataSetEnti
 
 	private User createUser;
 
-	private Date createTime;
+	private Date createTime = null;
 
 	private int dataPermission = PERMISSION_NOT_LOADED;
 
@@ -53,16 +53,27 @@ public class SummaryDataSetEntity extends AbstractDataSet implements DataSetEnti
 	public SummaryDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
-	@SuppressWarnings("unchecked")
 	public SummaryDataSetEntity(String id, String name, String dataSetType, User createUser)
 	{
-		super(id, name, Collections.EMPTY_LIST);
+		super(id, name, Collections.emptyList());
 		this.dataSetType = dataSetType;
-		this.createTime = new Date();
 		this.createUser = createUser;
+	}
+
+	public SummaryDataSetEntity(DataSetEntity dataSetEntity)
+	{
+		super(dataSetEntity.getId(), dataSetEntity.getName(), dataSetEntity.getFields());
+		setMutableModel(dataSetEntity.isMutableModel());
+		setParams(dataSetEntity.getParams());
+		setDataFormat(dataSetEntity.getDataFormat());
+		setDescription(dataSetEntity.getDescription());
+		this.dataSetType = dataSetEntity.getDataSetType();
+		this.createUser = dataSetEntity.getCreateUser();
+		this.createTime = dataSetEntity.getCreateTime();
+		this.dataPermission = dataSetEntity.getDataPermission();
+		this.analysisProject = dataSetEntity.getAnalysisProject();
 	}
 
 	@Override

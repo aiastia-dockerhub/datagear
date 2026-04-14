@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -36,8 +36,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  *
  */
 public class HtmlTplDashboardWidgetEntity extends HtmlTplDashboardWidget
-		implements CreateUserEntity<String>, DataPermissionEntity<String>, AnalysisProjectAwareEntity<String>,
-		CloneableEntity
+		implements Entity<String>, CreateUserEntity, DataPermissionEntity, AnalysisProjectAwareEntity,
+		CloneableEntity, DescriptionEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -55,27 +55,27 @@ public class HtmlTplDashboardWidgetEntity extends HtmlTplDashboardWidget
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
 
 	private AnalysisProject analysisProject = null;
 
+	/** 描述 */
+	private String description = "";
+
 	public HtmlTplDashboardWidgetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
 	public HtmlTplDashboardWidgetEntity(String id, String template, HtmlTplDashboardWidgetRenderer renderer,
-			TplDashboardWidgetResManager resManager,
-			String name, User createUser)
+			TplDashboardWidgetResManager resManager, String name, User createUser)
 	{
 		super(id, template, renderer, resManager);
 		this.name = name;
 		this.createUser = createUser;
-		this.createTime = new Date();
 	}
 
 	public String getName()
@@ -100,11 +100,13 @@ public class HtmlTplDashboardWidgetEntity extends HtmlTplDashboardWidget
 		this.createUser = createUser;
 	}
 
+	@Override
 	public Date getCreateTime()
 	{
 		return createTime;
 	}
 
+	@Override
 	public void setCreateTime(Date createTime)
 	{
 		this.createTime = createTime;
@@ -132,6 +134,18 @@ public class HtmlTplDashboardWidgetEntity extends HtmlTplDashboardWidget
 	public void setAnalysisProject(AnalysisProject analysisProject)
 	{
 		this.analysisProject = analysisProject;
+	}
+
+	@Override
+	public String getDescription()
+	{
+		return description;
+	}
+
+	@Override
+	public void setDescription(String description)
+	{
+		this.description = description;
 	}
 
 	@Override

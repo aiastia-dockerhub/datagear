@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -43,7 +43,7 @@ public class LoginLatchFilter implements Filter
 {
 	private String loginProcessingUrl;
 
-	private AuthenticationFailureHandlerImpl authenticationFailureHandlerImpl;
+	private AuthenticationFailureHandlerExt authenticationFailureHandlerExt;
 
 	private ApplicationProperties applicationProperties;
 
@@ -59,12 +59,12 @@ public class LoginLatchFilter implements Filter
 	}
 
 	public LoginLatchFilter(String loginProcessingUrl,
-			AuthenticationFailureHandlerImpl authenticationFailureHandlerImpl,
+			AuthenticationFailureHandlerExt authenticationFailureHandlerExt,
 			ApplicationProperties applicationProperties, CheckCodeManager checkCodeManager)
 	{
 		super();
 		setLoginProcessingUrl(loginProcessingUrl);
-		this.authenticationFailureHandlerImpl = authenticationFailureHandlerImpl;
+		this.authenticationFailureHandlerExt = authenticationFailureHandlerExt;
 		this.applicationProperties = applicationProperties;
 		this.checkCodeManager = checkCodeManager;
 	}
@@ -80,14 +80,14 @@ public class LoginLatchFilter implements Filter
 		this._loginProcessingRequestMatcher = new AntPathRequestMatcher(loginProcessingUrl, "POST");
 	}
 
-	public AuthenticationFailureHandlerImpl getAuthenticationFailureHandlerImpl()
+	public AuthenticationFailureHandlerExt getAuthenticationFailureHandlerExt()
 	{
-		return authenticationFailureHandlerImpl;
+		return authenticationFailureHandlerExt;
 	}
 
-	public void setAuthenticationFailureHandlerImpl(AuthenticationFailureHandlerImpl authenticationFailureHandlerImpl)
+	public void setAuthenticationFailureHandlerExt(AuthenticationFailureHandlerExt authenticationFailureHandlerExt)
 	{
-		this.authenticationFailureHandlerImpl = authenticationFailureHandlerImpl;
+		this.authenticationFailureHandlerExt = authenticationFailureHandlerExt;
 	}
 
 	public ApplicationProperties getApplicationProperties()
@@ -130,39 +130,55 @@ public class LoginLatchFilter implements Filter
 		if (!requiresCheck(req, res))
 		{
 			chain.doFilter(request, response);
-			return;
 		}
+		else
+		{
+			doFilterLoginLatch(req, res, chain);
+		}
+	}
 
+	protected void doFilterLoginLatch(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+			throws IOException, ServletException
+	{
 		if (!this.applicationProperties.isDisableLoginCheckCode())
 		{
-			String cc = getLoginCheckCode(req);
+			String cc = getLoginCheckCode(request);
 
-			if (!this.checkCodeManager.isCheckCode(req.getSession(), LoginController.CHECK_CODE_MODULE_LOGIN, cc))
+			if (!this.checkCodeManager.isCheckCode(request.getSession(), LoginController.CHECK_CODE_MODULE_LOGIN, cc))
 			{
-				this.authenticationFailureHandlerImpl.onAuthenticationFailure(req, res,
+				// 应该废弃使用过的验证码
+				this.checkCodeManager.removeCheckCode(request.getSession(), LoginController.CHECK_CODE_MODULE_LOGIN);
+
+				this.authenticationFailureHandlerExt.onAuthenticationFailure(request, response,
 						new LoginCheckCodeErrorException(), false);
 
 				return;
 			}
 		}
 
-		if (AccessLatch.isLatched(this.authenticationFailureHandlerImpl.getIpLoginLatchRemain(req)))
+		if (AccessLatch.isLatched(this.authenticationFailureHandlerExt.getIpLoginLatchRemain(request)))
 		{
-			this.authenticationFailureHandlerImpl.onAuthenticationFailure(req, res,
+			this.authenticationFailureHandlerExt.onAuthenticationFailure(request, response,
 					new IpLoginLatchedException(), false);
 
 			return;
 		}
 
-		if (AccessLatch.isLatched(this.authenticationFailureHandlerImpl.getUsernameLoginLatchRemain(req)))
+		if (AccessLatch.isLatched(this.authenticationFailureHandlerExt.getUsernameLoginLatchRemain(request)))
 		{
-			this.authenticationFailureHandlerImpl.onAuthenticationFailure(req, res, new UsernameLoginLatchedException(),
+			this.authenticationFailureHandlerExt.onAuthenticationFailure(request, response, new UsernameLoginLatchedException(),
 					false);
 
 			return;
 		}
 
 		chain.doFilter(request, response);
+
+		// 应该废弃使用过的验证码
+		if (!this.applicationProperties.isDisableLoginCheckCode())
+		{
+			this.checkCodeManager.removeCheckCode(request.getSession(), LoginController.CHECK_CODE_MODULE_LOGIN);
+		}
 	}
 
 	protected String getLoginCheckCode(HttpServletRequest request)

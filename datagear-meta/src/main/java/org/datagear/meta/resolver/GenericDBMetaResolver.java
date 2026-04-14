@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,6 +20,7 @@ package org.datagear.meta.resolver;
 import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.datagear.connection.ConnectionOption;
@@ -48,15 +49,34 @@ import org.datagear.meta.resolver.support.MySqlDevotedDBMetaResolver;
  */
 public class GenericDBMetaResolver implements DBMetaResolver
 {
-	private List<DevotedDBMetaResolver> devotedDBMetaResolvers = null;
+	private List<DevotedDBMetaResolver> devotedDBMetaResolvers = Collections.emptyList();
 
 	public GenericDBMetaResolver()
 	{
+		this(null);
+	}
+
+	/**
+	 * 创建默认实例。
+	 * 
+	 * @param tableTypeResolver
+	 *            允许{@code null}
+	 */
+	public GenericDBMetaResolver(TableTypeResolver tableTypeResolver)
+	{
 		super();
 
+		MySqlDevotedDBMetaResolver r0 = new MySqlDevotedDBMetaResolver();
+		if (tableTypeResolver != null)
+			r0.setTableTypeResolver(tableTypeResolver);
+
+		WildcardDevotedDBMetaResolver r1 = new WildcardDevotedDBMetaResolver();
+		if (tableTypeResolver != null)
+			r1.setTableTypeResolver(tableTypeResolver);
+
 		this.devotedDBMetaResolvers = new ArrayList<>();
-		this.devotedDBMetaResolvers.add(new MySqlDevotedDBMetaResolver());
-		this.devotedDBMetaResolvers.add(new WildcardDevotedDBMetaResolver());
+		this.devotedDBMetaResolvers.add(r0);
+		this.devotedDBMetaResolvers.add(r1);
 	}
 
 	public List<DevotedDBMetaResolver> getDevotedDBMetaResolvers()
@@ -77,35 +97,99 @@ public class GenericDBMetaResolver implements DBMetaResolver
 	}
 
 	@Override
-	public List<SimpleTable> getSimpleTables(Connection cn) throws DBMetaResolverException
+	public List<SimpleTable> getTables(Connection cn) throws DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
-		return resolver.getSimpleTables(cn);
+		return resolver.getTables(cn);
 	}
 
 	@Override
-	public SimpleTable getRandomSimpleTable(Connection cn) throws DBMetaResolverException
+	public List<SimpleTable> getDataTables(Connection cn) throws DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
-		return resolver.getRandomSimpleTable(cn);
+		return resolver.getDataTables(cn);
 	}
 
 	@Override
-	public boolean isUserDataTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	public List<SimpleTable> getEntityTables(Connection cn) throws DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
-		return resolver.isUserDataTable(cn, table);
+		return resolver.getEntityTables(cn);
 	}
 
 	@Override
-	public boolean isUserDataEntityTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	public SimpleTable getRandomDataTable(Connection cn) throws DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
-		return resolver.isUserDataEntityTable(cn, table);
+		return resolver.getRandomDataTable(cn);
 	}
 
 	@Override
-	public Table getTable(Connection cn, String tableName) throws DBMetaResolverException
+	public String[] getTableTypes(Connection cn) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.getTableTypes(cn);
+	}
+
+	@Override
+	public boolean isDataTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isDataTable(cn, table);
+	}
+
+	@Override
+	public boolean[] isDataTables(Connection cn, SimpleTable[] tables) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isDataTables(cn, tables);
+	}
+
+	@Override
+	public List<Boolean> isDataTables(Connection cn, List<? extends SimpleTable> tables) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isDataTables(cn, tables);
+	}
+
+	@Override
+	public boolean isEntityTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isEntityTable(cn, table);
+	}
+
+	@Override
+	public boolean[] isEntityTables(Connection cn, SimpleTable[] tables) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isEntityTables(cn, tables);
+	}
+
+	@Override
+	public List<Boolean> isEntityTables(Connection cn, List<? extends SimpleTable> tables)
+			throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.isEntityTables(cn, tables);
+	}
+
+	@Override
+	public String getExactTableName(Connection cn, String tableName) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.getExactTableName(cn, tableName);
+	}
+
+	@Override
+	public String[] getExactTableNames(Connection cn, String[] tableNames) throws DBMetaResolverException
+	{
+		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
+		return resolver.getExactTableNames(cn, tableNames);
+	}
+
+	@Override
+	public Table getTable(Connection cn, String tableName) throws TableNotFoundException, DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
 		return resolver.getTable(cn, tableName);
@@ -147,7 +231,7 @@ public class GenericDBMetaResolver implements DBMetaResolver
 	}
 
 	@Override
-	public List<String[]> getImportTables(Connection cn, String... tableNames)
+	public List<String[]> getImportTables(Connection cn, String... tableNames) throws DBMetaResolverException
 	{
 		DevotedDBMetaResolver resolver = doGetDevotedDBMetaResolverNotNull(cn);
 		return resolver.getImportTables(cn, tableNames);

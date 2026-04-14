@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,13 +25,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.datagear.connection.ConnectionOption;
 import org.datagear.meta.Column;
 import org.datagear.meta.DataType;
 import org.datagear.meta.Database;
@@ -64,9 +64,33 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 
 	protected static final String[] EMPTY_STRING_ARRAY = new String[0];
 
+	private TableTypeResolver tableTypeResolver = new DefaultTableTypeResolver();
+
+	private DbMetaSupport dbMetaSupport = new DbMetaSupport();
+
 	public AbstractDevotedDBMetaResolver()
 	{
 		super();
+	}
+
+	public TableTypeResolver getTableTypeResolver()
+	{
+		return tableTypeResolver;
+	}
+
+	public void setTableTypeResolver(TableTypeResolver tableTypeResolver)
+	{
+		this.tableTypeResolver = tableTypeResolver;
+	}
+
+	public DbMetaSupport getDbMetaSupport()
+	{
+		return dbMetaSupport;
+	}
+
+	public void setDbMetaSupport(DbMetaSupport dbMetaSupport)
+	{
+		this.dbMetaSupport = dbMetaSupport;
 	}
 
 	@Override
@@ -97,7 +121,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	}
 
 	@Override
-	public List<SimpleTable> getSimpleTables(Connection cn) throws DBMetaResolverException
+	public List<SimpleTable> getTables(Connection cn) throws DBMetaResolverException
 	{
 		String catalog = getCatalog(cn);
 		DatabaseMetaData metaData = getDatabaseMetaData(cn);
@@ -107,57 +131,165 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	}
 
 	@Override
-	public SimpleTable getRandomSimpleTable(Connection cn) throws DBMetaResolverException
+	public List<SimpleTable> getDataTables(Connection cn) throws DBMetaResolverException
+	{
+		List<SimpleTable> tables = getTables(cn);
+
+		List<SimpleTable> re = new ArrayList<>(tables.size());
+
+		List<Boolean> dts = isDataTables(cn, tables);
+		for (int i = 0, len = tables.size(); i < len; i++)
+		{
+			if (Boolean.TRUE.equals(dts.get(i)))
+			{
+				re.add(tables.get(i));
+			}
+		}
+
+		return re;
+	}
+
+	@Override
+	public List<SimpleTable> getEntityTables(Connection cn) throws DBMetaResolverException
+	{
+		List<SimpleTable> tables = getTables(cn);
+
+		List<SimpleTable> re = new ArrayList<>(tables.size());
+
+		List<Boolean> dts = isEntityTables(cn, tables);
+		for (int i = 0, len = tables.size(); i < len; i++)
+		{
+			if (Boolean.TRUE.equals(dts.get(i)))
+			{
+				re.add(tables.get(i));
+			}
+		}
+
+		return re;
+	}
+
+	@Override
+	public SimpleTable getRandomDataTable(Connection cn) throws DBMetaResolverException
 	{
 		String catalog = getCatalog(cn);
 		DatabaseMetaData metaData = getDatabaseMetaData(cn);
 		String schema = getSchema(cn, metaData);
 
-		return getRandomSimpleTable(cn, metaData, catalog, schema);
+		return getRandomDataTable(cn, metaData, catalog, schema);
 	}
 
 	@Override
-	public boolean isUserDataTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	public String[] getTableTypes(Connection cn) throws DBMetaResolverException
 	{
-		String type = table.getType();
-
-		if (type == null)
-			return false;
-
-		if (TableType.SYSTEM_TABLE.equalsIgnoreCase(type) || TableType.LOCAL_TEMPORARY.equalsIgnoreCase(type)
-				|| TableType.GLOBAL_TEMPORARY.equalsIgnoreCase(type))
-			return false;
-
-		@JDBCCompatiblity("各驱动的命名各有不同，所以这里采用子串匹配方式")
-
-		String typeUpper = type.toUpperCase();
-
-		if (typeUpper.indexOf(TableType.TABLE) > -1 || typeUpper.indexOf(TableType.VIEW) > -1
-				|| typeUpper.indexOf(TableType.ALIAS) > -1 || typeUpper.indexOf(TableType.SYNONYM) > -1)
-			return true;
-
-		return false;
+		return this.tableTypeResolver.getTableTypes(cn);
 	}
 
 	@Override
-	public boolean isUserDataEntityTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	public boolean isDataTable(Connection cn, SimpleTable table) throws DBMetaResolverException
 	{
-		if (!isUserDataTable(cn, table))
-			return false;
-
-		@JDBCCompatiblity("各驱动的命名各有不同，所以这里采用子串匹配方式")
-
-		String typeUpper = table.getType().toUpperCase();
-
-		if (typeUpper.indexOf(TableType.VIEW) > -1 || typeUpper.indexOf(TableType.ALIAS) > -1
-				|| typeUpper.indexOf(TableType.SYNONYM) > -1)
-			return false;
-
-		return true;
+		return this.tableTypeResolver.isDataTable(cn, table);
 	}
 
 	@Override
-	public Table getTable(Connection cn, String tableName) throws DBMetaResolverException
+	public boolean[] isDataTables(Connection cn, SimpleTable[] tables) throws DBMetaResolverException
+	{
+		return this.tableTypeResolver.isDataTables(cn, tables);
+	}
+
+	@Override
+	public List<Boolean> isDataTables(Connection cn, List<? extends SimpleTable> tables) throws DBMetaResolverException
+	{
+		return this.tableTypeResolver.isDataTables(cn, tables);
+	}
+
+	@Override
+	public boolean isEntityTable(Connection cn, SimpleTable table) throws DBMetaResolverException
+	{
+		return this.tableTypeResolver.isEntityTable(cn, table);
+	}
+
+	@Override
+	public boolean[] isEntityTables(Connection cn, SimpleTable[] tables) throws DBMetaResolverException
+	{
+		return this.tableTypeResolver.isEntityTables(cn, tables);
+	}
+
+	@Override
+	public List<Boolean> isEntityTables(Connection cn, List<? extends SimpleTable> tables)
+			throws DBMetaResolverException
+	{
+		return this.tableTypeResolver.isEntityTables(cn, tables);
+	}
+
+	@Override
+	public String getExactTableName(Connection cn, String tableName) throws DBMetaResolverException
+	{
+		String[] re = getExactTableNames(cn, new String[] { tableName });
+		return re[0];
+	}
+
+	@Override
+	public String[] getExactTableNames(Connection cn, String[] tableNames) throws DBMetaResolverException
+	{
+		String[] re = new String[tableNames.length];
+
+		Arrays.fill(re, null);
+
+		String catalog = getCatalog(cn);
+		DatabaseMetaData metaData = getDatabaseMetaData(cn);
+		String schema = getSchema(cn, metaData);
+
+		ResultSet rs = null;
+		String[] tableTypes = getTableTypes(cn);
+
+		try
+		{
+			rs = getTableResulSet(cn, metaData, catalog, schema, null, tableTypes);
+			MetaResultSet mrs = MetaResultSet.valueOf(rs);
+
+			while (rs.next())
+			{
+				String name = mrs.getString("TABLE_NAME", null);
+
+				if (name != null)
+				{
+					int okCount = 0;
+
+					for (int i = 0; i < tableNames.length; i++)
+					{
+						if (re[i] != null && re[i].equals(tableNames[i]))
+							continue;
+
+						if (name.equals(tableNames[i]))
+						{
+							re[i] = name;
+							okCount++;
+						}
+						else if (re[i] == null && name.equalsIgnoreCase(tableNames[i]))
+						{
+							re[i] = name;
+						}
+					}
+
+					if (okCount == tableNames.length)
+						break;
+				}
+			}
+		}
+		catch (SQLException e)
+		{
+			throw new DBMetaResolverException(e);
+		}
+		finally
+		{
+			JdbcUtil.closeResultSet(rs);
+		}
+
+		return re;
+	}
+
+	@Override
+	public Table getTable(Connection cn, String tableName) throws TableNotFoundException, DBMetaResolverException
 	{
 		@JDBCCompatiblity("如果cn为readonly，某些驱动程序的DatabaseMetaData.isReadOnly()也将为true（比如：Postgresql JDBC 42.2.5），"
 				+ "这会导致解析Table.readonly不正确，因此这里设为false，以保证解析正确")
@@ -283,49 +415,6 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	}
 
 	/**
-	 * 获取表类型。
-	 * <p>
-	 * 如果查不到，{@linkplain #DEFAULT_TABLE_TYPES}将返回
-	 * </p>
-	 * 
-	 * @param cn
-	 * @param metaData
-	 * @return
-	 */
-	protected String[] getTableTypes(Connection cn, DatabaseMetaData metaData)
-	{
-		String[] types = null;
-
-		ResultSet rs = null;
-		try
-		{
-			List<String> typeList = new ArrayList<>();
-			rs = metaData.getTableTypes();
-
-			while (rs.next())
-				typeList.add(rs.getString(1));
-
-			types = typeList.toArray(new String[typeList.size()]);
-		}
-		catch (SQLException e)
-		{
-			LOGGER.warn("can not get table types :", e);
-		}
-		finally
-		{
-			JdbcUtil.closeResultSet(rs);
-		}
-
-		if (types == null || types.length == 0)
-		{
-			LOGGER.warn("no table types found for {}, the default will return", ConnectionOption.valueOfNonNull(cn));
-			return DEFAULT_TABLE_TYPES;
-		}
-
-		return types;
-	}
-
-	/**
 	 * @param cn
 	 * @param metaData
 	 * @param schema
@@ -339,7 +428,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	{
 		ResultSet rs = null;
 
-		String[] tableTypes = getTableTypes(cn, metaData);
+		String[] tableTypes = getTableTypes(cn);
 
 		try
 		{
@@ -437,7 +526,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	}
 
 	protected Table getTable(Connection cn, DatabaseMetaData metaData, String catalog, String schema, String tableName)
-			throws DBMetaResolverException
+			throws TableNotFoundException, DBMetaResolverException
 	{
 		boolean readonly = resolveTableReadonly(cn);
 
@@ -447,9 +536,10 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 			throw new TableNotFoundException(tableName);
 
 		SimpleTable simpleTable = simpleTables.get(0);
+		tableName = simpleTable.getName();
 
 		Table table = new Table();
-		table.setName(simpleTable.getName());
+		table.setName(tableName);
 		table.setType(simpleTable.getType());
 		table.setComment(simpleTable.getComment());
 		table.setColumns(getColumns(cn, metaData, catalog, schema, tableName, null));
@@ -497,6 +587,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	 * @param tableNamePattern
 	 *            为{@code null}或空则查询全部
 	 * @param tableTypes
+	 *            为{@code null}查询所有类型
 	 * @return
 	 * @throws SQLException
 	 */
@@ -610,7 +701,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 		{
 			Column column = new Column();
 
-			String columnName = getColumnName(resultSetMetaData, i);
+			String columnName = getColumnLabel(resultSetMetaData, i);
 
 			column.setName(columnName);
 			column.setType(resultSetMetaData.getColumnType(i));
@@ -1066,12 +1157,12 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 		return databaseMetaData.getTypeInfo();
 	}
 
-	protected SimpleTable getRandomSimpleTable(Connection cn, DatabaseMetaData metaData, String catalog, String schema)
+	protected SimpleTable getRandomDataTable(Connection cn, DatabaseMetaData metaData, String catalog, String schema)
 			throws DBMetaResolverException
 	{
 		SimpleTable simpleTable = null;
 
-		String[] tableTypes = getTableTypes(cn, metaData);
+		String[] tableTypes = getTableTypes(cn);
 
 		ResultSet rs = null;
 
@@ -1084,7 +1175,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 			{
 				simpleTable = readSimpleTable(cn, metaData, catalog, schema, mrs);
 
-				if (simpleTable != null && isUserDataTable(cn, simpleTable))
+				if (simpleTable != null && isDataTable(cn, simpleTable))
 					return simpleTable;
 			}
 
@@ -1102,14 +1193,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 
 	protected DatabaseMetaData getDatabaseMetaData(Connection cn) throws DBMetaResolverException
 	{
-		try
-		{
-			return cn.getMetaData();
-		}
-		catch (SQLException e)
-		{
-			throw new DBMetaResolverException(e);
-		}
+		return this.dbMetaSupport.getDatabaseMetaData(cn);
 	}
 
 	/**
@@ -1121,14 +1205,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	 */
 	protected String getCatalog(Connection cn) throws DBMetaResolverException
 	{
-		try
-		{
-			return cn.getCatalog();
-		}
-		catch (SQLException e)
-		{
-			throw new DBMetaResolverException(e);
-		}
+		return this.dbMetaSupport.getCatalog(cn);
 	}
 
 	/**
@@ -1141,25 +1218,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	 */
 	protected String getSchema(Connection cn, DatabaseMetaData databaseMetaData) throws DBMetaResolverException
 	{
-		String schema;
-
-		try
-		{
-			@JDBCCompatiblity("JDBC4.1（JDK1.7）才有Connection.getSchema()接口，为了兼容JDBC4.0（JDK1.6），"
-					+ "所以这里捕获Throwable，避免出现底层java.lang.Error")
-			String mySchema = cn.getSchema();
-			schema = mySchema;
-		}
-		catch (Throwable e)
-		{
-			LOGGER.warn("current schema will be set to null for error:", e);
-
-			@JDBCCompatiblity("在JDBC4.0（JDK1.6）中需要将其设置为null，才符合DatabaseMetaData.getTables(...)等接口的参数要求")
-			String mySchema = null;
-			schema = mySchema;
-		}
-
-		return schema;
+		return this.dbMetaSupport.getSchema(cn, databaseMetaData);
 	}
 
 	/**
@@ -1170,26 +1229,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 	 */
 	protected String getIdentifierQuote(Connection cn)
 	{
-		String iq = null;
-		
-		try
-		{
-			iq = cn.getMetaData().getIdentifierQuoteString();
-		}
-		catch (SQLException e)
-		{
-			
-		}
-		
-		if(iq == null || iq.isEmpty())
-		{
-			@JDBCCompatiblity("出现异常、，或者不规范的JDBC驱动返回空字符串时，使用JDBC规范规定的空格字符串")
-			String iqt = " ";
-			
-			iq = iqt;
-		}
-		
-		return iq;
+		return this.dbMetaSupport.getIdentifierQuote(cn);
 	}
 	
 	protected static final Comparator<Column> COLUMN_SORT_COMPARATOR = new Comparator<Column>()
@@ -1280,7 +1320,7 @@ public abstract class AbstractDevotedDBMetaResolver extends JdbcSupport implemen
 			for (int i = 1; i <= columnCount; i++)
 			{
 				@JDBCCompatiblity("这里列名忽略大小写比较，避免不规范的驱动程序")
-				String columnName = getColumnName(meta, i);
+				String columnName = getColumnLabel(meta, i);
 				if (columnName.equalsIgnoreCase(name))
 					return i;
 			}

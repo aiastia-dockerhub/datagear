@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -37,9 +37,9 @@ public class JsonDataImportOption extends ValueDataImportOption
 	}
 
 	public JsonDataImportOption(ExceptionResolve exceptionResolve, boolean ignoreInexistentColumn,
-			boolean nullForIllegalColumnValue, JsonDataFormat jsonDataFormat)
+			boolean nullForIllegalColumnValue, boolean nullForEmptyImportKey, JsonDataFormat jsonDataFormat)
 	{
-		super(exceptionResolve, ignoreInexistentColumn, nullForIllegalColumnValue);
+		super(exceptionResolve, ignoreInexistentColumn, nullForIllegalColumnValue, nullForEmptyImportKey);
 		this.jsonDataFormat = jsonDataFormat;
 	}
 

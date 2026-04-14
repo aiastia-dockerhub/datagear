@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.datagear.analysis.ChartDefinition;
+import org.datagear.analysis.ChartPlugin;
 import org.datagear.analysis.RenderException;
 import org.datagear.analysis.support.ChartWidget;
 import org.datagear.analysis.support.JsonSupport;
@@ -39,18 +40,20 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  *
  */
 public class HtmlChartWidgetEntity extends HtmlChartWidget
-		implements CreateUserEntity<String>, DataPermissionEntity<String>, AnalysisProjectAwareEntity<String>,
-		CloneableEntity
+		implements Entity<String>, CreateUserEntity, DataPermissionEntity, AnalysisProjectAwareEntity,
+		CloneableEntity, DescriptionEntity
 {
 	private static final long serialVersionUID = 1L;
 
 	/** 授权资源类型 */
 	public static final String AUTHORIZATION_RESOURCE_TYPE = "Chart";
 
-	protected static final ChartDataSetVO[] EMPTY_CHART_DATA_VO_SET = new ChartDataSetVO[0];
+	protected static final DataSetBindVO[] EMPTY_CHART_DATA_VO_SET = new DataSetBindVO[0];
 
 	/** 图表部件渲染时的图表选项信息 */
 	public static final String ATTR_CHART_OPTIONS = BUILTIN_ATTR_PREFIX + "CHART_OPTIONS";
+
+	private HtmlChartPluginVo pluginVo;
 
 	/**
 	 * 图表选项。
@@ -64,27 +67,28 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
 
 	private AnalysisProject analysisProject = null;
 
+	/** 描述 */
+	private String description = "";
+
 	public HtmlChartWidgetEntity()
 	{
 		super();
-		super.setChartDataSets(EMPTY_CHART_DATA_VO_SET);
-		this.createTime = new Date();
+		super.setDataSetBinds(EMPTY_CHART_DATA_VO_SET);
 	}
 
-	public HtmlChartWidgetEntity(String id, String name, ChartDataSetVO[] chartDataSets, HtmlChartPlugin chartPlugin,
+	public HtmlChartWidgetEntity(String id, String name, DataSetBindVO[] dataSetBinds, HtmlChartPlugin chartPlugin,
 			User createUser)
 	{
-		super(id, name, chartDataSets, chartPlugin);
-		super.setChartDataSets(EMPTY_CHART_DATA_VO_SET);
+		super(id, name, dataSetBinds, chartPlugin);
+		super.setDataSetBinds(EMPTY_CHART_DATA_VO_SET);
 		this.createUser = createUser;
-		this.createTime = new Date();
 	}
 
 	public String getOptions()
@@ -97,24 +101,38 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 		this.options = options;
 	}
 
-	public ChartDataSetVO[] getChartDataSetVOs()
+	public DataSetBindVO[] getDataSetBindVOs()
 	{
-		return (ChartDataSetVO[]) super.getChartDataSets();
+		return (DataSetBindVO[]) super.getDataSetBinds();
 	}
 
-	public void setChartDataSetVOs(ChartDataSetVO[] chartDataSetVOs)
+	public void setDataSetBindVOs(DataSetBindVO[] dataSetBindVOs)
 	{
-		super.setChartDataSets(chartDataSetVOs);
+		super.setDataSetBinds(dataSetBindVOs);
 	}
 
-	public HtmlChartPlugin getHtmlChartPlugin()
+	public HtmlChartPluginVo getPluginVo()
 	{
-		return getPlugin();
+		return this.pluginVo;
 	}
 
-	public void setHtmlChartPlugin(HtmlChartPlugin htmlChartPlugin)
+	public void setPluginVo(HtmlChartPluginVo pluginVo)
 	{
-		setPlugin(htmlChartPlugin);
+		this.pluginVo = pluginVo;
+	}
+
+	@JsonIgnore
+	@Override
+	public HtmlChartPlugin getPlugin()
+	{
+		return super.getPlugin();
+	}
+
+	@JsonIgnore
+	@Override
+	public void setPlugin(ChartPlugin plugin)
+	{
+		super.setPlugin(plugin);
 	}
 
 	@Override
@@ -129,11 +147,13 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 		this.createUser = createUser;
 	}
 
+	@Override
 	public Date getCreateTime()
 	{
 		return createTime;
 	}
 
+	@Override
 	public void setCreateTime(Date createTime)
 	{
 		this.createTime = createTime;
@@ -163,6 +183,18 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 		this.analysisProject = analysisProject;
 	}
 
+	@Override
+	public String getDescription()
+	{
+		return description;
+	}
+
+	@Override
+	public void setDescription(String description)
+	{
+		this.description = description;
+	}
+
 	/**
 	 * 获取{@linkplain #getAttrValues()}的JSON字符串形式。
 	 * <p>
@@ -190,6 +222,7 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 	 * 
 	 * @param attrValuesJson
 	 */
+	@JsonIgnore
 	@SuppressWarnings("unchecked")
 	public void setAttrValuesJson(String attrValuesJson)
 	{
@@ -216,18 +249,18 @@ public class HtmlChartWidgetEntity extends HtmlChartWidget
 		HtmlChartWidgetEntity entity = new HtmlChartWidgetEntity();
 		BeanUtils.copyProperties(this, entity);
 
-		ChartDataSetVO[] chartDataSetVOs = entity.getChartDataSetVOs();
+		DataSetBindVO[] dataSetBindVOs = entity.getDataSetBindVOs();
 
-		if (chartDataSetVOs != null && chartDataSetVOs.length != 0)
+		if (dataSetBindVOs != null && dataSetBindVOs.length != 0)
 		{
-			ChartDataSetVO[] cloned = new ChartDataSetVO[chartDataSetVOs.length];
+			DataSetBindVO[] cloned = new DataSetBindVO[dataSetBindVOs.length];
 
-			for (int i = 0; i < chartDataSetVOs.length; i++)
+			for (int i = 0; i < dataSetBindVOs.length; i++)
 			{
-				cloned[i] = chartDataSetVOs[i].clone();
+				cloned[i] = dataSetBindVOs[i].clone();
 			}
 
-			entity.setChartDataSetVOs(cloned);
+			entity.setDataSetBindVOs(cloned);
 		}
 
 		Map<String, Object> attrValues = this.getAttrValues();

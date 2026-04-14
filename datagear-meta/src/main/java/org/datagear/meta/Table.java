@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -143,6 +143,53 @@ public class Table extends AbstractTable
 	}
 
 	/**
+	 * 获取指定名称的列索引。
+	 * 
+	 * @param name
+	 * @return {@code -1}表示没有找到
+	 */
+	public int getColumnIndex(String name)
+	{
+		int re = -1;
+
+		if (this.columns == null)
+			return re;
+
+		for (int i = 0; i < this.columns.length; i++)
+		{
+			Column column = this.columns[i];
+			String myName = column.getName();
+
+			// 优先取准确列，其次取忽略大小写的列
+			if (myName.equals(name))
+			{
+				re = i;
+				break;
+			}
+			else if (myName.equalsIgnoreCase(name))
+			{
+				re = i;
+			}
+		}
+
+		return re;
+	}
+
+	/**
+	 * 获取指定索引的{@linkplain Column}。
+	 * 
+	 * @param index
+	 * @return
+	 */
+	public Column getColumn(int index)
+	{
+		if (this.columns == null)
+			throw new NullPointerException("no column");
+
+		return this.columns[index];
+	}
+
+	/**
 	 * 获取指定名称的{@linkplain Column}。
 	 * 
 	 * @param name
@@ -150,13 +197,28 @@ public class Table extends AbstractTable
 	 */
 	public Column getColumn(String name)
 	{
+		Column re = null;
+
+		if (this.columns == null)
+			return re;
+
 		for (Column column : this.columns)
 		{
-			if (column.getName().equals(name))
-				return column;
+			String myName = column.getName();
+
+			// 优先取准确列，其次取忽略大小写的列
+			if (myName.equals(name))
+			{
+				re = column;
+				break;
+			}
+			else if (myName.equalsIgnoreCase(name))
+			{
+				re = column;
+			}
 		}
 
-		return null;
+		return re;
 	}
 
 	/**
@@ -175,30 +237,61 @@ public class Table extends AbstractTable
 		return columns;
 	}
 
+	/**
+	 * 获取所有二进制列。
+	 * 
+	 * @return 返回空数组表示没有。
+	 */
+	public Column[] getBinaryColumns()
+	{
+		List<Column> re = new ArrayList<>(2);
+
+		if (this.columns != null)
+		{
+			for (Column column : this.columns)
+			{
+				if (JdbcUtil.isBinaryType(column.getType()))
+					re.add(column);
+			}
+		}
+
+		return re.toArray(new Column[re.size()]);
+	}
+
+	/**
+	 * 给定列是否是外键列。
+	 * 
+	 * @param name
+	 * @return
+	 */
+	public boolean isImportKeyColumn(String name)
+	{
+		if (!this.hasImportKey())
+			return false;
+
+		for (ImportKey ik : this.importKeys)
+		{
+			String[] colNames = ik.getColumnNames();
+
+			if (colNames != null)
+			{
+				for (String colName : colNames)
+				{
+					// 此处不应区分大小写
+					if (name.equalsIgnoreCase(colName))
+						return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
 	@Override
 	public String toString()
 	{
 		return getClass().getSimpleName() + " [name=" + getName() + ", type=" + getType() + ", comment=" + getComment()
 				+ ", columns=" + Arrays.toString(columns) + ", primaryKey=" + primaryKey + ", uniqueKeys="
 				+ Arrays.toString(uniqueKeys) + ", importKeys=" + Arrays.toString(importKeys) + "]";
-	}
-
-	/**
-	 * 获取所有二进制列。
-	 * 
-	 * @return 返回空数组表示没有。
-	 */
-	public static Column[] getBinaryColumns(Table table)
-	{
-		List<Column> bcs = new ArrayList<>(1);
-
-		Column[] columns = table.getColumns();
-		for (Column column : columns)
-		{
-			if (JdbcUtil.isBinaryType(column.getType()))
-				bcs.add(column);
-		}
-
-		return bcs.toArray(new Column[bcs.size()]);
 	}
 }

@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,6 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
-<a href="${statics['org.datagear.util.Global'].WEB_SITE}" target="_blank" class="logo link font-bold">
+<a href="${statics['org.datagear.util.Global'].WEB_SITE}" target="_blank" class="logo link img-link font-bold">
 	<@spring.message code="app.name" />
 </a>

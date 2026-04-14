@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -19,11 +19,13 @@
 <#include "include/page_import.ftl">
 [
 	{
-		"cssId" : "primevueCssLink",
-		"href" : "${contextPath}/static/lib/primevue@3.15.0/resources/themes/<@spring.theme code='primevue.cssName' />/theme.css"
+		"changeElement": "#primevueCssLink",
+		"changeAttr": "href",
+		"changeValue": "${contextPath}/static/lib/primevue@3.34.1/resources/themes/<@spring.theme code='primevue.cssName' />/theme.css"
 	},
 	{
-		"cssId" : "styleCssLink",
-		"href" : "${contextPath}/static/theme/<@spring.theme code='styleName' />/style.css"
+		"changeElement": "#styleCssLink",
+		"changeAttr": "href",
+		"changeValue": "${contextPath}/static/theme/<@spring.theme code='styleName' />/style.css?v=${clientCacheCode}"
 	}
 ]

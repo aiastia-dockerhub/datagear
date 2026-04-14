@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,7 +28,7 @@ import org.datagear.util.i18n.Labeled;
  * @author datagear@163.com
  *
  */
-public interface ChartPlugin extends Identifiable, Labeled
+public interface ChartPlugin extends Identifiable, Labeled, AdditionsAware
 {
 	String PROPERTY_ID = "id";
 	String PROPERTY_NAME_LABEL = Labeled.PROPERTY_NAME_LABEL;
@@ -41,6 +41,11 @@ public interface ChartPlugin extends Identifiable, Labeled
 	String PROPERTY_ORDER = "order";
 	String PROPERTY_CATEGORIES = "categories";
 	String PROPERTY_CATEGORY_ORDERS = "categoryOrders";
+	String PROPERTY_AUTHOR = "author";
+	String PROPERTY_CONTACT = "contact";
+	String PROPERTY_ISSUE_DATE = "issueDate";
+	String PROPERTY_PLATFORM_VERSION = "platformVersion";
+	String PROPERTY_ADDITIONS = AdditionsAware.PROPERTY_ADDITIONS;
 
 	/** 默认图标主题名 */
 	String DEFAULT_ICON_THEME_NAME = "default";
@@ -177,4 +182,53 @@ public interface ChartPlugin extends Identifiable, Labeled
 	 * @return
 	 */
 	List<Integer> getCategoryOrders();
+
+	/**
+	 * 获取作者。
+	 * <p>
+	 * 返回{@code null}或空字符串表示没有。
+	 * </p>
+	 * 
+	 * @return
+	 */
+	String getAuthor();
+
+	/**
+	 * 获取作者联系方式。
+	 * <p>
+	 * 返回{@code null}或空字符串表示没有。
+	 * </p>
+	 * 
+	 * @return
+	 */
+	String getContact();
+
+	/**
+	 * 获取发布日期。
+	 * <p>
+	 * 返回{@code null}或空字符串表示没有。
+	 * </p>
+	 * 
+	 * @return
+	 */
+	String getIssueDate();
+
+	/**
+	 * 获取支持的平台版本。
+	 * <p>
+	 * 比如：
+	 * </p>
+	 * <p>
+	 * 5.0.0+ 表示需要5.0.0及以上版本；
+	 * </p>
+	 * <p>
+	 * 5.0.0- 表示需要5.0.0及以下版本
+	 * </p>
+	 * <p>
+	 * 返回{@code null}或空字符串表示没有限制。
+	 * </p>
+	 * 
+	 * @return
+	 */
+	String getPlatformVersion();
 }

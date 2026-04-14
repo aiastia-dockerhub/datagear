@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -18,21 +18,22 @@
 package org.datagear.management.service.impl;
 
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.ibatis.session.RowBounds;
+import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.datagear.management.domain.CreateTimeEntity;
 import org.datagear.management.domain.User;
 import org.datagear.management.util.dialect.MbSqlDialect;
-import org.datagear.persistence.Order;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.persistence.Query;
 import org.datagear.util.StringUtil;
 import org.mybatis.spring.SqlSessionTemplate;
-import org.mybatis.spring.support.SqlSessionDaoSupport;
 
 /**
  * 抽象基于Mybatis的服务类。
@@ -40,40 +41,11 @@ import org.mybatis.spring.support.SqlSessionDaoSupport;
  * @author datagear@163.com
  *
  */
-public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
+public abstract class AbstractMybatisService<T>
 {
-	public static final String DEFAULT_IDENTIFIER_QUOTE_KEY = "_iq_";
-
-	/** 查询参数：不匹配 */
-	public static final String QUERY_PARAM_NOT_LIKE = "queryNotLike";
-
-	/** 查询参数：关键字 */
-	public static final String QUERY_PARAM_KEYWORD = "queryKeyword";
-
-	/** 查询参数：条件 */
-	public static final String QUERY_PARAM_CONDITION = "queryCondition";
-
-	/** 查询参数：排序 */
-	public static final String QUERY_PARAM_ORDER = "queryOrder";
-
-	/** 分页查询是否支持 */
-	public static final String PAGING_QUERY_SUPPORTED = "_pagingQuerySupported";
-
-	/** 分页查询SQL首部片段 */
-	public static final String PAGING_QUERY_HEAD_SQL = "_pagingQueryHead";
-
-	/** 分页查询SQL尾部片段 */
-	public static final String PAGING_QUERY_FOOT_SQL = "_pagingQueryFoot";
-
-	/** {@linkplain MbSqlDialect#funcNameMax()}的MyBatis参数名 */
-	public static final String FUNC_NAME_MAX = "_FUNC_MAX";
-
-	/** {@linkplain MbSqlDialect#funcNameModInt()}的MyBatis参数名 */
-	public static final String FUNC_NAME_MODINT = "_FUNC_MODINT";
+	private SqlSessionDaoSupportImpl sqlSessionDaoSupportImpl;
 
 	private MbSqlDialect dialect;
-
-	private String identifierQuoteKey = DEFAULT_IDENTIFIER_QUOTE_KEY;
 
 	public AbstractMybatisService()
 	{
@@ -83,15 +55,19 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	public AbstractMybatisService(SqlSessionFactory sqlSessionFactory, MbSqlDialect dialect)
 	{
 		super();
-		setSqlSessionFactory(sqlSessionFactory);
+		this.sqlSessionDaoSupportImpl = new SqlSessionDaoSupportImpl(sqlSessionFactory);
 		this.dialect = dialect;
+
+		this.sqlSessionDaoSupportImpl.afterPropertiesSet();
 	}
 
 	public AbstractMybatisService(SqlSessionTemplate sqlSessionTemplate, MbSqlDialect dialect)
 	{
 		super();
-		setSqlSessionTemplate(sqlSessionTemplate);
+		this.sqlSessionDaoSupportImpl = new SqlSessionDaoSupportImpl(sqlSessionTemplate);
 		this.dialect = dialect;
+
+		this.sqlSessionDaoSupportImpl.afterPropertiesSet();
 	}
 
 	public MbSqlDialect getDialect()
@@ -104,14 +80,14 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 		this.dialect = dialect;
 	}
 
-	public String getIdentifierQuoteKey()
+	protected SqlSessionDaoSupportImpl getSqlSessionDaoSupportImpl()
 	{
-		return identifierQuoteKey;
+		return sqlSessionDaoSupportImpl;
 	}
 
-	public void setIdentifierQuoteKey(String identifierQuoteKey)
+	protected void setSqlSessionDaoSupportImpl(SqlSessionDaoSupportImpl sqlSessionDaoSupportImpl)
 	{
-		this.identifierQuoteKey = identifierQuoteKey;
+		this.sqlSessionDaoSupportImpl = sqlSessionDaoSupportImpl;
 	}
 
 	/**
@@ -139,10 +115,26 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	protected void add(T entity, Map<String, Object> params)
 	{
 		checkAddInput(entity);
+		inflateCreateTime(entity);
 
 		params.put("entity", entity);
 
 		insertMybatis("insert", params);
+	}
+
+	protected boolean inflateCreateTime(Object entity)
+	{
+		if (entity instanceof CreateTimeEntity)
+		{
+			CreateTimeEntity ct = (CreateTimeEntity) entity;
+
+			if (ct.getCreateTime() == null)
+			{
+				ct.setCreateTime(new Date());
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -171,11 +163,22 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected boolean update(T entity, Map<String, Object> params)
 	{
-		checkUpdateInput(entity);
+		return (update("update", entity, params) > 0);
+	}
 
+	/**
+	 * 更新。
+	 * 
+	 * @param entity
+	 * @param params
+	 * @return
+	 */
+	protected int update(String statement, T entity, Map<String, Object> params)
+	{
+		checkUpdateInput(entity);
 		params.put("entity", entity);
 
-		return (updateMybatis("update", params) > 0);
+		return updateMybatis(statement, params);
 	}
 
 	/**
@@ -311,7 +314,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected List<T> query(String statement, Query query, Map<String, Object> params, boolean postProcessQuery)
 	{
-		addQueryParam(params, query);
+		setQueryParams(params, query);
 
 		List<T> list = query(statement, params);
 
@@ -374,15 +377,43 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	protected PagingData<T> pagingQuery(String statement, PagingQuery pagingQuery, Map<String, Object> params,
 			boolean postProcessQuery)
 	{
-		addQueryParam(params, pagingQuery);
+		return pagingQuery(statement, pagingQuery, params, true, 0, postProcessQuery);
+	}
 
-		int total = (Integer) selectOneMybatis(statement + "Count", params);
+	/**
+	 * 分页查询。
+	 * <p>
+	 * 如果{@code queryTotal}为{@code true}，此方法要求已定义{@code [statement]Count}
+	 * SQL。例如：
+	 * </p>
+	 * <p>
+	 * 如果{@code statement}为{@code "pagingQuery"}，那么必须已定义{@code "pagingQueryCount"}
+	 * SQL Mapper。
+	 * </p>
+	 * 
+	 * @param statement
+	 * @param pagingQuery
+	 * @param params
+	 * @param queryTotal
+	 * @param total
+	 *            如果{@code queryTotal}为{@code false}，应设置此总记录数；否则，设为{@code 0}即可
+	 * @param postProcessQuery
+	 *            是否内部执行{@linkplain #postProcessQuery(List)}
+	 * @return
+	 */
+	protected PagingData<T> pagingQuery(String statement, PagingQuery pagingQuery, Map<String, Object> params,
+			boolean queryTotal, int total, boolean postProcessQuery)
+	{
+		setQueryParams(params, pagingQuery);
+
+		if (queryTotal)
+			total = (Integer) selectOneMybatis(statement + "Count", params);
 
 		PagingData<T> pagingData = new PagingData<>(pagingQuery.getPage(), total, pagingQuery.getPageSize());
 
 		int startIndex = pagingData.getStartIndex();
 
-		addDialectParamsPagingQuery(params, startIndex, pagingData.getPageSize());
+		setPagingQueryParams(params, startIndex, pagingData.getPageSize());
 
 		List<T> list = null;
 
@@ -491,65 +522,19 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	}
 
 	/**
-	 * 添加{@linkplain Query}参数。
+	 * 设置{@linkplain Query}查询SQL参数。
 	 * 
 	 * @param param
 	 * @param query
 	 * @return
 	 */
-	protected void addQueryParam(Map<String, Object> param, Query query)
+	protected void setQueryParams(Map<String, Object> param, Query query)
 	{
-		String keyword = query.getKeyword();
-//		String condition = query.getCondition();
-		Order[] orders = query.getOrders();
-
-		param.put(QUERY_PARAM_NOT_LIKE, query.isNotLike());
-
-		if (keyword != null && !keyword.isEmpty())
-		{
-			if (!keyword.startsWith("%") && !keyword.endsWith("%"))
-				keyword = "%" + keyword + "%";
-
-			param.put(QUERY_PARAM_KEYWORD, keyword);
-		}
-
-		// 禁用query.condition，避免SQL注入问题
-//		if (condition != null && !condition.isEmpty())
-//		{
-//			param.put(QUERY_PARAM_CONDITION, condition);
-//		}
-
-		if (orders != null && orders.length > 0)
-		{
-			StringBuilder orderSql = new StringBuilder();
-
-			for (Order order : orders)
-			{
-				if (orderSql.length() > 0)
-					orderSql.append(", ");
-
-				orderSql.append(toQuoteIdentifier(order.getName()));
-				orderSql.append(" ");
-
-				if ("DESC".equalsIgnoreCase(order.getType()))
-					orderSql.append("DESC");
-				else
-					orderSql.append("ASC");
-			}
-
-			param.put(QUERY_PARAM_ORDER, orderSql.toString());
-		}
-	}
-
-	protected void addDialectParamsBase(Map<String, Object> param)
-	{
-		param.put(this.identifierQuoteKey, this.dialect.getIdentifierQuote());
-		param.put(FUNC_NAME_MAX, this.dialect.funcNameMax());
-		param.put(FUNC_NAME_MODINT, this.dialect.funcNameModInt());
+		this.dialect.setQueryParams(param, query);
 	}
 
 	/**
-	 * 添加分页查询参数。
+	 * 设置分页查询SQL参数。
 	 * 
 	 * @param params
 	 * @param startIndex
@@ -557,28 +542,9 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 * @param fetchSize
 	 *            页大小
 	 */
-	protected void addDialectParamsPagingQuery(Map<String, Object> params, int startIndex, int fetchSize)
+	protected void setPagingQueryParams(Map<String, Object> params, int startIndex, int fetchSize)
 	{
-		params.put(PAGING_QUERY_SUPPORTED, this.dialect.supportsPaging());
-
-		String sqlHead = null;
-		String sqlFoot = null;
-
-		if (this.dialect.supportsPaging())
-		{
-			sqlHead = this.dialect.pagingSqlHead(startIndex, fetchSize);
-			sqlFoot = this.dialect.pagingSqlFoot(startIndex, fetchSize);
-		}
-		else
-		{
-			// 不支持的话，设为空字符串，方便底层SQL Mapper处理
-
-			sqlHead = "";
-			sqlFoot = "";
-		}
-
-		params.put(PAGING_QUERY_HEAD_SQL, sqlHead);
-		params.put(PAGING_QUERY_FOOT_SQL, sqlFoot);
+		this.dialect.setPagingQueryParams(params, startIndex, fetchSize);
 	}
 
 	/**
@@ -601,7 +567,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected <TT> TT selectOneMybatis(String statement, Map<String, Object> parameter)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().selectOne(toGlobalSqlId(statement), parameter);
 	}
@@ -626,7 +592,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected <E> List<E> selectListMybatis(String statement, Map<String, Object> parameter)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().selectList(toGlobalSqlId(statement), parameter);
 	}
@@ -641,7 +607,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected <E> List<E> selectListMybatis(String statement, Map<String, Object> parameter, RowBounds rowBounds)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().selectList(toGlobalSqlId(statement), parameter, rowBounds);
 	}
@@ -666,7 +632,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected int insertMybatis(String statement, Map<String, Object> parameter)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().insert(toGlobalSqlId(statement), parameter);
 	}
@@ -691,7 +657,7 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected int updateMybatis(String statement, Map<String, Object> parameter)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().update(toGlobalSqlId(statement), parameter);
 	}
@@ -716,9 +682,23 @@ public abstract class AbstractMybatisService<T> extends SqlSessionDaoSupport
 	 */
 	protected int deleteMybatis(String statement, Map<String, Object> parameter)
 	{
-		addDialectParamsBase(parameter);
+		addBuiltInParams(parameter);
 
 		return getSqlSession().delete(toGlobalSqlId(statement), parameter);
+	}
+
+	protected SqlSession getSqlSession()
+	{
+		return getSqlSessionDaoSupportImpl().getSqlSession();
+	}
+
+	/**
+	 * 添加内置SQL参数。
+	 * 
+	 * @param param
+	 */
+	protected void addBuiltInParams(Map<String, Object> param)
+	{
 	}
 
 	/**

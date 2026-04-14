@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -19,6 +19,8 @@ package org.datagear.analysis;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.datagear.util.IOUtil;
+
 /**
  * 模板看板部件。
  * <p>
@@ -30,12 +32,18 @@ import java.util.List;
  */
 public abstract class TplDashboardWidget extends AbstractIdentifiable
 {
-	public static final String DEFAULT_TEMPLATE_ENCODING = "UTF-8";
+	private static final long serialVersionUID = 1L;
+
+	public static final String DEFAULT_TEMPLATE_ENCODING = IOUtil.CHARSET_UTF_8;
 
 	/** 模板名称集 */
 	private String[] templates;
 
+	/** 模板编码 */
 	private String templateEncoding = DEFAULT_TEMPLATE_ENCODING;
+
+	/** 版本 */
+	private String version = "";
 
 	public TplDashboardWidget()
 	{
@@ -66,6 +74,16 @@ public abstract class TplDashboardWidget extends AbstractIdentifiable
 	public void setTemplateEncoding(String templateEncoding)
 	{
 		this.templateEncoding = templateEncoding;
+	}
+
+	public String getVersion()
+	{
+		return version;
+	}
+
+	public void setVersion(String version)
+	{
+		this.version = version;
 	}
 
 	/**

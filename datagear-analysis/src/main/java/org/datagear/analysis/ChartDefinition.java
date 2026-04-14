@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,11 +17,14 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.datagear.util.Global;
 
 /**
  * 图表定义。
@@ -29,24 +32,34 @@ import java.util.Map;
  * @author datagear@163.com
  *
  */
-public class ChartDefinition extends AbstractIdentifiable implements ResultDataFormatAware
+public class ChartDefinition extends AbstractIdentifiable implements ResultDataFormatAware, Serializable
 {
-	/** 内置图表属性名前缀 */
-	public static final String BUILTIN_ATTR_PREFIX = "DG_";
+	private static final long serialVersionUID = 1L;
+
+	/**
+	 * 内置图表属性名前缀。
+	 * <p>
+	 * 所有内置属性名都应以此作为前缀，避免名称冲突。
+	 * </p>
+	 * <p>
+	 * 注意：谨慎重构此常量值，因为它可能已被用于系统已创建的图表中，重构它将导致这些图表逻辑出错。
+	 * </p>
+	 */
+	public static final String BUILTIN_ATTR_PREFIX = Global.NAME_SHORT_UCUS;
 
 	public static final String PROPERTY_ID = "id";
 	public static final String PROPERTY_NAME = "name";
-	public static final String PROPERTY_CHART_DATASETS = "chartDataSets";
+	public static final String PROPERTY_DATA_SET_BINDS = "dataSetBinds";
 	public static final String PROPERTY_ATTR_VALUES = "attrValues";
 	public static final String PROPERTY_UPDATE_INTERVAL = "updateInterval";
 
-	public static final ChartDataSet[] EMPTY_CHART_DATA_SET = new ChartDataSet[0];
+	public static final DataSetBind[] EMPTY_DATA_SET_BINDS = new DataSetBind[0];
 
 	/** 图表名称 */
 	private String name;
 
 	/** 图表数据集 */
-	private ChartDataSet[] chartDataSets = EMPTY_CHART_DATA_SET;
+	private DataSetBind[] dataSetBinds = EMPTY_DATA_SET_BINDS;
 
 	/** 图表属性值映射表 */
 	private Map<String, Object> attrValues = null;
@@ -62,16 +75,16 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 		super();
 	}
 
-	public ChartDefinition(String id, String name, ChartDataSet[] chartDataSets)
+	public ChartDefinition(String id, String name, DataSetBind[] dataSetBinds)
 	{
 		super(id);
 		this.name = name;
-		this.chartDataSets = chartDataSets;
+		this.dataSetBinds = dataSetBinds;
 	}
 
 	public ChartDefinition(ChartDefinition chartDefinition)
 	{
-		this(chartDefinition.getId(), chartDefinition.name, chartDefinition.chartDataSets);
+		this(chartDefinition.getId(), chartDefinition.name, chartDefinition.dataSetBinds);
 		this.attrValues = chartDefinition.attrValues;
 		this.updateInterval = chartDefinition.updateInterval;
 		this.resultDataFormat = chartDefinition.resultDataFormat;
@@ -87,14 +100,14 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 		this.name = name;
 	}
 
-	public ChartDataSet[] getChartDataSets()
+	public DataSetBind[] getDataSetBinds()
 	{
-		return chartDataSets;
+		return dataSetBinds;
 	}
 
-	public void setChartDataSets(ChartDataSet[] chartDataSets)
+	public void setDataSetBinds(DataSetBind[] dataSetBinds)
 	{
-		this.chartDataSets = chartDataSets;
+		this.dataSetBinds = dataSetBinds;
 	}
 
 	/**
@@ -185,7 +198,7 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 	/**
 	 * 获取{@linkplain ChartResult}。
 	 * <p>
-	 * 如果{@linkplain ChartQuery#getDataSetQuery(int)}为{@code null}，此方法将使用{@linkplain ChartDataSet#getQuery()}。
+	 * 如果{@linkplain ChartQuery#getDataSetQuery(int)}为{@code null}，此方法将使用{@linkplain DataSetBind#getQuery()}。
 	 * </p>
 	 * 
 	 * @param query
@@ -194,18 +207,30 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 	 */
 	public ChartResult getResult(ChartQuery query) throws DataSetException
 	{
-		if (this.chartDataSets == null || this.chartDataSets.length == 0)
+		if (this.dataSetBinds == null || this.dataSetBinds.length == 0)
 			return new ChartResult(Collections.emptyList());
 
 		ChartResult chartResult = new ChartResult();
 
-		List<DataSetResult> dataSetResults = new ArrayList<DataSetResult>(this.chartDataSets.length);
+		List<DataSetResult> dataSetResults = new ArrayList<DataSetResult>(this.dataSetBinds.length);
 
-		for (int i = 0; i < this.chartDataSets.length; i++)
+		for (int i = 0; i < this.dataSetBinds.length; i++)
 		{
-			ChartDataSet chartDataSet = this.chartDataSets[i];
-			DataSetQuery dataSetQuery = getDataSetQuery(query, chartDataSet, i);
-			DataSetResult dataSetResult = chartDataSet.getResult(dataSetQuery);
+			DataSetBind dataSetBind = this.dataSetBinds[i];
+			DataSetQuery dataSetQuery = getDataSetQuery(query, dataSetBind, i);
+			boolean ignoreFetch = dataSetQuery.isIgnoreFetch();
+
+			DataSetResult dataSetResult;
+
+			if (ignoreFetch)
+				dataSetResult = createDataSetResultForIgnoreFetch(dataSetQuery);
+			else
+			{
+				dataSetResult = dataSetBind.getResult(dataSetQuery);
+
+				if (dataSetResult != null)
+					dataSetResult.setIgnoreFetch(false);
+			}
 
 			dataSetResults.add(dataSetResult);
 		}
@@ -219,16 +244,16 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 	 * 获取指定{@linkplain DataSetQuery}。
 	 * 
 	 * @param chartQuery
-	 * @param chartDataSet
-	 * @param chartDataSetIdx
+	 * @param dataSetBind
+	 * @param dataSetBindIdx
 	 * @return
 	 */
-	protected DataSetQuery getDataSetQuery(ChartQuery chartQuery, ChartDataSet chartDataSet, int chartDataSetIdx)
+	protected DataSetQuery getDataSetQuery(ChartQuery chartQuery, DataSetBind dataSetBind, int dataSetBindIdx)
 	{
-		DataSetQuery dataSetQuery = chartQuery.getDataSetQuery(chartDataSetIdx);
+		DataSetQuery dataSetQuery = chartQuery.getDataSetQuery(dataSetBindIdx);
 
 		if (dataSetQuery == null)
-			dataSetQuery = chartDataSet.getQuery();
+			dataSetQuery = dataSetBind.getQuery();
 
 		if (dataSetQuery == null)
 			dataSetQuery = DataSetQuery.valueOf();
@@ -249,6 +274,14 @@ public class ChartDefinition extends AbstractIdentifiable implements ResultDataF
 		}
 
 		return dataSetQuery;
+	}
+
+	protected DataSetResult createDataSetResultForIgnoreFetch(DataSetQuery dataSetQuery)
+	{
+		DataSetResult dr = new DataSetResult(null);
+		dr.setIgnoreFetch(true);
+
+		return dr;
 	}
 
 	@Override

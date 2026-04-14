@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,11 +25,12 @@ page_code_editor.ftl
 
 变量：
 //数据源ID，不允许为null
-po.getSqlEditorSchemaId
+po.getSqlEditorDtbsSourceId
 -->
 <script type="text/javascript">
 (function(po)
 {
+	//page.js
 	$.inflatePageSqlEditor(po);
 })
 (${pid});

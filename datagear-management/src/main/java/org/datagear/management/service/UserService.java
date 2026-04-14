@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -54,7 +54,7 @@ public interface UserService extends EntityService<String, User>
 	User getByIdNoPassword(String id);
 
 	/**
-	 * 根据ID获取用户基本信息，密码已被清除、且{@linkplain User#getRoles()}未设置。
+	 * 根据ID获取用户基本信息，参考{@linkplain User#cloneSimple()}。
 	 * 
 	 * @param id
 	 * @return
@@ -62,7 +62,7 @@ public interface UserService extends EntityService<String, User>
 	User getByIdSimple(String id);
 
 	/**
-	 * 根据用户名获取用户基本信息，密码已被清除、且{@linkplain User#getRoles()}未设置。
+	 * 根据用户名获取用户基本信息，参考{@linkplain User#cloneSimple()}。
 	 * 
 	 * @param name
 	 * @return
@@ -70,7 +70,7 @@ public interface UserService extends EntityService<String, User>
 	User getByNameSimple(String name);
 
 	/**
-	 * 根据ID获取用户，密码已被清除、且{@linkplain User#getRoles()}未设置。
+	 * 根据ID获取用户基本信息，参考{@linkplain User#cloneSimple()}。
 	 * 
 	 * @param ids
 	 * @param discardNull
@@ -80,12 +80,28 @@ public interface UserService extends EntityService<String, User>
 	List<User> getByIdsSimple(String[] ids, boolean discardNull);
 
 	/**
+	 * 获总计取用户数。
+	 * 
+	 * @return
+	 */
+	int getUserCount();
+
+	/**
 	 * 更新，但是忽略{@linkplain User#getRoles()}。
 	 * 
 	 * @param user
 	 * @return
 	 */
 	boolean updateIgnoreRole(User user);
+
+	/**
+	 * 用户密码是否正确。
+	 * 
+	 * @param id
+	 * @param password
+	 * @return
+	 */
+	boolean isPasswordMatchById(String id, String password);
 
 	/**
 	 * 更新用户密码。

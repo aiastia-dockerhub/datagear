@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,7 +31,7 @@ import org.springframework.beans.BeanUtils;
  * @author datagear@163.com
  *
  */
-public class User extends AbstractStringIdEntity implements CloneableEntity
+public class User extends AbstractStringIdEntity implements CreateTimeEntity, CloneableEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -57,7 +57,7 @@ public class User extends AbstractStringIdEntity implements CloneableEntity
 	private boolean anonymous = false;
 
 	/** 此模式的创建时间 */
-	private Date createTime = new Date();
+	private Date createTime = null;
 
 	/** 角色集 */
 	private Set<Role> roles = Collections.emptySet();
@@ -139,11 +139,13 @@ public class User extends AbstractStringIdEntity implements CloneableEntity
 		this.anonymous = anonymous;
 	}
 
+	@Override
 	public Date getCreateTime()
 	{
 		return createTime;
 	}
 
+	@Override
 	public void setCreateTime(Date createTime)
 	{
 		this.createTime = createTime;
@@ -201,7 +203,7 @@ public class User extends AbstractStringIdEntity implements CloneableEntity
 	}
 
 	/**
-	 * 拷贝对象，排除密码。
+	 * 拷贝，排除密码。
 	 * 
 	 * @return
 	 */
@@ -209,6 +211,25 @@ public class User extends AbstractStringIdEntity implements CloneableEntity
 	{
 		User entity = clone();
 		entity.clearPassword();
+
+		return entity;
+	}
+
+	/**
+	 * 拷贝，仅包含用户基本信息（ID、用户名、姓名）， {@linkplain #getPassword()}为{@code null}、
+	 * {@linkplain getRoles()}、{@linkplain #getEmail()}}为空、
+	 * {@linkplain #getCreateTime()}为{@code null}。
+	 * 
+	 * @return
+	 */
+	public User cloneSimple()
+	{
+		User entity = clone();
+
+		entity.clearPassword();
+		entity.setRoles(Collections.emptySet());
+		entity.setEmail("");
+		entity.setCreateTime(null);
 
 		return entity;
 	}

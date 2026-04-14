@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -30,17 +30,33 @@ public class UnsupportedGetConnectionException extends ConnectionSourceException
 {
 	private static final long serialVersionUID = 1L;
 
-	private ConnectionOption connectionOption;
+	public UnsupportedGetConnectionException()
+	{
+		super();
+	}
+
+	public UnsupportedGetConnectionException(String message)
+	{
+		super(message);
+	}
+
+	public UnsupportedGetConnectionException(Throwable cause)
+	{
+		super(cause);
+	}
+
+	public UnsupportedGetConnectionException(String message, Throwable cause)
+	{
+		super(message, cause);
+	}
 
 	public UnsupportedGetConnectionException(ConnectionOption connectionOption)
 	{
-		super("Get connection for [" + connectionOption + "] is not supported");
-
-		this.connectionOption = connectionOption;
+		super("Get connection for [" + connectionOption.urlOfMask() + "] is not supported");
 	}
 
-	public ConnectionOption getConnectionOption()
+	public UnsupportedGetConnectionException(ConnectionOption connectionOption, Throwable cause)
 	{
-		return connectionOption;
+		super("Get connection for [" + connectionOption.urlOfMask() + "] is not supported", cause);
 	}
 }

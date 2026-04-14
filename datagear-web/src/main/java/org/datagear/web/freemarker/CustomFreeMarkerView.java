@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,8 +21,11 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 
-import org.datagear.util.StringUtil;
+import org.datagear.management.domain.User;
+import org.datagear.util.Global;
 import org.datagear.web.config.ApplicationProperties;
+import org.datagear.web.security.AuthenticationUserGetter;
+import org.datagear.web.util.DetectNewVersionScriptResolver;
 import org.datagear.web.util.WebUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.web.context.support.WebApplicationContextUtils;
@@ -46,6 +49,9 @@ public class CustomFreeMarkerView extends FreeMarkerView
 	/** 变量：应用根路径 */
 	public static final String VAR_CONTEXT_PATH = "contextPath";
 
+	/** 变量：客户端缓存码 */
+	public static final String VAR_CLIENT_CACHE_CODE = "clientCacheCode";
+
 	/** 变量：页面ID关键字 */
 	public static final String VAR_PAGE_ID = "pid";
 
@@ -61,6 +67,9 @@ public class CustomFreeMarkerView extends FreeMarkerView
 	/** 变量：访问Java静态变量关键字 */
 	public static final String VAR_STATICS = "statics";
 
+	/** 变量：检测新版本结果 */
+	public static final String VAR_DETECT_NEW_VERSION_RESULT = "detectNewVersionResult";
+
 	private static final BeansWrapper BEANS_WRAPPER = new BeansWrapperBuilder(
 			Configuration.DEFAULT_INCOMPATIBLE_IMPROVEMENTS).build();
 
@@ -74,70 +83,38 @@ public class CustomFreeMarkerView extends FreeMarkerView
 	{
 		super.exposeHelpers(model, request);
 		
-		ApplicationProperties applicationProperties = getApplicationProperties(request);
-
 		model.put(VAR_PAGE_ID, WebUtils.generatePageId());
 		model.put(VAR_PARENT_PAGE_ID, WebUtils.getParentPageId(request));
 		model.put(VAR_CONTEXT_PATH, WebUtils.getContextPath(request));
+		model.put(VAR_CLIENT_CACHE_CODE, clientCacheCode(request));
 		model.put(VAR_IS_AJAX_REQUEST, WebUtils.isAjaxRequest(request));
-		model.put(VAR_CURRENT_USER, WebUtils.getUser());
 		model.put(VAR_STATICS, BEANS_WRAPPER.getStaticModels());
-		model.put(VAR_CONFIG_PROPERTIES, applicationProperties);
-		
-		if(WebUtils.isEnableDetectNewVersionRequest(request))
-			setDetectNewVersionScriptAttr(model, request, applicationProperties.isDisableDetectNewVersion());
-		else
-			setDetectNewVersionScriptAttr(model, request, true);
-	}
-	
-	protected ApplicationProperties getApplicationProperties(HttpServletRequest request)
-	{
+
 		ApplicationContext ac = WebApplicationContextUtils.getWebApplicationContext(request.getServletContext());
-		return ac.getBean(ApplicationProperties.class);
+		exposeHelpersOfApplicationContext(model, request, ac);
 	}
 
-	/**
-	 * 将检测新版本的JS脚本以{@code detectNewVersionScript}关键字存入{@code model}。
-	 * 
-	 * @param model
-	 * @param request
-	 * @param disableDetectNewVersion
-	 */
-	protected void setDetectNewVersionScriptAttr(Map<String, Object> model, HttpServletRequest request,
-			boolean disableDetectNewVersion)
+	protected void exposeHelpersOfApplicationContext(Map<String, Object> model, HttpServletRequest request,
+			ApplicationContext applicationContext) throws Exception
 	{
-		String script = buildDetectNewVersionScript(request, disableDetectNewVersion);
-		model.put("detectNewVersionScript", script);
+		ApplicationProperties applicationProperties = applicationContext.getBean(ApplicationProperties.class);
+		AuthenticationUserGetter userGetter = applicationContext.getBean(AuthenticationUserGetter.class);
+		DetectNewVersionScriptResolver detectNewVersionScriptResolver = applicationContext
+				.getBean(DetectNewVersionScriptResolver.class);
+
+		// 当部署在Tomcat时（8.5.61），对于类似“/static/not-exists.js”、“/chart/not-exists”的请求，
+		// 在被导向至“/error”后，此时如果这里使用userGetter.getUser()会抛出空指针异常，
+		// 因此，这里改为采用userGetter.getUserNullable()，由页面自己处理null。
+		// 目前“/error”页面已改为不会用到用户信息，而其他页面没有发现null的情况。
+		User currentUser = userGetter.getUserNullable();
+
+		model.put(VAR_CURRENT_USER, currentUser);
+		model.put(VAR_CONFIG_PROPERTIES, applicationProperties);
+		model.put(VAR_DETECT_NEW_VERSION_RESULT, detectNewVersionScriptResolver.buildIf(request));
 	}
 
-	/**
-	 * 构建检测新版本的JS脚本，格式为：
-	 * <p>
-	 * <code>
-	 * &lt;script src="http://www.datagear.tech/latest-version.js" type="text/javascript"&gt;&lt;/script&gt;
-	 * </code>
-	 * </p>
-	 * <p>
-	 * 如果{@code disableDetectNewVersion}为{@code true}，或者还未到达下一次检测时间，将直接返回空字符串：{@code ""}。
-	 * </p>
-	 * 
-	 * @param request
-	 * @param disableDetectNewVersion
-	 * @return
-	 */
-	protected String buildDetectNewVersionScript(HttpServletRequest request, boolean disableDetectNewVersion)
+	protected String clientCacheCode(HttpServletRequest request)
 	{
-		String script = "";
-
-		if (!disableDetectNewVersion)
-		{
-			String resolved = WebUtils.getCookieValue(request, WebUtils.COOKIE_DETECT_NEW_VERSION_RESOLVED);
-			disableDetectNewVersion = StringUtil.toBoolean(resolved);
-		}
-
-		if (!disableDetectNewVersion)
-			script = "<script src=\"" + WebUtils.LATEST_VERSION_SCRIPT_LOCATION + "\" type=\"text/javascript\"></script>";
-
-		return script;
+		return Global.VERSION;
 	}
 }

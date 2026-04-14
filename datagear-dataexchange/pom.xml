@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.datagear</groupId>
 		<artifactId>datagear</artifactId>
-		<version>4.5.1</version>
+		<version>5.5.0</version>
 	</parent>
 	
 	<artifactId>datagear-dataexchange</artifactId>
@@ -65,6 +65,7 @@
 			    				<copy file="../COPYING" todir="${project.build.outputDirectory}" />
 			    				<copy file="../COPYING.LESSER" todir="${project.build.outputDirectory}" />
 			    				<copy file="../LICENSE" todir="${project.build.outputDirectory}" />
+			    				<copy file="../NOTICE" todir="${project.build.outputDirectory}" />
 			    			</tasks>
 			    		</configuration>
 			    	</execution>

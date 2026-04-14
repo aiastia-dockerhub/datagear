@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -39,9 +39,10 @@ public class TextParserSupport
 	 * 
 	 * @param in
 	 * @param out
+	 * @return 行注释的下一个字符：{@code '\n'}、{@code '\r'}、{@code -1}
 	 * @throws IOException
 	 */
-	public void writeAfterLineComment(Reader in, Writer out) throws IOException
+	public int writeAfterLineComment(Reader in, Writer out) throws IOException
 	{
 		int c = -1;
 
@@ -52,6 +53,8 @@ public class TextParserSupport
 			if (c == '\n' || c == '\r')
 				break;
 		}
+		
+		return c;
 	}
 
 	/**
@@ -176,7 +179,7 @@ public class TextParserSupport
 	}
 
 	/**
-	 * 将输入流写入输出流，直到写完匹配字符串后停止。
+	 * 将输入流写至输出流，直到写完匹配字符串后停止。
 	 * 
 	 * @param in
 	 * @param out
@@ -189,13 +192,17 @@ public class TextParserSupport
 		int c = -1;
 		int matchCount = 0;
 
-		while ((c = in.read()) > -1)
+		while (true)
 		{
-			out.write(c);
-
 			if (matchCount == str.length)
 				break;
-			else if (c == str[matchCount])
+
+			c = in.read();
+
+			if (!writeIfValid(out, c))
+				break;
+
+			if (c == str[matchCount])
 				matchCount++;
 			else
 				matchCount = 0;
@@ -219,20 +226,11 @@ public class TextParserSupport
 	{
 		in.mark(str.length);
 
-		int c = -1;
-		int matchCount = 0;
-
-		while ((c = in.read()) > -1)
+		for (int i = start; i < end; i++)
 		{
-			if (matchCount >= (end - start))
-			{
-				break;
-			}
-			else if (c == str[matchCount + start])
-			{
-				matchCount++;
-			}
-			else
+			int c = in.read();
+			
+			if(c != str[i])
 			{
 				in.reset();
 				return false;
@@ -259,10 +257,15 @@ public class TextParserSupport
 	 * @param sb
 	 * @param c
 	 */
-	public void appendCharIfValid(StringBuilder sb, int c)
+	public boolean appendCharIfValid(StringBuilder sb, int c)
 	{
 		if (c > -1)
+		{
 			sb.appendCodePoint(c);
+			return true;
+		}
+		else
+			return false;
 	}
 
 	/**
@@ -272,10 +275,15 @@ public class TextParserSupport
 	 * @param c
 	 * @throws IOException
 	 */
-	public void writeIfValid(Writer out, int c) throws IOException
+	public boolean writeIfValid(Writer out, int c) throws IOException
 	{
 		if (c > -1)
+		{
 			out.write(c);
+			return true;
+		}
+		else
+			return false;
 	}
 
 	/**
@@ -381,16 +389,16 @@ public class TextParserSupport
 	}
 
 	/**
-	 * 清除{@linkplain StringBuilder}。
+	 * 获取字符串并清空{@linkplain StringBuilder}。
 	 * 
 	 * @param sb
+	 * @return
 	 */
-	public void clear(StringBuilder sb)
+	public String toStringWithClear(StringBuilder sb)
 	{
-		if (sb == null || sb.length() == 0)
-			return;
-
-		sb.delete(0, sb.length());
+		String str = sb.toString();
+		sb.setLength(0);
+		return str;
 	}
 
 	/**
@@ -400,23 +408,6 @@ public class TextParserSupport
 	 */
 	public StringBuilder createStringBuilder()
 	{
-		return new StringBuilder();
-	}
-
-	/**
-	 * 获取一个可用的初始{@linkplain StringBuilder}。
-	 * <p>
-	 * 如果{@code prev}不为{@code null}且为空，将直接返回它，否则，新建一个并返回。
-	 * </p>
-	 * 
-	 * @param prev
-	 * @return
-	 */
-	public StringBuilder availableStringBuilder(StringBuilder prev)
-	{
-		if (prev != null && prev.length() == 0)
-			return prev;
-
 		return new StringBuilder();
 	}
 }

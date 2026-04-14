@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -54,6 +54,12 @@ public class DataSetSourceParseException extends DataSetException
 	public DataSetSourceParseException(Throwable cause, String source)
 	{
 		super(cause);
+		this.source = source;
+	}
+
+	public DataSetSourceParseException(String message, String source)
+	{
+		super(message);
 		this.source = source;
 	}
 

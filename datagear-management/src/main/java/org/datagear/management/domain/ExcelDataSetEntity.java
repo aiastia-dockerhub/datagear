@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,10 +21,11 @@ import java.io.File;
 import java.util.Date;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.support.AbstractExcelFileDataSet;
 import org.datagear.analysis.support.ExcelDirectoryFileDataSet;
+import org.datagear.analysis.support.FileResolvedInfo;
 import org.springframework.beans.BeanUtils;
 
 /**
@@ -49,17 +50,17 @@ public class ExcelDataSetEntity extends AbstractExcelFileDataSet implements Dire
 	/** 展示名 */
 	private String displayName = "";
 
-	/** 服务器端文件所在的目录 */
-	private DataSetResDirectory dataSetResDirectory = null;
+	/** 服务器端文件源 */
+	private FileSource fileSource = null;
 
-	/** 服务器端文件的文件名（相对于{@linkplain #getDataSetResDirectory()}） */
+	/** 服务器端文件的文件名（相对于{@linkplain #getFileSource()}） */
 	private String dataSetResFileName = "";
 
 	/** 创建用户 */
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime = new Date();
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -71,10 +72,10 @@ public class ExcelDataSetEntity extends AbstractExcelFileDataSet implements Dire
 		super();
 	}
 
-	public ExcelDataSetEntity(String id, String name, List<DataSetProperty> properties, File directory, String fileName,
+	public ExcelDataSetEntity(String id, String name, List<DataSetField> fields, File directory, String fileName,
 			String displayName, User createUser)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.fileSourceType = FILE_SOURCE_TYPE_UPLOAD;
 		this.directory = directory;
 		this.fileName = fileName;
@@ -82,12 +83,12 @@ public class ExcelDataSetEntity extends AbstractExcelFileDataSet implements Dire
 		this.createUser = createUser;
 	}
 
-	public ExcelDataSetEntity(String id, String name, List<DataSetProperty> properties,
-			DataSetResDirectory dataSetResDirectory, String dataSetResFileName, User createUser)
+	public ExcelDataSetEntity(String id, String name, List<DataSetField> fields,
+			FileSource fileSource, String dataSetResFileName, User createUser)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.fileSourceType = FILE_SOURCE_TYPE_SERVER;
-		this.dataSetResDirectory = dataSetResDirectory;
+		this.fileSource = fileSource;
 		this.dataSetResFileName = dataSetResFileName;
 		this.createUser = createUser;
 	}
@@ -141,15 +142,15 @@ public class ExcelDataSetEntity extends AbstractExcelFileDataSet implements Dire
 	}
 
 	@Override
-	public DataSetResDirectory getDataSetResDirectory()
+	public FileSource getFileSource()
 	{
-		return dataSetResDirectory;
+		return fileSource;
 	}
 
 	@Override
-	public void setDataSetResDirectory(DataSetResDirectory dataSetResDirectory)
+	public void setFileSource(FileSource fileSource)
 	{
-		this.dataSetResDirectory = dataSetResDirectory;
+		this.fileSource = fileSource;
 	}
 
 	@Override
@@ -232,9 +233,9 @@ public class ExcelDataSetEntity extends AbstractExcelFileDataSet implements Dire
 	}
 
 	@Override
-	protected File getExcelFile(DataSetQuery query) throws Throwable
+	protected FileResolvedInfo getExcelFile(DataSetQuery query) throws Throwable
 	{
-		return FILE_SUPPORT.getFile(this, query);
+		return getFileForDataSetQuery(query);
 	}
 
 	@Override

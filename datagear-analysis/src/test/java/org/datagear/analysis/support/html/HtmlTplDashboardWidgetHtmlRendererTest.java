@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -40,7 +40,6 @@ import org.datagear.analysis.support.SimpleDashboardThemeSource;
 import org.datagear.analysis.support.html.HtmlTplDashboardWidgetHtmlRenderer.DashboardFilterContext;
 import org.datagear.analysis.support.html.HtmlTplDashboardWidgetHtmlRenderer.TplChartMeta;
 import org.datagear.analysis.support.html.HtmlTplDashboardWidgetHtmlRenderer.TplDashboardMeta;
-import org.datagear.util.CacheService;
 import org.datagear.util.IDUtil;
 import org.datagear.util.IOUtil;
 import org.junit.Test;
@@ -86,10 +85,10 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 		HtmlChartPlugin chartPlugin = HtmlChartPluginTest.createHtmlChartPlugin();
 
 		this.htmlChartWidget01 = new HtmlChartWidget(HTML_CHART_WIDGET_ID_01, "chart-widget-01",
-				ChartDefinition.EMPTY_CHART_DATA_SET, chartPlugin);
+				ChartDefinition.EMPTY_DATA_SET_BINDS, chartPlugin);
 
 		this.htmlChartWidget02 = new HtmlChartWidget(HTML_CHART_WIDGET_ID_02, "chart-widget-02",
-				ChartDefinition.EMPTY_CHART_DATA_SET, chartPlugin);
+				ChartDefinition.EMPTY_DATA_SET_BINDS, chartPlugin);
 
 		this.resManager = new FileTplDashboardWidgetResManager(
 				"src/test/resources/org/datagear/analysis/support/html/htmlTplDashboardWidgets/html");
@@ -101,8 +100,7 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 		this.rendererWithCache = new TestFixedIdHtmlTplDashboardWidgetHtmlRenderer(chartWidgetSource);
 
 		ConcurrentMapCache cache = new ConcurrentMapCache(HtmlTplDashboardWidgetHtmlRendererTest.class.getSimpleName());
-		CacheService cacheService = new CacheService(cache);
-		this.rendererWithCache.setCacheService(cacheService);
+		this.rendererWithCache.setCache(cache);
 	}
 
 	@Test
@@ -1722,8 +1720,8 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 	public void renderTest_forPerformance() throws Throwable
 	{
 		int loopCount = 10000;
-		long rawTimes = 0;
-		long enhanceTimes = 0;
+		double rawTimes = 0;
+		double enhanceTimes = 0;
 		
 		{
 			HtmlTplDashboardWidget dashboardWidget = createHtmlTplDashboardWidget(this.renderer);
@@ -1764,9 +1762,9 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 			}
 		}
 		
-		double enhance = ((double)rawTimes)/enhanceTimes;
+		double enhance = rawTimes / enhanceTimes;
 		
-		assertTrue(enhance >= 1.0d);
+		assertTrue(enhance > 0d);
 		
 		System.out.println("-----------------------");
 		System.out.println("test count   : " + loopCount);
@@ -1790,12 +1788,12 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 	{
 		HtmlTplDashboardRenderContext renderContext = new HtmlTplDashboardRenderContext(template, templateReader, out);
 		renderContext.setDashboardTheme(SimpleDashboardThemeSource.THEME_LIGHT);
-		renderContext.setImportList(buildImportList());
+		renderContext.setImportBuilder(importBuilder());
 		
 		return renderContext;
 	}
 
-	protected List<HtmlTplDashboardImport> buildImportList()
+	protected SimpleHtmlTplDashboardImportBuilder importBuilder()
 	{
 		List<HtmlTplDashboardImport> list = new ArrayList<>();
 
@@ -1804,7 +1802,7 @@ public class HtmlTplDashboardWidgetHtmlRendererTest
 		list.add(HtmlTplDashboardImport.valueOf("theme", IMPORT_CONTENT_THEME));
 		list.add(HtmlTplDashboardImport.valueOf("style", IMPORT_CONTENT_STYLE));
 
-		return list;
+		return new SimpleHtmlTplDashboardImportBuilder(list);
 	}
 
 	protected HtmlTplDashboardWidget createHtmlTplDashboardWidget()

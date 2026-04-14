@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -45,5 +45,6 @@ var ${pid} =
 	}
 };
 
+//page.js
 $.inflatePageObj(${pid});
 </script>

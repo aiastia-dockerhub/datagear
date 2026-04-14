@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,59 +17,60 @@
 
 package org.datagear.analysis.support;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.datagear.analysis.ChartResult;
 import org.datagear.analysis.ChartResultError;
 import org.datagear.analysis.DashboardResult;
 
 /**
- * 错误消息的{@linkplain DashboardResult}。
- * <p>
- * 它的{@linkplain #getChartResultErrors()}始终返回空映射表，
- * {@linkplain #getChartResultErrorMessages()}则是由{@linkplain DashboardResult#getChartResultErrors()}转换而得。
- * </p>
+ * 封装错误消息的看板结果。
  * 
  * @author datagear@163.com
  *
  */
-public class ErrorMessageDashboardResult extends DashboardResult
+public class ErrorMessageDashboardResult implements Serializable
 {
-	private Map<String, ChartResultErrorMessage> chartResultErrorMessages = Collections.emptyMap();
+	private static final long serialVersionUID = 1L;
+
+	/** 图表ID-图表结果映射表 */
+	private Map<String, ChartResult> chartResults = Collections.emptyMap();
+
+	/** 图表ID-错误消息映射表 */
+	private Map<String, ChartResultErrorMessage> chartErrors = Collections.emptyMap();
 
 	public ErrorMessageDashboardResult(DashboardResult result)
 	{
-		super.setChartResults(result.getChartResults());
-		setChartResultErrorMessages(toChartResultErrorMessages(result.getChartResultErrors(), false));
+		this(result, false);
 	}
 
 	public ErrorMessageDashboardResult(DashboardResult result, boolean rootCauseMessage)
 	{
-		super.setChartResults(result.getChartResults());
-		setChartResultErrorMessages(toChartResultErrorMessages(result.getChartResultErrors(), rootCauseMessage));
+		this.chartResults = result.getChartResults();
+		this.chartErrors = toChartResultErrorMessages(result.getChartResultErrors(), rootCauseMessage);
 	}
 
-	public Map<String, ChartResultErrorMessage> getChartResultErrorMessages()
+	public Map<String, ChartResult> getChartResults()
 	{
-		return chartResultErrorMessages;
+		return chartResults;
 	}
 
-	protected void setChartResultErrorMessages(Map<String, ChartResultErrorMessage> chartResultErrorMessages)
+	public void setChartResults(Map<String, ChartResult> chartResults)
 	{
-		this.chartResultErrorMessages = chartResultErrorMessages;
+		this.chartResults = chartResults;
 	}
 
-	@Override
-	public Map<String, ChartResultError> getChartResultErrors()
+	public Map<String, ChartResultErrorMessage> getChartErrors()
 	{
-		return Collections.emptyMap();
+		return chartErrors;
 	}
 
-	@Override
-	public void setChartResultErrors(Map<String, ChartResultError> chartResultErrors)
+	public void setChartErrors(Map<String, ChartResultErrorMessage> chartErrors)
 	{
-		throw new UnsupportedOperationException();
+		this.chartErrors = chartErrors;
 	}
 
 	protected Map<String, ChartResultErrorMessage> toChartResultErrorMessages(

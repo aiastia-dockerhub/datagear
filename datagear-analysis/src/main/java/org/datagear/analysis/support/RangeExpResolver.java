@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -330,7 +330,7 @@ public class RangeExpResolver
 	 * @author datagear@163.com
 	 *
 	 */
-	protected static class IndexRange implements Serializable
+	public static class IndexRange implements Serializable
 	{
 		private static final long serialVersionUID = 1L;
 

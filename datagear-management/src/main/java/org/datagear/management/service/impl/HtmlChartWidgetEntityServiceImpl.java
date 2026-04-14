@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,19 +22,17 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.datagear.analysis.AbstractIdentifiable;
-import org.datagear.analysis.ChartDataSet;
 import org.datagear.analysis.ChartPluginManager;
 import org.datagear.analysis.DataSet;
+import org.datagear.analysis.DataSetBind;
 import org.datagear.analysis.DataSetException;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetParam;
-import org.datagear.analysis.DataSetProperty;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.support.ChartWidget;
@@ -42,7 +40,8 @@ import org.datagear.analysis.support.JsonSupport;
 import org.datagear.analysis.support.html.HtmlChartPlugin;
 import org.datagear.management.domain.AnalysisProject;
 import org.datagear.management.domain.AnalysisProjectAwareEntity;
-import org.datagear.management.domain.ChartDataSetVO;
+import org.datagear.management.domain.DataSetBindVO;
+import org.datagear.management.domain.HtmlChartPluginVo;
 import org.datagear.management.domain.HtmlChartWidgetEntity;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.AnalysisProjectService;
@@ -251,7 +250,7 @@ public class HtmlChartWidgetEntityServiceImpl
 	protected HtmlChartWidgetEntity getByIdFromDB(String id, Map<String, Object> params)
 	{
 		HtmlChartWidgetEntity entity = super.getByIdFromDB(id, params);
-		setChartDataSetVOs(entity);
+		setDataSetBindVOs(entity);
 
 		return entity;
 	}
@@ -311,7 +310,7 @@ public class HtmlChartWidgetEntityServiceImpl
 		return SQL_NAMESPACE;
 	}
 
-	protected void setChartDataSetVOs(HtmlChartWidgetEntity entity)
+	protected void setDataSetBindVOs(HtmlChartWidgetEntity entity)
 	{
 		if (entity == null)
 			return;
@@ -321,35 +320,36 @@ public class HtmlChartWidgetEntityServiceImpl
 
 		List<WidgetDataSetRelation> relations = selectListMybatis("getDataSetRelations", sqlParams);
 
-		List<ChartDataSetVO> chartDataSets = new ArrayList<>(relations.size());
+		List<DataSetBindVO> dataSetBinds = new ArrayList<>(relations.size());
 
 		for (int i = 0; i < relations.size(); i++)
 		{
-			ChartDataSetVO chartDataSet = toChartDataSetVO(relations.get(i));
+			DataSetBindVO dataSetBind = toDataSetBindVO(relations.get(i));
 
-			if (chartDataSet != null)
-				chartDataSets.add(chartDataSet);
+			if (dataSetBind != null)
+				dataSetBinds.add(dataSetBind);
 		}
 
-		entity.setChartDataSets(chartDataSets.toArray(new ChartDataSetVO[chartDataSets.size()]));
+		entity.setDataSetBinds(dataSetBinds.toArray(new DataSetBindVO[dataSetBinds.size()]));
 	}
 
-	protected ChartDataSetVO toChartDataSetVO(WidgetDataSetRelation relation)
+	protected DataSetBindVO toDataSetBindVO(WidgetDataSetRelation relation)
 	{
 		if (relation == null || StringUtil.isEmpty(relation.getDataSetId()))
 			return null;
 
 		IdDataSet dataSet = new IdDataSet(relation.getDataSetId());
 
-		ChartDataSetVO chartDataSet = new ChartDataSetVO(dataSet);
-		chartDataSet.setPropertySigns(toPropertySigns(relation.getPropertySignsJson()));
-		chartDataSet.setAlias(relation.getAlias());
-		chartDataSet.setAttachment(relation.isAttachment());
-		chartDataSet.setQuery(toDataSetQuery(relation.getQueryJson()));
-		chartDataSet.setPropertyAliases(toPropertyAliases(relation.getPropertyAliasesJson()));
-		chartDataSet.setPropertyOrders(toPropertyOrders(relation.getPropertyOrdersJson()));
+		DataSetBindVO dataSetBind = new DataSetBindVO(dataSet);
+		dataSetBind.setFieldSigns(toFieldSigns(relation.getFieldSignsJson()));
+		dataSetBind.setAlias(relation.getAlias());
+		dataSetBind.setAttachment(relation.isAttachment());
+		dataSetBind.setQuery(toDataSetQuery(relation.getQueryJson()));
+		dataSetBind.setFieldAliases(toFieldAliases(relation.getFieldAliasesJson()));
+		dataSetBind.setFieldOrders(toFieldOrders(relation.getFieldOrdersJson()));
+		dataSetBind.setDataSetSigns(toDataSetSigns(relation.getDataSetSignsJson()));
 
-		return chartDataSet;
+		return dataSetBind;
 	}
 
 	protected void inflateHtmlChartWidgetEntity(HtmlChartWidgetEntity entity, boolean forAnalysis)
@@ -358,7 +358,7 @@ public class HtmlChartWidgetEntityServiceImpl
 			return;
 
 		inflateHtmlChartPlugin(entity, forAnalysis);
-		inflateChartDataSets(entity, forAnalysis);
+		inflateDataSetBinds(entity, forAnalysis);
 	}
 
 	protected void inflateHtmlChartPlugin(HtmlChartWidgetEntity entity, boolean forAnalysis)
@@ -366,41 +366,42 @@ public class HtmlChartWidgetEntityServiceImpl
 		if (entity == null)
 			return;
 
-		HtmlChartPlugin htmlChartPlugin = entity.getHtmlChartPlugin();
+		HtmlChartPluginVo pluginVo = entity.getPluginVo();
 
-		if (htmlChartPlugin != null)
+		if (pluginVo != null)
 		{
-			HtmlChartPlugin full = getHtmlChartPlugin(htmlChartPlugin.getId());
+			HtmlChartPlugin full = getHtmlChartPlugin(pluginVo.getId());
 
 			if (forAnalysis)
-				entity.setHtmlChartPlugin(full);
+				entity.setPlugin(full);
 			else
 			{
 				if (full != null)
 				{
-					htmlChartPlugin.setNameLabel(full.getNameLabel());
-					htmlChartPlugin.setDescLabel(full.getDescLabel());
-					htmlChartPlugin.setIconResourceNames(full.getIconResourceNames());
+					pluginVo.setId(full.getId());
+					pluginVo.setNameLabel(full.getNameLabel());
+					pluginVo.setDescLabel(full.getDescLabel());
+					pluginVo.setIconResourceNames(full.getIconResourceNames());
 				}
 			}
 		}
 	}
 
-	protected void inflateChartDataSets(HtmlChartWidgetEntity entity, boolean forAnalysis)
+	protected void inflateDataSetBinds(HtmlChartWidgetEntity entity, boolean forAnalysis)
 	{
 		if (entity == null)
 			return;
 
-		ChartDataSetVO[] chartDataSetVOs = entity.getChartDataSetVOs();
+		DataSetBindVO[] dataSetBindVOs = entity.getDataSetBindVOs();
 
-		if (chartDataSetVOs == null || chartDataSetVOs.length == 0)
+		if (dataSetBindVOs == null || dataSetBindVOs.length == 0)
 			return;
 
-		List<ChartDataSetVO> list = new ArrayList<ChartDataSetVO>(chartDataSetVOs.length);
+		List<DataSetBindVO> list = new ArrayList<DataSetBindVO>(dataSetBindVOs.length);
 
-		for (int i = 0; i < chartDataSetVOs.length; i++)
+		for (int i = 0; i < dataSetBindVOs.length; i++)
 		{
-			ChartDataSetVO vo = chartDataSetVOs[i].clone();
+			DataSetBindVO vo = dataSetBindVOs[i].clone();
 			String dataSetId = vo.getDataSet().getId();
 
 			DataSet dataSet = null;
@@ -415,16 +416,16 @@ public class HtmlChartWidgetEntityServiceImpl
 			addIfNonNull(list, (vo.getDataSet() == null ? null : vo));
 		}
 		
-		entity.setChartDataSetVOs(list.toArray(new ChartDataSetVO[list.size()]));
+		entity.setDataSetBindVOs(list.toArray(new DataSetBindVO[list.size()]));
 	}
 
 	@SuppressWarnings("unchecked")
-	protected Map<String, Set<String>> toPropertySigns(String json)
+	protected Map<String, List<String>> toFieldSigns(String json)
 	{
 		if (StringUtil.isEmpty(json))
 			return Collections.EMPTY_MAP;
 
-		Map<String, Set<String>> propertySigns = new HashMap<>();
+		Map<String, List<String>> fieldSigns = new HashMap<>();
 
 		Map<String, Object> jsonMap = JsonSupport.parse(json, Map.class, null);
 		if (jsonMap == null)
@@ -432,7 +433,7 @@ public class HtmlChartWidgetEntityServiceImpl
 
 		for (Map.Entry<String, Object> entry : jsonMap.entrySet())
 		{
-			Set<String> signs = new HashSet<>();
+			List<String> signs = new ArrayList<>();
 
 			Object valueObj = entry.getValue();
 
@@ -453,14 +454,14 @@ public class HtmlChartWidgetEntityServiceImpl
 				}
 			}
 
-			propertySigns.put(entry.getKey(), signs);
+			fieldSigns.put(entry.getKey(), signs);
 		}
 
-		return propertySigns;
+		return fieldSigns;
 	}
 
 	@SuppressWarnings("unchecked")
-	protected Map<String, String> toPropertyAliases(String json)
+	protected Map<String, String> toFieldAliases(String json)
 	{
 		if (StringUtil.isEmpty(json))
 			return Collections.EMPTY_MAP;
@@ -474,7 +475,7 @@ public class HtmlChartWidgetEntityServiceImpl
 	}
 
 	@SuppressWarnings("unchecked")
-	protected Map<String, Number> toPropertyOrders(String json)
+	protected Map<String, Number> toFieldOrders(String json)
 	{
 		if (StringUtil.isEmpty(json))
 			return Collections.EMPTY_MAP;
@@ -485,6 +486,21 @@ public class HtmlChartWidgetEntityServiceImpl
 			orders = Collections.EMPTY_MAP;
 
 		return orders;
+	}
+
+	@SuppressWarnings("unchecked")
+	protected List<String> toDataSetSigns(String json)
+	{
+		if (StringUtil.isEmpty(json))
+			return Collections.emptyList();
+
+		Collection<String> signs = JsonSupport.parse(json, Collection.class, null);
+
+		if (signs == null)
+			return Collections.emptyList();
+
+		List<String> re = new ArrayList<>(signs);
+		return re;
 	}
 
 	protected DataSetQuery toDataSetQuery(String json)
@@ -512,29 +528,30 @@ public class HtmlChartWidgetEntityServiceImpl
 		if (entity == null)
 			return list;
 
-		ChartDataSet[] chartDataSets = entity.getChartDataSets();
+		DataSetBind[] dataSetBinds = entity.getDataSetBinds();
 
-		if (chartDataSets == null)
+		if (dataSetBinds == null)
 			return list;
 
-		for (int i = 0; i < chartDataSets.length; i++)
+		for (int i = 0; i < dataSetBinds.length; i++)
 		{
-			ChartDataSet chartDataSet = chartDataSets[i];
+			DataSetBind dataSetBind = dataSetBinds[i];
 
-			String propertySignsJson = JsonSupport.generate(chartDataSet.getPropertySigns(), "");
-			String queryJson = JsonSupport.generate(chartDataSet.getQuery(), "");
-			String propertyAliasesJson = JsonSupport.generate(chartDataSet.getPropertyAliases(), "");
-			String propertyOrdersJson = JsonSupport.generate(chartDataSet.getPropertyOrders(), "");
+			String fieldSignsJson = JsonSupport.generate(dataSetBind.getFieldSigns(), "");
+			String queryJson = JsonSupport.generate(dataSetBind.getQuery(), "");
+			String fieldAliasesJson = JsonSupport.generate(dataSetBind.getFieldAliases(), "");
+			String fieldOrdersJson = JsonSupport.generate(dataSetBind.getFieldOrders(), "");
+			String dataSetSignsJson = JsonSupport.generate(dataSetBind.getDataSetSigns(), "");
 
 			WidgetDataSetRelation relation = new WidgetDataSetRelation(entity.getId(),
-					chartDataSet.getDataSet().getId(),
-					i + 1);
-			relation.setPropertySignsJson(propertySignsJson);
-			relation.setAlias(chartDataSet.getAlias());
-			relation.setAttachment(chartDataSet.isAttachment());
+					dataSetBind.getDataSet().getId(), i + 1);
+			relation.setFieldSignsJson(fieldSignsJson);
+			relation.setAlias(dataSetBind.getAlias());
+			relation.setAttachment(dataSetBind.isAttachment());
 			relation.setQueryJson(queryJson);
-			relation.setPropertyAliasesJson(propertyAliasesJson);
-			relation.setPropertyOrdersJson(propertyOrdersJson);
+			relation.setFieldAliasesJson(fieldAliasesJson);
+			relation.setFieldOrdersJson(fieldOrdersJson);
+			relation.setDataSetSignsJson(dataSetSignsJson);
 
 			list.add(relation);
 		}
@@ -543,7 +560,7 @@ public class HtmlChartWidgetEntityServiceImpl
 	}
 
 	/**
-	 * {@linkplain ChartDataSet}持久化值类型。
+	 * {@linkplain DataSetBind}持久化值类型。
 	 * 
 	 * @author datagear@163.com
 	 *
@@ -554,7 +571,7 @@ public class HtmlChartWidgetEntityServiceImpl
 
 		private String dataSetId;
 
-		private String propertySignsJson;
+		private String fieldSignsJson;
 
 		private String alias;
 
@@ -562,11 +579,13 @@ public class HtmlChartWidgetEntityServiceImpl
 
 		private String queryJson;
 
-		private String propertyAliasesJson;
+		private String fieldAliasesJson;
 
-		private String propertyOrdersJson;
+		private String fieldOrdersJson;
 
 		private int order;
+
+		private String dataSetSignsJson;
 
 		public WidgetDataSetRelation()
 		{
@@ -601,14 +620,14 @@ public class HtmlChartWidgetEntityServiceImpl
 			this.dataSetId = dataSetId;
 		}
 
-		public String getPropertySignsJson()
+		public String getFieldSignsJson()
 		{
-			return propertySignsJson;
+			return fieldSignsJson;
 		}
 
-		public void setPropertySignsJson(String propertySignsJson)
+		public void setFieldSignsJson(String fieldSignsJson)
 		{
-			this.propertySignsJson = propertySignsJson;
+			this.fieldSignsJson = fieldSignsJson;
 		}
 
 		public String getAlias()
@@ -641,24 +660,24 @@ public class HtmlChartWidgetEntityServiceImpl
 			this.queryJson = queryJson;
 		}
 
-		public String getPropertyAliasesJson()
+		public String getFieldAliasesJson()
 		{
-			return propertyAliasesJson;
+			return fieldAliasesJson;
 		}
 
-		public void setPropertyAliasesJson(String propertyAliasesJson)
+		public void setFieldAliasesJson(String fieldAliasesJson)
 		{
-			this.propertyAliasesJson = propertyAliasesJson;
+			this.fieldAliasesJson = fieldAliasesJson;
 		}
 
-		public String getPropertyOrdersJson()
+		public String getFieldOrdersJson()
 		{
-			return propertyOrdersJson;
+			return fieldOrdersJson;
 		}
 
-		public void setPropertyOrdersJson(String propertyOrdersJson)
+		public void setFieldOrdersJson(String fieldOrdersJson)
 		{
-			this.propertyOrdersJson = propertyOrdersJson;
+			this.fieldOrdersJson = fieldOrdersJson;
 		}
 
 		public int getOrder()
@@ -669,6 +688,16 @@ public class HtmlChartWidgetEntityServiceImpl
 		public void setOrder(int order)
 		{
 			this.order = order;
+		}
+
+		public String getDataSetSignsJson()
+		{
+			return dataSetSignsJson;
+		}
+
+		public void setDataSetSignsJson(String dataSetSignsJson)
+		{
+			this.dataSetSignsJson = dataSetSignsJson;
 		}
 	}
 
@@ -699,13 +728,13 @@ public class HtmlChartWidgetEntityServiceImpl
 		}
 
 		@Override
-		public List<DataSetProperty> getProperties()
+		public List<DataSetField> getFields()
 		{
 			return Collections.emptyList();
 		}
 
 		@Override
-		public DataSetProperty getProperty(String name)
+		public DataSetField getField(String name)
 		{
 			return null;
 		}

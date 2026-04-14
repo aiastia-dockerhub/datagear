@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletRequest;
@@ -36,22 +35,21 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.datagear.connection.DriverEntity;
 import org.datagear.connection.DriverEntityManager;
-import org.datagear.connection.DriverEntityManagerException;
 import org.datagear.connection.DriverLibraryInfo;
-import org.datagear.connection.XmlDriverEntityManager;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.util.FileInfo;
 import org.datagear.util.FileUtil;
 import org.datagear.util.IDUtil;
 import org.datagear.util.IOUtil;
+import org.datagear.util.KeywordMatcher;
+import org.datagear.util.KeywordMatcher.MatchValue;
 import org.datagear.web.util.DriverInfo;
-import org.datagear.web.util.KeywordMatcher;
 import org.datagear.web.util.OperationMessage;
-import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -75,6 +73,8 @@ public class DriverEntityController extends AbstractController
 
 	@Autowired
 	private File tempDirectory;
+
+	private KeywordMatcher keywordMatcher = new KeywordMatcher();
 
 	private List<String> commonDriverClassNames = Collections
 			.unmodifiableList(DriverInfo.getDriverClassNames(DriverInfo.getCommonInDriverInfos()));
@@ -104,6 +104,16 @@ public class DriverEntityController extends AbstractController
 		this.tempDirectory = tempDirectory;
 	}
 
+	public KeywordMatcher getKeywordMatcher()
+	{
+		return keywordMatcher;
+	}
+
+	public void setKeywordMatcher(KeywordMatcher keywordMatcher)
+	{
+		this.keywordMatcher = keywordMatcher;
+	}
+
 	public List<String> getCommonDriverClassNames()
 	{
 		return commonDriverClassNames;
@@ -117,12 +127,22 @@ public class DriverEntityController extends AbstractController
 	@RequestMapping("/add")
 	public String add(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
 	{
-		DriverEntity driverEntity = new DriverEntity();
-		driverEntity.setId(IDUtil.randomIdOnTime20());
+		setFormAction(model, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
 
-		setFormModel(model, driverEntity, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
+		DriverEntity entity = createAdd(request, model);
+
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 
 		return "/driverEntity/driverEntity_form";
+	}
+
+	protected DriverEntity createAdd(HttpServletRequest request, Model model)
+	{
+		DriverEntity entity = createInstance();
+		entity.setId(IDUtil.randomIdOnTime20());
+
+		return entity;
 	}
 
 	@RequestMapping(value = "/saveAdd", produces = CONTENT_TYPE_JSON)
@@ -131,17 +151,16 @@ public class DriverEntityController extends AbstractController
 			@RequestBody DriverEntitySaveForm form)
 			throws Exception
 	{
-		DriverEntity driverEntity = form.getDriverEntity();
+		DriverEntity entity = form.getDriverEntity();
 		String[] driverLibraryFileNames = form.getDriverLibraryFileNames();
 
-		if (isBlank(driverEntity.getId()) || isBlank(driverEntity.getDriverClassName()))
-			throw new IllegalInputException();
-
-		this.driverEntityManager.add(driverEntity);
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+		this.driverEntityManager.add(entity);
 
 		if (driverLibraryFileNames != null)
 		{
-			File directory = getTempDriverLibraryDirectoryNotNull(driverEntity.getId());
+			File directory = getTempDriverLibraryDirectoryNotNull(entity.getId());
 
 			for (String driverLibraryFileName : driverLibraryFileNames)
 			{
@@ -153,7 +172,7 @@ public class DriverEntityController extends AbstractController
 
 					try
 					{
-						this.driverEntityManager.addDriverLibrary(driverEntity, driverLibraryFileName, in);
+						this.driverEntityManager.addDriverLibrary(entity, driverLibraryFileName, in);
 					}
 					finally
 					{
@@ -163,97 +182,17 @@ public class DriverEntityController extends AbstractController
 			}
 		}
 
-		return optSuccessDataResponseEntity(request, driverEntity);
-	}
+		toFormResponseData(request, entity);
 
-	@RequestMapping("/import")
-	public String importDriverEntity(HttpServletRequest request, HttpServletResponse response,
-			org.springframework.ui.Model model)
-	{
-		model.addAttribute("importId", IDUtil.uuid());
-
-		return "/driverEntity/driverEntity_import";
-	}
-
-	@RequestMapping(value = "/uploadImportFile", produces = CONTENT_TYPE_JSON)
-	@ResponseBody
-	public List<DriverEntity> uploadImportFile(HttpServletRequest request, HttpServletResponse response,
-			@RequestParam("importId") String importId, @RequestParam("file") MultipartFile multipartFile)
-			throws Exception
-	{
-		File directory = getTempImportDirectory(importId, true);
-
-		FileUtil.clearDirectory(directory);
-
-		File importFile = FileUtil.getFile(directory, TEMP_IMPORT_FILE_NAME);
-
-		InputStream in = null;
-		OutputStream importFileOut = null;
-		try
-		{
-			in = multipartFile.getInputStream();
-			importFileOut = IOUtil.getOutputStream(importFile);
-			IOUtil.write(in, importFileOut);
-		}
-		finally
-		{
-			IOUtil.close(in);
-			IOUtil.close(importFileOut);
-		}
-
-		ZipInputStream importFileIn = IOUtil.getZipInputStream(importFile);
-
-		XmlDriverEntityManager driverEntityManager = new XmlDriverEntityManager(directory);
-
-		try
-		{
-			driverEntityManager.init();
-
-			return driverEntityManager.readDriverEntitiesFromZip(importFileIn);
-		}
-		catch (DriverEntityManagerException e)
-		{
-			throw new IllegalImportDriverEntityFileFormatException(e);
-		}
-		finally
-		{
-			IOUtil.close(importFileIn);
-			driverEntityManager.releaseAll();
-		}
-	}
-
-	@RequestMapping(value = "/saveImport", produces = CONTENT_TYPE_JSON)
-	@ResponseBody
-	public ResponseEntity<OperationMessage> saveImport(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody DriverEntitySaveImportForm form)
-			throws Exception
-	{
-		String importId = form.getImportId();
-		String[] driverEntityIds = form.getDriverEntityIds();
-
-		if (isEmpty(importId) || isNull(driverEntityIds))
-			throw new IllegalInputException();
-
-		File directory = getTempImportDirectory(importId, false);
-		File importFile = FileUtil.getFile(directory, TEMP_IMPORT_FILE_NAME);
-
-		if (!importFile.exists())
-			throw new IllegalInputException("import file for [" + importId + "] not exists");
-
-		ZipInputStream in = IOUtil.getZipInputStream(importFile);
-
-		this.driverEntityManager.importFromZip(in, driverEntityIds);
-
-		return optSuccessResponseEntity(request);
+		return optSuccessDataResponseEntity(request, entity);
 	}
 
 	@RequestMapping(value = "/export")
 	public void export(HttpServletRequest request, HttpServletResponse response,
 			@RequestParam(value = "id", required = false) String[] driverEntityIds) throws Exception
 	{
-		response.addHeader("Content-Disposition",
-				"attachment;filename=" + toResponseAttachmentFileName(request, response, "drivers.zip"));
-		response.setContentType("application/octet-stream");
+		setDownloadResponseHeader(request, response, "drivers.zip");
+		response.setContentType(CONTENT_TYPE_OCTET_STREAM);
 
 		ZipOutputStream zout = IOUtil.getZipOutputStream(response.getOutputStream());
 
@@ -272,13 +211,14 @@ public class DriverEntityController extends AbstractController
 	public String edit(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
 			@RequestParam("id") String id)
 	{
-		DriverEntity driverEntity = this.driverEntityManager.get(id);
+		setFormAction(model, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
 
-		if(driverEntity == null)
-			throw new IllegalInputException();
-
-		setFormModel(model, driverEntity, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
+		DriverEntity entity = this.driverEntityManager.get(id);
+		checkNonNullEntity(entity);
 		
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
+
 		return "/driverEntity/driverEntity_form";
 	}
 
@@ -287,26 +227,28 @@ public class DriverEntityController extends AbstractController
 	public ResponseEntity<OperationMessage> saveEdit(HttpServletRequest request, HttpServletResponse response,
 			@RequestBody DriverEntitySaveForm form)
 	{
-		DriverEntity driverEntity = form.getDriverEntity();
+		DriverEntity entity = form.getDriverEntity();
 
-		if (isBlank(driverEntity.getId()) || isBlank(driverEntity.getDriverClassName()))
-			throw new IllegalInputException();
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+		this.driverEntityManager.update(entity);
 
-		this.driverEntityManager.update(driverEntity);
+		toFormResponseData(request, entity);
 
-		return optSuccessDataResponseEntity(request, driverEntity);
+		return optSuccessDataResponseEntity(request, entity);
 	}
 
 	@RequestMapping("/view")
 	public String view(HttpServletRequest request, org.springframework.ui.Model model, @RequestParam("id") String id)
 	{
-		DriverEntity driverEntity = this.driverEntityManager.get(id);
-		
-		if(driverEntity == null)
-			throw new IllegalInputException();
+		setFormAction(model, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
 
-		setFormModel(model, driverEntity, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
+		DriverEntity entity = this.driverEntityManager.get(id);
+		checkNonNullEntity(entity);
 		
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
+
 		return "/driverEntity/driverEntity_form";
 	}
 
@@ -320,11 +262,11 @@ public class DriverEntityController extends AbstractController
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping(value = "/query")
-	public String query(HttpServletRequest request, org.springframework.ui.Model model)
+	@RequestMapping(value = "/manage")
+	public String manage(HttpServletRequest request, org.springframework.ui.Model model)
 	{
-		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_QUERY);
-		setReadonlyActionByRole(model, WebUtils.getUser());
+		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_MANAGE);
+		setReadonlyAction(model);
 		return "/driverEntity/driverEntity_table";
 	}
 
@@ -340,13 +282,13 @@ public class DriverEntityController extends AbstractController
 	public List<DriverEntity> queryData(HttpServletRequest request,
 			@RequestBody(required = false) PagingQuery pagingQueryParam) throws Exception
 	{
-		final PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
+		PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
 
-		List<DriverEntity> driverEntities = this.driverEntityManager.getAll();
+		List<DriverEntity> items = this.driverEntityManager.getAll();
+		items = findByKeyword(items, pagingQuery.getKeyword());
+		toQueryResponseData(request, items);
 
-		driverEntities = findByKeyword(driverEntities, pagingQuery.getKeyword());
-
-		return driverEntities;
+		return items;
 	}
 
 	@RequestMapping(value = "/uploadDriverFile", produces = CONTENT_TYPE_JSON)
@@ -403,8 +345,7 @@ public class DriverEntityController extends AbstractController
 		DriverEntity driverEntity = this.driverEntityManager.get(id);
 
 		response.setCharacterEncoding(IOUtil.CHARSET_UTF_8);
-		response.setHeader("Content-Disposition",
-				"attachment; filename=" + toResponseAttachmentFileName(request, response, fileName));
+		setDownloadResponseHeader(request, response, fileName);
 		OutputStream out = response.getOutputStream();
 
 		if (driverEntity != null)
@@ -492,6 +433,12 @@ public class DriverEntityController extends AbstractController
 		return fileInfos;
 	}
 
+	protected void checkSaveEntity(HttpServletRequest request, DriverEntity entity)
+	{
+		if (isEmpty(entity.getId()) || isBlank(entity.getDriverClassName()))
+			throw new IllegalInputException();
+	}
+
 	protected void resolveDriverClassNames(File file, List<String> driverClassNames)
 	{
 		if (!FileUtil.isExtension(file, "jar"))
@@ -563,6 +510,28 @@ public class DriverEntityController extends AbstractController
 		return FileUtil.getDirectory(this.tempDirectory, "driverEntity", true);
 	}
 
+	protected void setFormPageAttr(HttpServletRequest request, Model model, DriverEntity entity)
+	{
+		setFormModel(model, entity);
+	}
+
+	protected void inflateSaveEntity(HttpServletRequest request, DriverEntity entity)
+	{
+	}
+
+	protected void toFormResponseData(HttpServletRequest request, DriverEntity entity)
+	{
+	}
+
+	protected void toQueryResponseData(HttpServletRequest request, List<DriverEntity> items)
+	{
+	}
+
+	protected DriverEntity createInstance()
+	{
+		return new DriverEntity();
+	}
+
 	/**
 	 * 根据表名称关键字查询{@linkplain TableInfo}列表。
 	 * 
@@ -572,8 +541,7 @@ public class DriverEntityController extends AbstractController
 	 */
 	protected List<DriverEntity> findByKeyword(List<DriverEntity> driverEntities, String keyword)
 	{
-		return KeywordMatcher.<DriverEntity> match(driverEntities, keyword,
-				new KeywordMatcher.MatchValue<DriverEntity>()
+		return this.keywordMatcher.match(driverEntities, keyword, new MatchValue<DriverEntity>()
 				{
 					@Override
 					public String[] get(DriverEntity t)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -29,21 +29,21 @@ public class Database implements Serializable
 {
 	private static final long serialVersionUID = 1L;
 
-	private String url;
+	private String url = null;
 
-	private String user;
+	private String user = null;
 
-	private String productName;
+	private String productName = null;
 
-	private String productVersion;
+	private String productVersion = null;
 
-	private String catalog;
+	private String catalog = null;
 
-	private String schema;
+	private String schema = null;
 
-	private String driverName;
+	private String driverName = null;
 
-	private String driverVersion;
+	private String driverVersion = null;
 
 	public Database()
 	{

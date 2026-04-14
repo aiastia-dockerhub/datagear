@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -130,7 +130,7 @@ public class AuthorizationServiceImpl extends AbstractMybatisEntityService<Strin
 		if (resourceService == null)
 			return false;
 
-		DataPermissionEntity<?> resourceEntity = resourceService.getByStringId(user, resourceId);
+		DataPermissionEntity resourceEntity = resourceService.getByStringId(user, resourceId);
 
 		if (resourceEntity == null)
 			return false;

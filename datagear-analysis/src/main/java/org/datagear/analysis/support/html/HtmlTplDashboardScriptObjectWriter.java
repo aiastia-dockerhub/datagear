@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -81,6 +81,8 @@ public class HtmlTplDashboardScriptObjectWriter extends AbstractHtmlScriptObject
 	 */
 	protected static class HtmlTplDashboardJson extends HtmlTplDashboard
 	{
+		private static final long serialVersionUID = 1L;
+
 		@SuppressWarnings("unchecked")
 		public HtmlTplDashboardJson(HtmlTplDashboard dashboard, String renderContextVarName)
 		{
@@ -88,6 +90,7 @@ public class HtmlTplDashboardScriptObjectWriter extends AbstractHtmlScriptObject
 					new TplDashboardWidgetJson(dashboard.getWidget()), dashboard.getVarName());
 
 			setCharts(Collections.EMPTY_LIST);
+			setVersion(dashboard.getVersion());
 			
 			LoadableChartWidgets lcws = dashboard.getLoadableChartWidgets();
 			setLoadableChartWidgets(lcws == null ? null : new LoadableChartWidgetsJson(lcws));
@@ -141,9 +144,12 @@ public class HtmlTplDashboardScriptObjectWriter extends AbstractHtmlScriptObject
 	 */
 	protected static class TplDashboardWidgetJson extends HtmlTplDashboardWidget
 	{
+		private static final long serialVersionUID = 1L;
+
 		public TplDashboardWidgetJson(HtmlTplDashboardWidget dashboardWidget)
 		{
 			super(dashboardWidget.getId(), dashboardWidget.getTemplates(), null, null);
+			setVersion(dashboardWidget.getVersion());
 		}
 
 		@JsonIgnore

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,6 +31,7 @@ import org.datagear.dataexchange.ExceptionResolve;
 import org.datagear.util.IOUtil;
 import org.datagear.web.dataexchange.MessageBatchDataExchangeListener.SubSubmitSuccess;
 import org.datagear.web.util.MessageChannel;
+import org.datagear.web.util.msg.Message;
 import org.springframework.context.MessageSource;
 
 /**
@@ -43,7 +44,7 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 {
 	public static final String LINE_SEPARATOR = System.getProperty("line.separator", "\n");
 
-	public static final String LOG_FILE_CHARSET = "UTF-8";
+	public static final String LOG_FILE_CHARSET = IOUtil.CHARSET_UTF_8;
 
 	public static final String LOG_FILE_CONTENT_DIV = "----------------------------------------";
 
@@ -100,6 +101,12 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 		return sendExchangingMessageInterval;
 	}
 
+	/**
+	 * 设置发送交换中消息的间隔毫秒数
+	 * 
+	 * @param sendExchangingMessageInterval
+	 *            {@code -1}表示不发送
+	 */
 	public void setSendExchangingMessageInterval(int sendExchangingMessageInterval)
 	{
 		this.sendExchangingMessageInterval = sendExchangingMessageInterval;
@@ -149,25 +156,25 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	}
 
 	@Override
-	protected DataExchangeMessage buildStartMessage()
+	protected Message buildStartMessage()
 	{
 		return new SubStart(this.subDataExchangeId);
 	}
 
 	@Override
-	protected DataExchangeMessage buildExceptionMessage(DataExchangeException e)
+	protected Message buildExceptionMessage(DataExchangeException e)
 	{
 		return new SubException(this.subDataExchangeId, resolveDataExchangeExceptionI18n(e), evalDuration());
 	}
 
 	@Override
-	protected DataExchangeMessage buildSuccessMessage()
+	protected Message buildSuccessMessage()
 	{
 		return new SubSuccess(this.subDataExchangeId, evalDuration());
 	}
 
 	@Override
-	protected DataExchangeMessage buildFinishMessage()
+	protected Message buildFinishMessage()
 	{
 		return new SubFinish(this.subDataExchangeId);
 	}
@@ -179,6 +186,9 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	protected boolean isTimeSendExchangingMessage()
 	{
+		if (this.sendExchangingMessageInterval < 0)
+			return false;
+
 		long currentTime = System.currentTimeMillis();
 
 		if (currentTime - this._prevSendExchangingMessageTime < this.sendExchangingMessageInterval)
@@ -192,7 +202,7 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 * 
 	 * @return
 	 */
-	protected void sendExchangingMessage(DataExchangeMessage message)
+	protected void sendExchangingMessage(Message message)
 	{
 		sendMessage(message);
 		this._prevSendExchangingMessageTime = System.currentTimeMillis();
@@ -279,6 +289,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubStart extends SubDataExchangeMessage
 	{
+		private static final long serialVersionUID = 1L;
+
 		public static final int ORDER = SubSubmitSuccess.ORDER + 1;
 
 		public SubStart()
@@ -300,6 +312,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubException extends SubDataExchangeMessage
 	{
+		private static final long serialVersionUID = 1L;
+
 		public static final int ORDER = SubStart.ORDER + 2;
 
 		private String content;
@@ -347,6 +361,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubSuccess extends SubDataExchangeMessage
 	{
+		private static final long serialVersionUID = 1L;
+
 		public static final int ORDER = SubStart.ORDER + 2;
 
 		private long duration;
@@ -381,6 +397,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubFinish extends SubDataExchangeMessage
 	{
+		private static final long serialVersionUID = 1L;
+
 		public static final int ORDER = SubSuccess.ORDER + 1;
 
 		public SubFinish()
@@ -402,6 +420,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubExchangingWithCount extends SubDataExchangeMessage
 	{
+		private static final long serialVersionUID = 1L;
+
 		public static final int ORDER = SubStart.ORDER + 1;
 
 		private int successCount;
@@ -449,6 +469,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubExceptionWithCount extends SubException
 	{
+		private static final long serialVersionUID = 1L;
+
 		private ExceptionResolve exceptionResolve;
 
 		private int successCount;
@@ -508,6 +530,8 @@ public abstract class MessageSubDataExchangeListener extends MessageDataExchange
 	 */
 	public static class SubSuccessWithCount extends SubSuccess
 	{
+		private static final long serialVersionUID = 1L;
+
 		private int successCount;
 
 		private int failCount;

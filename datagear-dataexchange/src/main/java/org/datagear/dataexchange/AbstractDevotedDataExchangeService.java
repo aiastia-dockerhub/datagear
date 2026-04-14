@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,20 +17,12 @@
 
 package org.datagear.dataexchange;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.Reader;
-import java.sql.Blob;
-import java.sql.Clob;
 import java.sql.Connection;
-import java.sql.NClob;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.RowId;
 import java.sql.SQLException;
-import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -42,12 +34,14 @@ import java.util.List;
 
 import org.apache.commons.codec.DecoderException;
 import org.datagear.meta.Column;
+import org.datagear.meta.Table;
 import org.datagear.meta.resolver.DBMetaResolver;
 import org.datagear.persistence.support.PersistenceSupport;
 import org.datagear.util.IOUtil;
 import org.datagear.util.JdbcUtil;
 import org.datagear.util.NumberParserException;
 import org.datagear.util.SqlParamValue;
+import org.datagear.util.StringUtil;
 import org.datagear.util.resource.ResourceFactory;
 
 /**
@@ -398,73 +392,44 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	}
 
 	/**
-	 * 移除{@code null}列信息位置对应的列值。
-	 * <p>
-	 * 如果没有{@code null}列信息，将返回原列值列表。
-	 * </p>
+	 * 扩容集合直到满足长度。
 	 * 
-	 * @param rawColumns
-	 * @param noNullColumns
-	 * @param columnValues
-	 * @return
+	 * @param <G>
+	 * @param list
+	 * @param size
+	 * @param expandValue
 	 */
-	protected <G> List<G> removeNullColumnValues(List<Column> rawColumns, List<Column> noNullColumns,
-			List<G> columnValues)
+	protected <G> void expandToSize(Collection<G> list, int size, G expandValue)
 	{
-		if (noNullColumns == rawColumns || noNullColumns.size() == rawColumns.size())
-			return columnValues;
+		int expandCount = (size - list.size());
 
-		List<G> newColumnValues = new ArrayList<>(noNullColumns.size());
-
-		for (G ele : columnValues)
+		for (int i = 0; i < expandCount; i++)
 		{
-			if (ele == null)
-				continue;
-
-			newColumnValues.add(ele);
+			list.add(expandValue);
 		}
-
-		return newColumnValues;
 	}
 
 	/**
 	 * 移除{@linkplain Column}列表中的{@code null}元素。
-	 * <p>
-	 * 如果没有{@code null}元素，将返回原列表。
-	 * </p>
 	 * 
 	 * @param columns
 	 * @return
 	 */
 	protected List<Column> removeNullColumns(List<Column> columns)
 	{
-		boolean noNull = true;
-
-		for (Column column : columns)
-		{
-			if (column == null)
-			{
-				noNull = false;
-				break;
-			}
-		}
-
-		if (noNull)
-			return columns;
-
-		List<Column> list = new ArrayList<>(columns.size());
+		List<Column> re = new ArrayList<>(columns.size());
 
 		for (Column column : columns)
 		{
 			if (column != null)
-				list.add(column);
+				re.add(column);
 		}
 
-		return list;
+		return re;
 	}
 
 	/**
-	 * 获取表所有咧信息。
+	 * 获取表信息。
 	 * 
 	 * @param cn
 	 * @param table
@@ -472,68 +437,136 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @return
 	 * @throws TableNotFoundException
 	 */
-	protected List<Column> getColumns(Connection cn, String table, DBMetaResolver dbMetaResolver)
+	protected Table getTableIfValid(Connection cn, String table, DBMetaResolver dbMetaResolver)
 			throws TableNotFoundException
 	{
-		Column[] allColumns = dbMetaResolver.getColumns(cn, table);
+		Table t = null;
 
-		if (allColumns == null || allColumns.length == 0)
+		try
+		{
+			t = dbMetaResolver.getTable(cn, table);
+		}
+		catch (org.datagear.meta.resolver.TableNotFoundException e)
+		{
+			String exactName = dbMetaResolver.getExactTableName(cn, table);
+
+			if (exactName == null || exactName.equals(table))
+				throw new TableNotFoundException(table);
+			else
+			{
+				try
+				{
+					t = dbMetaResolver.getTable(cn, exactName);
+				}
+				catch (org.datagear.meta.resolver.TableNotFoundException e1)
+				{
+					throw new TableNotFoundException(table);
+				}
+			}
+		}
+
+		if (t == null || !t.hasColumn())
 			throw new TableNotFoundException(table);
 
-		return Arrays.asList(allColumns);
+		return t;
 	}
 
 	/**
-	 * 获取表指定列信息列表。
-	 * <p>
-	 * 当指定位置的列不存在时，如果{@code nullIfColumnNotFound}为{@code true}，返回列表对应位置将为{@code null}，
-	 * 否则，将立刻抛出{@linkplain ColumnNotFoundException}。
-	 * </p>
+	 * 查找表列。
 	 * 
-	 * @param cn
 	 * @param table
 	 * @param columnNames
 	 * @param nullIfColumnNotFound
-	 * @param dbMetaResolver
+	 *            当为{@code false}时，如果未找到指定名称的列，将抛出{@linkplain ColumnNotFoundException}异常
 	 * @return
-	 * @throws TableNotFoundException
 	 * @throws ColumnNotFoundException
 	 */
-	protected List<Column> getColumns(Connection cn, String table, List<String> columnNames,
-			boolean nullIfColumnNotFound, DBMetaResolver dbMetaResolver)
-			throws TableNotFoundException, ColumnNotFoundException
+	protected List<Column> findColumns(Table table, List<String> columnNames, boolean nullIfColumnNotFound)
+			throws ColumnNotFoundException
 	{
 		int size = columnNames.size();
 
 		List<Column> columns = new ArrayList<>(size);
 
-		Column[] allColumns = dbMetaResolver.getColumns(cn, table);
-
-		if (allColumns == null || allColumns.length == 0)
-			throw new TableNotFoundException(table);
-
-		for (int i = 0; i < size; i++)
+		for (String columnName : columnNames)
 		{
-			String columnName = columnNames.get(i);
-
-			Column column = null;
-
-			for (int j = 0; j < allColumns.length; j++)
-			{
-				if (allColumns[j].getName().equals(columnName))
-				{
-					column = allColumns[j];
-					break;
-				}
-			}
+			Column column = table.getColumn(columnName);
 
 			if (!nullIfColumnNotFound && column == null)
-				throw new ColumnNotFoundException(table, columnName);
+				throw new ColumnNotFoundException(table.getName(), columnName);
 
 			columns.add(column);
 		}
 
 		return columns;
+	}
+
+	/**
+	 * 是否外键列。
+	 * 
+	 * @param table
+	 * @param columns
+	 * @return
+	 */
+	protected List<Boolean> isImportKeyColumns(Table table, Column[] columns)
+	{
+		return isImportKeyColumns(table, Arrays.asList(columns));
+	}
+
+	/**
+	 * 是否外键列。
+	 * 
+	 * @param table
+	 * @param columns
+	 * @return
+	 */
+	protected List<Boolean> isImportKeyColumns(Table table, List<Column> columns)
+	{
+		List<Boolean> re = new ArrayList<Boolean>(columns.size());
+
+		for (Column column : columns)
+		{
+			re.add(table.isImportKeyColumn(column.getName()));
+		}
+
+		return re;
+	}
+
+	/**
+	 * 移除{@code null}列信息位置对应的值。
+	 * 
+	 * @param columns
+	 * @param columnValues
+	 * @return
+	 */
+	protected <G> List<G> removeValueOfNullColumn(List<Column> columns, List<G> columnValues)
+	{
+		List<G> re = new ArrayList<>(columnValues.size());
+
+		for (int i = 0, len = columns.size(); i < len; i++)
+		{
+			if (columns.get(i) != null)
+			{
+				re.add(columnValues.get(i));
+			}
+		}
+
+		return re;
+	}
+
+	/**
+	 * 移除{@code null}列信息位置对应的值。
+	 * 
+	 * @param <G>
+	 * @param columns
+	 * @param columnValues
+	 * @param expandValue
+	 * @return
+	 */
+	protected <G> List<G> removeValueOfNullColumnExpanded(List<Column> columns, List<G> columnValues, G expandValue)
+	{
+		expandToSize(columnValues, columns.size(), expandValue);
+		return removeValueOfNullColumn(columns, columnValues);
 	}
 
 	/**
@@ -580,6 +613,39 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	}
 
 	/**
+	 * 将空字符串的外键列值设为{@code null}。
+	 * 
+	 * @param <V>
+	 * @param columns
+	 * @param importKeyColumns
+	 * @param columnValues
+	 */
+	protected <V> void setNullForEmptyIfImportKey(List<Column> columns, List<Boolean> importKeyColumns,
+			List<V> columnValues)
+	{
+		for (int i = 0, len = columns.size(); i < len; i++)
+		{
+			Column col = columns.get(i);
+
+			// 只有在列允许null值时才应设置
+			if (col.isNullable())
+			{
+				boolean ikc = importKeyColumns.get(i);
+
+				if (ikc)
+				{
+					V cv = columnValues.get(i);
+
+					if ((cv instanceof String) && StringUtil.isEmpty((String) cv))
+					{
+						columnValues.set(i, null);
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * 设置{@linkplain PreparedStatement}的参数值，并在必要时进行数据类型转换。
 	 * 
 	 * @param cn
@@ -588,7 +654,7 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @param paramValue
 	 * @param column
 	 * @param dataFormatContext
-	 *            当{@code parameterValue}为字符串且需要类型转换时使用，允许为{@code null}
+	 *            允许为{@code null}，当{@code parameterValue}为字符串且需要类型转换时使用
 	 * @throws SQLException
 	 * @throws ParseException
 	 * @throws NumberParserException
@@ -596,7 +662,7 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @throws UnsupportedSqlValueException
 	 * @throws UnsupportedSqlTypeException
 	 */
-	protected void setParamValue(Connection cn, PreparedStatement st, int paramIndex, Object paramValue,
+	protected Object setParamValue(Connection cn, PreparedStatement st, int paramIndex, Object paramValue,
 			Column column, DataFormatContext dataFormatContext) throws SQLException, ParseException,
 			NumberParserException, DecoderException, UnsupportedSqlValueException, UnsupportedSqlTypeException
 	{
@@ -605,7 +671,7 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 		if (paramValue == null)
 		{
 			st.setNull(paramIndex, sqlType);
-			return;
+			return null;
 		}
 
 		Object value = paramValue;
@@ -755,7 +821,7 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 			}
 		}
 
-		super.setParamValue(cn, st, paramIndex, SqlParamValue.valueOf(value, sqlType));
+		return super.setParamValue(cn, st, paramIndex, SqlParamValue.valueOf(value, sqlType));
 	}
 
 	@Override
@@ -778,168 +844,22 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @param cn
 	 * @param rs
 	 * @param column
+	 * @param columnIndex
+	 *            {@linkplain Column}在结果集中的列号（以{@code 1}开始）
 	 * @return
 	 * @throws SQLException
 	 * @throws IOException
 	 * @throws UnsupportedSqlTypeException
 	 */
-	protected Object getColumnValueSimple(Connection cn, ResultSet rs, Column column)
+	protected Object getColumnValueSimple(Connection cn, ResultSet rs, Column column, int columnIndex)
 			throws SQLException, IOException, UnsupportedSqlTypeException
 	{
 		Object value = null;
 
 		int sqlType = column.getType();
-		String columnName = column.getName();
 
 		switch (sqlType)
 		{
-			case Types.LONGVARCHAR:
-			{
-				Reader reader = rs.getCharacterStream(columnName);
-
-				try
-				{
-					if (!rs.wasNull())
-						value = readToString(reader);
-				}
-				finally
-				{
-					IOUtil.close(reader);
-				}
-
-				break;
-			}
-
-			case Types.LONGVARBINARY:
-			{
-				InputStream in = rs.getBinaryStream(columnName);
-
-				try
-				{
-					if (!rs.wasNull())
-					{
-						value = readToBytes(in);
-					}
-				}
-				finally
-				{
-					IOUtil.close(in);
-				}
-
-				break;
-			}
-
-			case Types.CLOB:
-			{
-				Clob clob = rs.getClob(columnName);
-
-				if (!rs.wasNull())
-				{
-					Reader reader = clob.getCharacterStream();
-
-					try
-					{
-						value = readToString(reader);
-					}
-					finally
-					{
-						IOUtil.close(reader);
-					}
-				}
-
-				break;
-			}
-
-			case Types.BLOB:
-			{
-				Blob blob = rs.getBlob(columnName);
-
-				if (!rs.wasNull())
-				{
-					InputStream inputStream = blob.getBinaryStream();
-
-					try
-					{
-						value = readToBytes(inputStream);
-					}
-					finally
-					{
-						IOUtil.close(inputStream);
-					}
-				}
-
-				break;
-			}
-
-			case Types.LONGNVARCHAR:
-			{
-				Reader reader = rs.getNCharacterStream(columnName);
-
-				try
-				{
-					if (!rs.wasNull())
-						value = readToString(reader);
-				}
-				finally
-				{
-					IOUtil.close(reader);
-				}
-
-				break;
-			}
-
-			case Types.NCLOB:
-			{
-				NClob nclob = rs.getNClob(columnName);
-
-				if (!rs.wasNull())
-				{
-					Reader reader = nclob.getCharacterStream();
-
-					try
-					{
-						value = readToString(reader);
-					}
-					finally
-					{
-						IOUtil.close(reader);
-					}
-				}
-
-				break;
-			}
-
-			case Types.ROWID:
-			{
-				RowId rowId = rs.getRowId(columnName);
-
-				if (!rs.wasNull())
-					value = rowId.getBytes();
-
-				break;
-			}
-
-			case Types.SQLXML:
-			{
-				SQLXML sqlXml = rs.getSQLXML(columnName);
-
-				if (!rs.wasNull())
-				{
-					Reader reader = sqlXml.getCharacterStream();
-
-					try
-					{
-						value = readToString(reader);
-					}
-					finally
-					{
-						IOUtil.close(reader);
-					}
-				}
-
-				break;
-			}
-
 			case Types.ARRAY:
 			case Types.DATALINK:
 			case Types.DISTINCT:
@@ -947,25 +867,32 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 			case Types.OTHER:
 			case Types.REF:
 			case Types.REF_CURSOR:
+			case Types.STRUCT:
 			{
-				value = getColumnValueExt(cn, rs, columnName, sqlType);
-
+				value = getColumnValueExt(cn, rs, columnIndex, sqlType);
 				break;
 			}
 
 			default:
-
-				value = super.getColumnValue(cn, rs, columnName, sqlType);
+			{
+				value = super.getColumnValue(cn, rs, columnIndex, sqlType);
+				break;
+			}
 		}
-
-		if (rs.wasNull())
-			value = null;
 
 		return value;
 	}
 
 	@Override
-	protected Object getColumnValueExt(Connection cn, ResultSet rs, String columnName, int sqlType) throws SQLException
+	protected Object getColumnValueExt(Connection cn, ResultSet rs, int column, int sqlType)
+			throws SQLException
+	{
+		throw new UnsupportedSqlTypeException(sqlType);
+	}
+
+	@Override
+	protected Object getColumnValueRawExt(Connection cn, ResultSet rs, int column, int sqlType)
+			throws SQLException
 	{
 		throw new UnsupportedSqlTypeException(sqlType);
 	}
@@ -976,16 +903,18 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @param cn
 	 * @param rs
 	 * @param column
+	 * @param columnIndex
+	 *            {@linkplain Column}在结果集中的列号（以{@code 1}开始）
 	 * @param dataFormatContext
 	 * @return
 	 * @throws SQLException
 	 * @throws IOException
 	 * @throws UnsupportedSqlTypeException
 	 */
-	protected String getStringValue(Connection cn, ResultSet rs, Column column,
+	protected String getStringValue(Connection cn, ResultSet rs, Column column, int columnIndex,
 			DataFormatContext dataFormatContext) throws SQLException, IOException, UnsupportedSqlTypeException
 	{
-		Object value = getColumnValueSimple(cn, rs, column);
+		Object value = getColumnValueSimple(cn, rs, column, columnIndex);
 		String valueStr = null;
 
 		if (value == null)
@@ -1027,45 +956,6 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	}
 
 	/**
-	 * 将字节流读入字节数组。
-	 * 
-	 * @param in
-	 * @return
-	 * @throws IOException
-	 */
-	protected byte[] readToBytes(InputStream in) throws IOException
-	{
-		ByteArrayOutputStream bout = new ByteArrayOutputStream();
-
-		byte[] buf = new byte[32];
-		int count = -1;
-		while ((count = in.read(buf)) > -1)
-			bout.write(buf, 0, count);
-
-		return bout.toByteArray();
-	}
-
-	/**
-	 * 将字符流读入字符串。
-	 * 
-	 * @param reader
-	 * @return
-	 * @throws IOException
-	 */
-	protected String readToString(Reader reader) throws IOException
-	{
-		StringBuilder sb = new StringBuilder();
-
-		char[] buf = new char[32];
-
-		int count = -1;
-		while ((count = reader.read(buf)) > -1)
-			sb.append(buf, 0, count);
-
-		return sb.toString();
-	}
-
-	/**
 	 * 导入一条值数据。
 	 * 
 	 * @param cn
@@ -1082,14 +972,16 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 */
 	protected boolean importValueData(Connection cn, PreparedStatement st, List<Column> columns,
 			List<? extends Object> columnValues, DataIndex dataIndex, boolean nullForIllegalColumnValue,
-			ExceptionResolve exceptionResolve, DataFormatContext dataFormatContext, ValueDataImportListener listener)
+			ExceptionResolve exceptionResolve, DataFormatContext dataFormatContext,
+			ValueDataImportListener listener)
 			throws DataExchangeException
 	{
 		DataExchangeException exception = null;
 
+		List<Object> re = null;
 		try
 		{
-			setImportParamValues(cn, st, columns, columnValues, dataIndex, nullForIllegalColumnValue,
+			re = setImportParamValues(cn, st, columns, columnValues, dataIndex, nullForIllegalColumnValue,
 					dataFormatContext, listener);
 
 			executeImportPreparedStatement(st, dataIndex);
@@ -1097,6 +989,10 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 		catch (Throwable t)
 		{
 			exception = wrapToDataExchangeException(t);
+		}
+		finally
+		{
+			IOUtil.closeIf(re);
 		}
 
 		if (exception == null)
@@ -1152,12 +1048,15 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 	 * @param nullForIllegalColumnValue
 	 * @param dataFormatContext
 	 * @param listener
+	 * @return
 	 * @throws SetImportColumnValueException
 	 */
-	protected void setImportParamValues(Connection cn, PreparedStatement st, List<Column> columns,
+	protected List<Object> setImportParamValues(Connection cn, PreparedStatement st, List<Column> columns,
 			List<? extends Object> columnValues, DataIndex dataIndex, boolean nullForIllegalColumnValue,
 			DataFormatContext dataFormatContext, ValueDataImportListener listener) throws SetImportColumnValueException
 	{
+		List<Object> re = new ArrayList<>();
+
 		int columnCount = columns.size();
 		int columnValueCount = columnValues.size();
 
@@ -1170,7 +1069,8 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 
 			try
 			{
-				setParamValue(cn, st, parameterIndex, rawValue, column, dataFormatContext);
+				Object reVal = setParamValue(cn, st, parameterIndex, rawValue, column, dataFormatContext);
+				re.add(reVal);
 			}
 			catch (Throwable t)
 			{
@@ -1202,5 +1102,7 @@ public abstract class AbstractDevotedDataExchangeService<T extends DataExchange>
 					throw e;
 			}
 		}
+
+		return re;
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,7 +20,7 @@ package org.datagear.management.domain;
 import java.util.Date;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.support.CsvValueDataSet;
 import org.springframework.beans.BeanUtils;
 
@@ -38,7 +38,7 @@ public class CsvValueDataSetEntity extends CsvValueDataSet implements DataSetEnt
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -48,14 +48,12 @@ public class CsvValueDataSetEntity extends CsvValueDataSet implements DataSetEnt
 	public CsvValueDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
-	public CsvValueDataSetEntity(String id, String name, List<DataSetProperty> properties, String value,
+	public CsvValueDataSetEntity(String id, String name, List<DataSetField> fields, String value,
 			User createUser)
 	{
-		super(id, name, properties, value);
-		this.createTime = new Date();
+		super(id, name, fields, value);
 		this.createUser = createUser;
 	}
 

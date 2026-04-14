@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -76,9 +76,10 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		{
 			cn = getConnection();
 			ResourceFactory<Reader> readerFactory = ClasspathReaderResourceFactory
-					.valueOf(getResourceClasspath("support/CsvDataExportServiceTest.csv"), "UTF-8");
+					.valueOf(getResourceClasspath("support/CsvDataExportServiceTest.csv"), IOUtil.CHARSET_UTF_8);
 
-			ValueDataImportOption valueDataImportOption = new ValueDataImportOption(ExceptionResolve.ABORT, true, true);
+			ValueDataImportOption valueDataImportOption = new ValueDataImportOption(ExceptionResolve.ABORT, true, true,
+					true);
 			CsvDataImport impt = new CsvDataImport(new SimpleConnectionFactory(cn, false), dataFormat,
 					valueDataImportOption, TABLE_NAME_DATA_EXPORT, readerFactory);
 
@@ -96,9 +97,11 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		{
 			cn = getConnection();
 			ResourceFactory<Reader> readerFactory = ClasspathReaderResourceFactory
-					.valueOf(getResourceClasspath("support/CsvDataImportServiceTest_unsigned_number.csv"), "UTF-8");
+					.valueOf(getResourceClasspath("support/CsvDataImportServiceTest_unsigned_number.csv"),
+							IOUtil.CHARSET_UTF_8);
 
-			ValueDataImportOption valueDataImportOption = new ValueDataImportOption(ExceptionResolve.ABORT, true, true);
+			ValueDataImportOption valueDataImportOption = new ValueDataImportOption(ExceptionResolve.ABORT, true, true,
+					true);
 			CsvDataImport impt = new CsvDataImport(new SimpleConnectionFactory(cn, false), dataFormat,
 					valueDataImportOption, TABLE_NAME_UNSIGNED_NUMBER, readerFactory);
 
@@ -128,7 +131,7 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		{
 			cn = getConnection();
 
-			ResourceFactory<Writer> writerFactory = FileWriterResourceFactory.valueOf(outFile, "UTF-8");
+			ResourceFactory<Writer> writerFactory = FileWriterResourceFactory.valueOf(outFile, IOUtil.CHARSET_UTF_8);
 
 			CsvDataExport csvDataExport = new CsvDataExport(new SimpleConnectionFactory(cn, false), dataFormat,
 					new TextDataExportOption(true), new TableQuery(TABLE_NAME_DATA_EXPORT), writerFactory);
@@ -142,10 +145,10 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		}
 
 		CSVParser sourceCsvParser = CSVFormat.DEFAULT.parse(ClasspathReaderResourceFactory
-				.valueOf(getResourceClasspath("support/CsvDataExportServiceTest.csv"), "UTF-8").get());
+				.valueOf(getResourceClasspath("support/CsvDataExportServiceTest.csv"), IOUtil.CHARSET_UTF_8).get());
 
 		CSVParser exportCsvParser = CSVFormat.DEFAULT
-				.parse(new InputStreamReader(new FileInputStream(outFile), "UTF-8"));
+				.parse(new InputStreamReader(new FileInputStream(outFile), IOUtil.CHARSET_UTF_8));
 
 		List<CSVRecord> sourceRecords = sourceCsvParser.getRecords();
 		List<CSVRecord> exportRecords = exportCsvParser.getRecords();
@@ -188,7 +191,7 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		{
 			cn = getConnection();
 
-			ResourceFactory<Writer> writerFactory = FileWriterResourceFactory.valueOf(outFile, "UTF-8");
+			ResourceFactory<Writer> writerFactory = FileWriterResourceFactory.valueOf(outFile, IOUtil.CHARSET_UTF_8);
 
 			CsvDataExport csvDataExport = new CsvDataExport(new SimpleConnectionFactory(cn, false), dataFormat,
 					new TextDataExportOption(true), new TableQuery(TABLE_NAME_UNSIGNED_NUMBER), writerFactory);
@@ -202,10 +205,12 @@ public class CsvDataExportServiceTest extends DataexchangeTestSupport
 		}
 
 		CSVParser sourceCsvParser = CSVFormat.DEFAULT.parse(ClasspathReaderResourceFactory
-				.valueOf(getResourceClasspath("support/CsvDataImportServiceTest_unsigned_number.csv"), "UTF-8").get());
+				.valueOf(getResourceClasspath("support/CsvDataImportServiceTest_unsigned_number.csv"),
+						IOUtil.CHARSET_UTF_8)
+				.get());
 
 		CSVParser exportCsvParser = CSVFormat.DEFAULT
-				.parse(new InputStreamReader(new FileInputStream(outFile), "UTF-8"));
+				.parse(new InputStreamReader(new FileInputStream(outFile), IOUtil.CHARSET_UTF_8));
 
 		List<CSVRecord> sourceRecords = sourceCsvParser.getRecords();
 		List<CSVRecord> exportRecords = exportCsvParser.getRecords();

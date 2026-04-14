@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -41,6 +41,7 @@ import org.datagear.persistence.support.dialect.MysqlDialectBuilder;
 import org.datagear.persistence.support.dialect.OracleDialectBuilder;
 import org.datagear.persistence.support.dialect.PostgresqlDialectBuilder;
 import org.datagear.persistence.support.dialect.SqlServerDialectBuilder;
+import org.datagear.util.QueryResultSet;
 import org.datagear.util.Sql;
 
 /**
@@ -233,7 +234,7 @@ public class DefaultDialectSource extends PersistenceSupport implements DialectS
 	 */
 	protected TestInfo buildTestInfo(Connection cn, DatabaseMetaData databaseMetaData)
 	{
-		SimpleTable table = this.dbMetaResolver.getRandomSimpleTable(cn);
+		SimpleTable table = this.dbMetaResolver.getRandomDataTable(cn);
 
 		if (table == null)
 			return null;
@@ -263,10 +264,17 @@ public class DefaultDialectSource extends PersistenceSupport implements DialectS
 				.sql(dialect.quote(testInfo.getTableName()));
 
 		Order[] orders = Order.asArray(Order.valueOf(testInfo.getOrderColumnName(), Order.ASC));
-
 		Sql pagingQuerySql = dialect.toPagingQuerySql(query, orders, 1, 5);
+		QueryResultSet qrs = null;
 
-		executeQuery(cn, pagingQuerySql, ResultSet.TYPE_FORWARD_ONLY);
+		try
+		{
+			qrs = executeQuery(cn, pagingQuerySql, ResultSet.TYPE_FORWARD_ONLY);
+		}
+		finally
+		{
+			QueryResultSet.close(qrs);
+		}
 
 		return true;
 	}

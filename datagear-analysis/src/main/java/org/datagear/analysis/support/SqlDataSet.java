@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,13 +17,13 @@
 
 package org.datagear.analysis.support;
 
-import java.io.Reader;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,16 +31,18 @@ import java.util.Map;
 
 import org.datagear.analysis.DataSet;
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
-import org.datagear.analysis.DataSetProperty.DataType;
+import org.datagear.analysis.DataSetField;
+import org.datagear.analysis.DataSetField.DataType;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.ResolvableDataSet;
 import org.datagear.analysis.ResolvedDataSetResult;
-import org.datagear.util.IOUtil;
+import org.datagear.analysis.support.datasettpl.SqlTemplateResult;
 import org.datagear.util.JDBCCompatiblity;
 import org.datagear.util.JdbcSupport;
+import org.datagear.util.JdbcUtil;
 import org.datagear.util.QueryResultSet;
 import org.datagear.util.Sql;
+import org.datagear.util.SqlParamValue;
 import org.datagear.util.SqlType;
 import org.datagear.util.resource.ConnectionFactory;
 import org.datagear.util.sqlvalidator.DatabaseProfile;
@@ -60,6 +62,8 @@ import org.slf4j.LoggerFactory;
  */
 public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(SqlDataSet.class);
 
 	protected static final JdbcSupport JDBC_SUPPORT = new JdbcSupport();
@@ -82,10 +86,10 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 		this.sql = sql;
 	}
 
-	public SqlDataSet(String id, String name, List<DataSetProperty> properties, ConnectionFactory connectionFactory,
+	public SqlDataSet(String id, String name, List<DataSetField> fields, ConnectionFactory connectionFactory,
 			String sql)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.connectionFactory = connectionFactory;
 		this.sql = sql;
 	}
@@ -128,10 +132,10 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 	}
 
 	@Override
-	protected TemplateResolvedDataSetResult resolveResult(DataSetQuery query, List<DataSetProperty> properties,
-			boolean resolveProperties) throws DataSetException
+	protected TemplateResolvedDataSetResult resolveResult(DataSetQuery query, boolean resolveFields)
+			throws DataSetException
 	{
-		String sql = resolveTemplateSql(getSql(), query);
+		SqlTemplateResult sqlTemplateResult = resolveTemplateResultSql(getSql(), query);
 
 		Connection cn = null;
 
@@ -139,39 +143,20 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 		{
 			try
 			{
-				cn = getConnectionFactory().get();
+				cn = getConnection();
 			}
 			catch (Throwable t)
 			{
 				throw new SqlDataSetConnectionException(t);
 			}
 
-			validateSql(cn, sql);
-
-			Sql sqlObj = Sql.valueOf(sql);
-
-			JdbcSupport jdbcSupport = getJdbcSupport();
-
-			QueryResultSet qrs = null;
-
 			try
 			{
-				qrs = jdbcSupport.executeQuery(cn, sqlObj, ResultSet.TYPE_FORWARD_ONLY);
-			}
-			catch (Throwable t)
-			{
-				QueryResultSet.close(qrs);
-				throw new SqlDataSetSqlExecutionException(sql, t);
-			}
+				// 注意：无论是否预编译SQL，都应进行防注入校验，因为混合场景很常用，比如：
+				// SELECT * FROM T WHERE NAME = ${pc(name)} ORDER BY ${col}
+				validateSql(cn, sqlTemplateResult);
 
-			TemplateResolvedDataSetResult dataSetResult = null;
-
-			try
-			{
-				ResultSet rs = qrs.getResultSet();
-				ResolvedDataSetResult result = resolveResult(cn, rs, query, properties, resolveProperties);
-
-				dataSetResult = new TemplateResolvedDataSetResult(result.getResult(), result.getProperties(), sql);
+				return resolveResult(cn, query, resolveFields, sqlTemplateResult);
 			}
 			catch (DataSetException e)
 			{
@@ -181,12 +166,6 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 			{
 				throw new DataSetException(t);
 			}
-			finally
-			{
-				QueryResultSet.close(qrs);
-			}
-
-			return dataSetResult;
 		}
 		finally
 		{
@@ -194,7 +173,7 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 			{
 				try
 				{
-					getConnectionFactory().release(cn);
+					releaseConnection(cn);
 				}
 				catch (Throwable t)
 				{
@@ -204,18 +183,117 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 		}
 	}
 
+	protected Connection getConnection() throws Throwable
+	{
+		Connection cn = getConnectionFactory().get();
+		// 设为只读，提示底层数据库驱动优化
+		JdbcUtil.setReadonlyIfSupports(cn, true);
+		return cn;
+	}
+
+	protected void releaseConnection(Connection cn) throws Throwable
+	{
+		getConnectionFactory().release(cn);
+	}
+
+	protected TemplateResolvedDataSetResult resolveResult(Connection cn, DataSetQuery query, boolean resolveFields,
+			SqlTemplateResult sqlTemplateResult) throws Throwable
+	{
+		Sql sqlObj = buildSqlObj(sqlTemplateResult);
+
+		QueryResultSet qrs = null;
+		TemplateResolvedDataSetResult dataSetResult = null;
+
+		try
+		{
+			qrs = executeQuery(cn, sqlObj);
+			ResultSet rs = qrs.getResultSet();
+			ResolvedDataSetResult result = resolveResult(cn, rs, query, resolveFields);
+			dataSetResult = new TemplateResolvedDataSetResult(result.getResult(), result.getFields(),
+					buildTemplateResultStr(sqlTemplateResult, resolveFields));
+		}
+		finally
+		{
+			QueryResultSet.close(qrs);
+		}
+
+		return dataSetResult;
+	}
+
+	protected Sql buildSqlObj(SqlTemplateResult sqlTemplateResult)
+	{
+		String sql = sqlTemplateResult.getResult();
+		boolean precompiles = sqlTemplateResult.isPrecompiled();
+
+		Sql sqlObj = Sql.valueOf(sql);
+		JdbcSupport jdbcSupport = getJdbcSupport();
+
+		if (precompiles)
+		{
+			List<SqlParamValue> spvs = jdbcSupport.toSqlParamValues(sqlTemplateResult.getParamValues());
+			sqlObj.param(spvs);
+		}
+
+		return sqlObj;
+	}
+
+	protected QueryResultSet executeQuery(Connection cn, Sql sqlObj) throws SqlDataSetSqlExecutionException
+	{
+		QueryResultSet qrs = null;
+
+		try
+		{
+			qrs = getJdbcSupport().executeQuery(cn, sqlObj, ResultSet.TYPE_FORWARD_ONLY);
+		}
+		catch (Throwable t)
+		{
+			QueryResultSet.close(qrs);
+			throw new SqlDataSetSqlExecutionException(sqlObj.getSqlValue(), t);
+		}
+
+		return qrs;
+	}
+
+	protected String buildTemplateResultStr(SqlTemplateResult sqlTemplateResult, boolean buildPrecompileParam)
+	{
+		String sql = sqlTemplateResult.getResult();
+
+		if (!buildPrecompileParam || !sqlTemplateResult.isPrecompiled())
+			return sql;
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(sql);
+
+		List<Object> params = sqlTemplateResult.getParamValues();
+		if (params != null && params.size() > 0)
+		{
+			sb.append(System.lineSeparator() + "-----------------------------------------" + System.lineSeparator());
+			sb.append("Parameters :" + System.lineSeparator());
+			for (int i = 0; i < params.size(); i++)
+			{
+				Object v = params.get(i);
+				sb.append("[" + (i + 1) + "] : " + v);
+				sb.append(System.lineSeparator());
+			}
+		}
+
+		return sb.toString();
+	}
+
 	/**
 	 * 校验SQL。
 	 * 
 	 * @param cn
-	 * @param sql
+	 * @param sqlTemplateResult
 	 * @throws SqlDataSetSqlValidationException
 	 */
-	protected void validateSql(Connection cn, String sql) throws SqlDataSetSqlValidationException
+	protected void validateSql(Connection cn, SqlTemplateResult sqlTemplateResult)
+			throws SqlDataSetSqlValidationException
 	{
 		if (this.sqlValidator == null)
 			return;
 
+		String sql = sqlTemplateResult.getResult();
 		SqlValidation validation = this.sqlValidator.validate(sql, DatabaseProfile.valueOf(cn));
 
 		if (!validation.isValid())
@@ -228,22 +306,20 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 	 * @param cn
 	 * @param rs
 	 * @param query
-	 * @param properties
-	 *            允许为{@code null}
-	 * @param resolveProperties
+	 * @param resolveFields
 	 * @return
 	 * @throws Throwable
 	 */
-	protected ResolvedDataSetResult resolveResult(Connection cn, ResultSet rs,
-			DataSetQuery query, List<DataSetProperty> properties, boolean resolveProperties) throws Throwable
+	protected ResolvedDataSetResult resolveResult(Connection cn, ResultSet rs, DataSetQuery query,
+			boolean resolveFields) throws Throwable
 	{
-		List<DataSetProperty> rawProperties =(resolveProperties ? new ArrayList<DataSetProperty>() : Collections.emptyList());
-		List<Map<String, ?>> rawData = resolveRawData(cn, rs, query, resolveProperties, rawProperties);
+		List<DataSetField> rawFields = (resolveFields ? new ArrayList<DataSetField>() : Collections.emptyList());
+		List<Map<String, ?>> rawData = resolveRawData(cn, rs, query, resolveFields, rawFields);
 		
-		if(resolveProperties)
-			calibrateProperties(rawProperties, rawData);
+		if (resolveFields)
+			calibrateFields(rawFields, rawData);
 		
-		return resolveResult(query, rawData, rawProperties, properties, resolveProperties);
+		return resolveResult(query, toDataSetResult(rawData), rawFields);
 	}
 
 	/**
@@ -252,36 +328,37 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 	 * @param cn
 	 * @param rs
 	 * @param query
-	 * @param resolveProperties 是否同时解析{@linkplain DataSetProperty}并写入下面的{@code properties}中
-	 * @param properties
+	 * @param resolveFields
+	 *            是否同时解析{@linkplain DataSetField}并写入下面的{@code fields}中
+	 * @param fields
 	 * @return
 	 * @throws Throwable
 	 */
 	protected List<Map<String, ?>> resolveRawData(Connection cn, ResultSet rs, DataSetQuery query,
-			boolean resolveProperties, List<DataSetProperty> properties) throws Throwable
+			boolean resolveFields, List<DataSetField> fields) throws Throwable
 	{
 		List<Map<String, ?>> data = new ArrayList<>();
 
 		JdbcSupport jdbcSupport = getJdbcSupport();
 
 		ResultSetMetaData rsMeta = rs.getMetaData();
-		String[] colNames = jdbcSupport.getColumnNames(rsMeta);
+		String[] colNames = jdbcSupport.getColumnLabels(rsMeta);
 		SqlType[] sqlTypes = jdbcSupport.getColumnSqlTypes(rsMeta);
-		String[] propertyTypes = new String[colNames.length];
+		String[] fieldTypes = new String[colNames.length];
 		
-		//无论是否解析properties，都应保留此处逻辑，用于校验数据类型合法
+		// 无论是否解析fields，都应保留此处逻辑，用于校验数据类型合法
 		for (int i = 0; i < colNames.length; i++)
-			propertyTypes[i] = toPropertyDataType(sqlTypes[i], colNames[i]);
+			fieldTypes[i] = toFieldDataType(sqlTypes[i], colNames[i]);
 		
-		@JDBCCompatiblity("应在遍历ResultSet数据前读取ResultSetMetaData信息解析数据集属性，"
+		@JDBCCompatiblity("应在遍历ResultSet数据前读取ResultSetMetaData信息解析数据集字段，"
 				+ "因为某些驱动在遍历数据后读取ResultSetMetaData会报【ResultSet已关闭】的错误（比如DB2-9.7的db2jcc4.jar驱动）")
-		boolean resolvePropertiesHere = resolveProperties;
-		if (resolvePropertiesHere)
+		boolean resolveFieldsHere = resolveFields;
+		if (resolveFieldsHere)
 		{
 			for (int i = 0; i < colNames.length; i++)
 			{
-				DataSetProperty property = new DataSetProperty(colNames[i], propertyTypes[i]);
-				properties.add(property);
+				DataSetField field = new DataSetField(colNames[i], fieldTypes[i]);
+				fields.add(field);
 			}
 		}
 		
@@ -294,7 +371,7 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 
 			for (int i = 0; i < colNames.length; i++)
 			{
-				Object value = getColumnValue(cn, rs, colNames[i], sqlTypes[i].getType(), jdbcSupport);
+				Object value = getColumnValue(cn, rs, (i + 1), sqlTypes[i].getType(), jdbcSupport);
 				row.put(colNames[i], value);
 			}
 
@@ -304,39 +381,46 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 		return data;
 	}
 
-	protected Object getColumnValue(Connection cn, ResultSet rs, String columnName, int sqlType,
+	protected Object getColumnValue(Connection cn, ResultSet rs, int column, int sqlType,
 			JdbcSupport jdbcSupport) throws Throwable
 	{
-		Object value = jdbcSupport.getColumnValue(cn, rs, columnName, sqlType);
+		Object value = jdbcSupport.getColumnValue(cn, rs, column, sqlType);
 
-		// 对于大字符串类型，value可能是字符输入流，这里应转成字符串并关闭输入流，便于后续处理
-		if (value instanceof Reader)
+		if (value instanceof byte[])
 		{
-			Reader reader = (Reader) value;
-			value = IOUtil.readString(reader, true);
+			value = convertBytesColumnValue(cn, rs, column, sqlType, (byte[]) value);
 		}
 
 		return value;
 	}
 
+	protected Object convertBytesColumnValue(Connection cn, ResultSet rs, int column, int sqlType, byte[] value)
+			throws Throwable
+	{
+		if (value == null)
+			return null;
+
+		return Base64.getEncoder().encodeToString(value);
+	}
+
 	/**
-	 * 校准{@linkplain DataSetProperty}。
+	 * 校准{@linkplain DataSetField}。
 	 * <p>
-	 * 某些驱动程序可能存在一种情况，列类型会被{@linkplain #toPropertyDataType(SqlType, String)}解析为{@linkplain DataType#UNKNOWN}，但是实际值是允许的，
+	 * 某些驱动程序可能存在一种情况，列类型会被{@linkplain #toFieldDataType(SqlType, String)}解析为{@linkplain DataType#UNKNOWN}，但是实际值是允许的，
 	 * 比如：PostgreSQL-42.2.5驱动对于{@code "SELECT 'aaa' as NAME"}语句，结果的SQL类型是{@linkplain Types#OTHER}，但实际值是允许的字符串。
 	 * </p>
 	 * <p>
 	 * 因此，需要此方法根据实际的数据值重新校准。
 	 * </p>
 	 * 
-	 * @param properties
+	 * @param fields
 	 * @param data
 	 * @throws Throwable
 	 */
-	protected void calibrateProperties(List<DataSetProperty> properties, List<Map<String, ?>> data)
+	protected void calibrateFields(List<DataSetField> fields, List<Map<String, ?>> data)
 			throws Throwable
 	{
-		if(properties == null || properties.isEmpty())
+		if(fields == null || fields.isEmpty())
 			return;
 		
 		if(data == null || data.isEmpty())
@@ -344,19 +428,19 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 		
 		Map<String, ?> row0 = data.get(0);
 		
-		for (DataSetProperty property : properties)
+		for (DataSetField field : fields)
 		{
-			boolean resolveTypeByValue = DataType.UNKNOWN.equals(property.getType());
+			boolean resolveTypeByValue = DataType.UNKNOWN.equals(field.getType());
 
 			if (resolveTypeByValue)
 			{
-				property.setType(resolvePropertyDataType(row0.get(property.getName())));
+				field.setType(resolveFieldDataType(row0.get(field.getName())));
 			}
 		}
 	}
 
 	/**
-	 * 由SQL类型转换为{@linkplain DataSetProperty#getType()}。
+	 * 由SQL类型转换为{@linkplain DataSetField#getType()}。
 	 * 
 	 * @param sqlType
 	 * @param columnName
@@ -365,7 +449,7 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 	 * @throws SQLException
 	 * @throws SqlDataSetUnsupportedSqlTypeException
 	 */
-	protected String toPropertyDataType(SqlType sqlType, String columnName)
+	protected String toFieldDataType(SqlType sqlType, String columnName)
 			throws SQLException, SqlDataSetUnsupportedSqlTypeException
 	{
 		String dataType = null;
@@ -374,13 +458,6 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 
 		switch (type)
 		{
-			// 确定不支持的类型
-			case Types.BINARY:
-			case Types.BLOB:
-			case Types.LONGVARBINARY:
-			case Types.VARBINARY:
-				throw new SqlDataSetUnsupportedSqlTypeException(sqlType, columnName);
-
 			case Types.CHAR:
 			case Types.NCHAR:
 			case Types.VARCHAR:
@@ -438,11 +515,34 @@ public class SqlDataSet extends AbstractResolvableDataSet implements ResolvableD
 				break;
 			}
 
+			case Types.BINARY:
+			case Types.BLOB:
+			case Types.LONGVARBINARY:
+			case Types.VARBINARY:
+			{
+				dataType = getBinaryDataType();
+				break;
+			}
+
 			default:
+			{
 				dataType = DataType.UNKNOWN;
+				break;
+			}
 		}
 
 		return dataType;
+	}
+
+	/**
+	 * 获取二进制SQL类型的数据类型。
+	 * 
+	 * @return
+	 */
+	protected String getBinaryDataType()
+	{
+		// 二进制将被转换为Base64字符串
+		return DataType.STRING;
 	}
 
 	protected JdbcSupport getJdbcSupport()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -78,7 +78,6 @@ public class CsvDataExportService extends AbstractDevotedDBMetaDataExchangeServi
 		context.addContextCloseable(qrs);
 
 		ResultSet rs = qrs.getResultSet();
-
 		List<Column> columns = getColumns(cn, rs);
 		int columnCount = columns.size();
 
@@ -100,7 +99,7 @@ public class CsvDataExportService extends AbstractDevotedDBMetaDataExchangeServi
 
 				try
 				{
-					value = getStringValue(cn, rs, column, exportContext.getDataFormatContext());
+					value = getStringValue(cn, rs, column, i + 1, exportContext.getDataFormatContext());
 				}
 				catch (Throwable t)
 				{

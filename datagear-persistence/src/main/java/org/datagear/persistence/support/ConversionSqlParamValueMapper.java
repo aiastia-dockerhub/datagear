@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -52,9 +52,9 @@ import org.datagear.util.IOUtil;
 import org.datagear.util.JdbcUtil;
 import org.datagear.util.SqlParamValue;
 import org.datagear.util.StringUtil;
+import org.datagear.util.spel.BaseSpelExpressionParser;
 import org.springframework.core.convert.ConversionFailedException;
 import org.springframework.core.convert.ConversionService;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
 
 /**
  * 支持类型转换的{@linkplain SqlParamValueMapper}。
@@ -87,8 +87,8 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 	public static final String PREFIX_BASE64 = "base64:";
 
 	protected static final VariableExpressionResolver DEFAULT_VARIABLE_EXPRESSION_RESOLVER = new VariableExpressionResolver();
+
 	protected static final SqlExpressionResolver DEFAULT_SQL_EXPRESSION_RESOLVER = new SqlExpressionResolver();
-	protected static final SpelExpressionParser DEFAULT_SPEL_EXPRESSION_PARSER = new SpelExpressionParser();
 
 	/** 用于支持基本类型转换的转换服务类 */
 	private ConversionService conversionService = null;
@@ -109,7 +109,7 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 	private SqlExpressionResolver sqlExpressionResolver = DEFAULT_SQL_EXPRESSION_RESOLVER;
 
 	/** 变量表达式计算器 */
-	private SpelExpressionParser spelExpressionParser = DEFAULT_SPEL_EXPRESSION_PARSER;
+	private BaseSpelExpressionParser spelExpressionParser = BaseSpelExpressionParser.DEFAULT;
 
 	/** 表达式计算上下文 */
 	private ExpressionEvaluationContext expressionEvaluationContext = new ExpressionEvaluationContext();
@@ -189,12 +189,12 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 		this.sqlExpressionResolver = sqlExpressionResolver;
 	}
 
-	public SpelExpressionParser getSpelExpressionParser()
+	public BaseSpelExpressionParser getSpelExpressionParser()
 	{
 		return spelExpressionParser;
 	}
 
-	public void setSpelExpressionParser(SpelExpressionParser spelExpressionParser)
+	public void setSpelExpressionParser(BaseSpelExpressionParser spelExpressionParser)
 	{
 		this.spelExpressionParser = spelExpressionParser;
 	}
@@ -292,12 +292,12 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 	 * @param column
 	 * @param value
 	 * @param expressions
-	 * @param expressionEvaluationContext
+	 * @param evalContext
 	 * @return
 	 * @throws Throwable
 	 */
 	protected String evaluateVariableExpressions(Connection cn, Table table, Column column, String value,
-			List<NameExpression> expressions, ExpressionEvaluationContext expressionEvaluationContext) throws Throwable
+			List<NameExpression> expressions, ExpressionEvaluationContext evalContext) throws Throwable
 	{
 		List<Object> expressionValues = new ArrayList<>(expressions.size());
 
@@ -305,15 +305,15 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 		{
 			NameExpression expression = expressions.get(i);
 
-			String expressionKey = expressionEvaluationContext.getCachedKey(expression);
-			if (expressionEvaluationContext.containsCachedValue(expressionKey))
+			String expressionKey = evalContext.getCachedKey(expression);
+			if (evalContext.containsCachedValue(expressionKey))
 			{
-				Object expValue = expressionEvaluationContext.getCachedValue(expressionKey);
+				Object expValue = evalContext.getCachedValue(expressionKey);
 				expressionValues.add(expValue);
 			}
 			else
 			{
-				evaluateVariableExpression(cn, table, column, value, expression, expressionEvaluationContext,
+				evaluateVariableExpression(cn, table, column, value, expression, evalContext,
 						expressionValues);
 			}
 		}
@@ -324,7 +324,7 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 	}
 
 	protected Object evaluateVariableExpression(Connection cn, Table table, Column column, String value,
-			NameExpression expression, ExpressionEvaluationContext expressionEvaluationContext,
+			NameExpression expression, ExpressionEvaluationContext evalContext,
 			List<Object> expressionValues) throws Throwable
 	{
 		Object expValue;
@@ -339,7 +339,7 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 		{
 			// 如果是表达式不合法，且列是文本类型，则忽略计算
 			if (JdbcUtil.isTextType(column.getType()))
-				expValue = expression.toString();
+				expValue = expression.getExpression();
 			else
 				throw new SqlParamValueVariableExpressionSyntaxException(table, column, value, expression.getContent(),
 						t);
@@ -347,19 +347,19 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 
 		try
 		{
-			expValue = spelExpression.getValue(expressionEvaluationContext.getVariableExpressionBean());
+			expValue = this.spelExpressionParser.getValue(spelExpression, evalContext.getVariableExpressionBean());
 		}
 		catch (Throwable t)
 		{
 			// 如果是表达式不合法，且列是文本类型，则忽略计算
 			if (JdbcUtil.isTextType(column.getType()))
-				expValue = expression.toString();
+				expValue = expression.getExpression();
 			else
 				throw new SqlParamValueVariableExpressionException(table, column, value, expression.getContent(), t);
 		}
 
 		expressionValues.add(expValue);
-		expressionEvaluationContext.putCachedValue(expression, expValue);
+		evalContext.putCachedValue(expression, expValue);
 
 		return expValue;
 	}
@@ -874,7 +874,7 @@ public class ConversionSqlParamValueMapper extends AbstractSqlParamValueMapper
 
 		// XML默认为UTF-8
 		if (Types.SQLXML == column.getType() && StringUtil.isEmpty(charset))
-			charset = "UTF-8";
+			charset = IOUtil.CHARSET_UTF_8;
 
 		return IOUtil.getReader(file, charset);
 	}

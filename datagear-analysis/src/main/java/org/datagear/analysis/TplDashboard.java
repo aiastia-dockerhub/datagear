@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,6 +25,8 @@ package org.datagear.analysis;
  */
 public class TplDashboard extends Dashboard
 {
+	private static final long serialVersionUID = 1L;
+
 	public static final String PROPERTY_TEMPLATE = "template";
 	public static final String PROPERTY_WIDGET = "widget";
 	

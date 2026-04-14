@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * 可解析{@linkplain DataSetResult}。
  * <p>
- * 调用{@linkplain #resolve(Map)}无需预先设置{@linkplain #getProperties()}。
+ * 调用{@linkplain #resolve(Map)}无需预先设置{@linkplain #getFields()}。
  * </p>
  * 
  * @author datagear@163.com
@@ -32,8 +32,11 @@ public interface ResolvableDataSet extends DataSet
 {
 	/**
 	 * 解析{@linkplain ResolvedDataSetResult}。
+	 * <p>
+	 * 返回的{@linkplain ResolvedDataSetResult#getFields()}是从数据中解析的信息。
+	 * </p>
 	 * 
-	 * @param query 应是已通过{@linkplain #isReady(DataSetQuery)}校验的（可能为{@code null}）
+	 * @param query
 	 * @return
 	 * @throws DataSetException
 	 */

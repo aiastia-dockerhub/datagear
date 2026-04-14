@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -26,6 +26,7 @@ page_obj.ftl
 <script type="text/javascript">
 (function(po)
 {
+	//page.js
 	$.inflatePageCodeEditor(po);
 })
 (${pid});

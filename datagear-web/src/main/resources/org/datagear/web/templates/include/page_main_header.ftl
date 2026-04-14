@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,22 +22,24 @@
 变量：
 //当前用户，不允许为null
 User currentUser
+//检测新版本结果，不允许为null
+DetectResult detectNewVersionResult
 
 -->
-<#assign Themes=statics['org.datagear.web.util.Themes']>
+<#assign ThemeSpec=statics['org.datagear.web.util.ThemeSpec']>
 <#assign Global=statics['org.datagear.util.Global']>
 <#assign WebUtils=statics['org.datagear.web.util.WebUtils']>
-<div class="page-main-header flex-grow-0 p-card no-border text-primary py-1 border-noround-top border-noround-bottom">
+<div id="${pid}mainHeader" class="page-main-header flex-grow-0 p-card no-border text-primary py-1 border-noround-top border-noround-bottom">
 	<div class="grid grid-nogutter align-items-center">
-		<div class="logo-wrapper col-fixed flex align-items-center pl-1">
+		<div id="sysLogoWrapper" class="logo-wrapper header-left col-fixed flex align-items-center pl-1">
 			<#include "html_logo.ftl">
 		</div>
 		<div class="col text-right pr-2">
-			<div class="flex justify-content-end align-items-center">
+			<div class="header-right flex justify-content-end align-items-center">
 				<div class="mr-1">
 					<#if currentUser.anonymous>
-						<a href="${contextPath}/login" class="link px-1"><@spring.message code='module.login' /></a>
-						<a href="${contextPath}/" class="link px-1"><@spring.message code='module.main' /></a>
+						<a href="${contextPath}/login" class="link text-primary px-1"><@spring.message code='module.login' /></a>
+						<a href="${contextPath}/" class="link text-primary px-1"><@spring.message code='module.main' /></a>
 					<#else>
 						<span class="text-color-secondary">
 							<i class="pi pi-user text-sm"></i>
@@ -50,7 +52,7 @@ User currentUser
 						class="p-button-sm p-button-text p-button-rounded text-primary"
 						:class="pm.newVersionDetectedTipClassName">
 					</p-button>
-					<p-tieredmenu id="${pid}sysMenu" ref="${pid}sysMenuEle" :model="pm.sysMenuItems" :popup="true"
+					<p-tieredmenu id="${pid}sysMenu" ref="${pid}sysMenuEle" :model="pm.sysMenuItems" :popup="true" @show="onSysMenuShow"
 						class="left-submenu-list">
 					</p-tieredmenu>
 				</div>
@@ -63,26 +65,33 @@ User currentUser
 {
 	po.isUserAnonymous = ("${currentUser.anonymous?string('true','false')}" == "true");
 	po.isUserAdmin = ("${currentUser.admin?string('true','false')}" == "true");
-	po.currentVersion = "${Global.VERSION}";
+	
+	po.detectedVersionInfo =
+	{
+		latestVersionVar : "${detectNewVersionResult.latestVersionVar}",
+		detectedVersionCookieName : "${detectNewVersionResult.versionCookieName}",
+		detectedVersionCookieExpDays : parseInt("${detectNewVersionResult.versionCookieExpDays}"),
+		currentVersion : "${detectNewVersionResult.currentVersion}"
+	};
+	
+	po.detectedVersionInfo.detectedVersion = $.cookie(po.detectedVersionInfo.detectedVersionCookieName);
+	po.detectedVersionInfo.latestVersion = ($.localStorageItem(po.detectedVersionInfo.latestVersionVar) || "");
 	
 	po.newVersionDetected = function()
 	{
-		var detectedVersion = $.cookie("DETECTED_VERSION");
-		if(typeof(DATA_GEAR_LATEST_VERSION) != "undefined")
+		var dvi = po.detectedVersionInfo;
+		var detectedVersion = dvi.detectedVersion;
+		
+		if(detectedVersion != dvi.latestVersion)
 		{
-			$.cookie("${WebUtils.COOKIE_DETECT_NEW_VERSION_RESOLVED}", "true", {expires : 1, path : po.concatContextPath("/")});
-			
-			if(DATA_GEAR_LATEST_VERSION != detectedVersion)
-			{
-				detectedVersion = DATA_GEAR_LATEST_VERSION;
-				$.cookie("DETECTED_VERSION", detectedVersion, {expires : 100, path : po.concatContextPath("/")});
-			}
+			detectedVersion = dvi.latestVersion;
+			$.cookie(dvi.detectedVersionCookieName, detectedVersion, {expires : dvi.detectedVersionCookieExpDays, path : po.concatContextPath("/")});
 		}
 		
 		if(!detectedVersion)
 			return false;
 		
-		return ($.compareVersion(detectedVersion, po.currentVersion) > 0);
+		return ($.compareVersion(detectedVersion, dvi.currentVersion) > 0);
 	};
 	
 	po.isNewVersionDetected = po.newVersionDetected();
@@ -102,11 +111,19 @@ User currentUser
 	
 	po.changeTheme = function(themeName)
 	{
-		po.getJson("/changeThemeData?theme=" + themeName, function(data)
+		//WebMvcConfigurerConfigSupport.THEME_PARAM
+		po.getJson("/changeThemeData?THEME=" + themeName, function(data)
 		{
 			$.each(data, function(idx, item)
 			{
-				$("#"+item.cssId).attr("href", item.href);
+				if(item.changeAttr)
+				{
+					$(item.changeElement).attr(item.changeAttr, item.changeValue);
+				}
+				else if(item.changeHtml)
+				{
+					$(item.changeElement).html(item.changeValue);
+				}
 			});
 		});
 	};
@@ -121,7 +138,11 @@ User currentUser
 				label: "<@spring.message code='module.personalSet' />",
 				url: po.concatContextPath("/user/personalSet"),
 				command: function(e){ po.openSysMenuDialog(e, false); }
-				
+			},
+			{
+				label: "<@spring.message code='module.editPassword' />",
+				url: po.concatContextPath("/user/personalPsd"),
+				command: function(e){ po.openSysMenuDialog(e, false); }
 			},
 			{ separator: true }
 		]);
@@ -137,17 +158,17 @@ User currentUser
 				[
 					{
 						label: "<@spring.message code='module.driverEntity' />",
-						url: po.concatContextPath("/driverEntity/query"),
+						url: po.concatContextPath("/driverEntity/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					},
 					{
-						label: "<@spring.message code='module.schemaUrlBuilder' />",
-						url: po.concatContextPath("/schemaUrlBuilder/set"),
+						label: "<@spring.message code='module.dtbsSourceUrlBuilder' />",
+						url: po.concatContextPath("/dtbsSourceUrlBuilder/set"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					},
 					{
-						label: "<@spring.message code='module.schemaGuard' />",
-						url: po.concatContextPath("/schemaGuard/query"),
+						label: "<@spring.message code='module.dtbsSourceGuard' />",
+						url: po.concatContextPath("/dtbsSourceGuard/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					}
 				]
@@ -157,18 +178,18 @@ User currentUser
 				items:
 				[
 					{
-						label: "<@spring.message code='module.dataSetResDirectory' />",
-						url: po.concatContextPath("/dataSetResDirectory/pagingQuery"),
+						label: "<@spring.message code='module.fileSource' />",
+						url: po.concatContextPath("/fileSource/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					},
 					{
 						label: "<@spring.message code='module.chartPlugin' />",
-						url: po.concatContextPath("/chartPlugin/query"),
+						url: po.concatContextPath("/chartPlugin/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					},
 					{
 						label: "<@spring.message code='module.dashboardGlobalRes' />",
-						url: po.concatContextPath("/dashboardGlobalRes/query"),
+						url: po.concatContextPath("/dashboardGlobalRes/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					}
 				]
@@ -179,12 +200,12 @@ User currentUser
 				[
 					{
 						label: "<@spring.message code='module.user' />",
-						url: po.concatContextPath("/user/pagingQuery"),
+						url: po.concatContextPath("/user/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					},
 					{
 						label: "<@spring.message code='module.role' />",
-						url: po.concatContextPath("/role/pagingQuery"),
+						url: po.concatContextPath("/role/manage"),
 						command: function(e){ po.openSysMenuDialog(e); }
 					}
 				]
@@ -203,14 +224,14 @@ User currentUser
 					label: "<@spring.message code='module.changeTheme.blue' />",
 					command: function(e)
 					{
-						po.changeTheme("${Themes.BLUE}");
+						po.changeTheme("${ThemeSpec.BLUE}");
 					}
 				},
 				{
 					label: "<@spring.message code='module.changeTheme.blueDark' />",
 					command: function(e)
 					{
-						po.changeTheme("${Themes.BLUE_DARK}");
+						po.changeTheme("${ThemeSpec.BLUE_DARK}");
 					}
 				}
 			]
@@ -237,7 +258,7 @@ User currentUser
 				},
 				{
 					label: "<@spring.message code='module.documentation' />",
-					url: "${statics['org.datagear.util.Global'].WEB_SITE}/documentation/",
+					url: "${Global.WEB_SITE}/documentation/",
 					target: "_blank"
 				},
 				{
@@ -247,11 +268,17 @@ User currentUser
 				},
 				{
 					label: "<@spring.message code='module.downloadLatestVersion' />",
-					class: po.newVersionDetectedTipClassName,
-					url: "${statics['org.datagear.util.Global'].WEB_SITE}",
+					class: "item-download-latest-version " + po.newVersionDetectedTipClassName,
+					url: "${Global.WEB_SITE}",
 					target: "_blank"
 				}
 			]
+		},
+		{
+			label: "<@spring.message code='enterpriseVersion' />",
+			class: "enterprise-menuitem",
+			url: "${Global.WEB_SITE}/pro/",
+			target: "_blank"
 		}
 	]);
 	
@@ -263,7 +290,7 @@ User currentUser
 			{
 				label: "<@spring.message code='module.logout' />",
 				url: po.concatContextPath("/logout"),
-				class: "p-error"
+				class: "danger-menuitem"
 			}
 		]);
 	}
@@ -279,6 +306,24 @@ User currentUser
 		onSysMenuToggle: function(e)
 		{
 			po.vueUnref("${pid}sysMenuEle").toggle(e);
+		},
+		onSysMenuShow: function()
+		{
+			if(po.isNewVersionDetected)
+			{
+				var sysMenu = po.elementOfId("${pid}sysMenu", document.body);
+				var downloadLatestVersionItem = po.element(".item-download-latest-version", sysMenu);
+				if(downloadLatestVersionItem.length > 0)
+				{
+					var label = po.element(".p-menuitem-link > span", downloadLatestVersionItem);
+					var tipVersion = po.element(".tip-latest-version", label);
+					
+					if(tipVersion.length == 0)
+						tipVersion = $("<i class='tip-latest-version' />").appendTo(label);
+					
+					tipVersion.text("v"+po.detectedVersionInfo.latestVersion);
+				}
+			}
 		}
 	});
 	

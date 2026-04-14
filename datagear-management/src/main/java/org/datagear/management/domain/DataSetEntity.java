@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,8 +21,9 @@ import java.util.Date;
 import java.util.List;
 
 import org.datagear.analysis.DataSet;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetParam;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.support.DataFormat;
 
 /**
  * 数据集实体接口。
@@ -31,7 +32,8 @@ import org.datagear.analysis.DataSetProperty;
  *
  */
 public interface DataSetEntity
-		extends DataSet, CreateUserEntity<String>, DataPermissionEntity<String>, AnalysisProjectAwareEntity<String>
+		extends Entity<String>, DataSet, CreateUserEntity, DataPermissionEntity, AnalysisProjectAwareEntity,
+		DescriptionEntity
 {
 	/** 授权资源类型 */
 	String AUTHORIZATION_RESOURCE_TYPE = "DataSet";
@@ -65,11 +67,11 @@ public interface DataSetEntity
 	void setName(String name);
 
 	/**
-	 * 设置属性集。
+	 * 设置{@linkplain DataSetField}集。
 	 * 
-	 * @param properties
+	 * @param fields
 	 */
-	void setProperties(List<DataSetProperty> properties);
+	void setFields(List<DataSetField> fields);
 
 	/**
 	 * 设置参数集。
@@ -93,10 +95,25 @@ public interface DataSetEntity
 	void setDataSetType(String dataSetType);
 
 	/**
+	 * 获取底层数据格式。
+	 * 
+	 * @return
+	 */
+	DataFormat getDataFormat();
+
+	/**
+	 * 设置底层数据格式。
+	 * 
+	 * @param dataFormat
+	 */
+	void setDataFormat(DataFormat dataFormat);
+
+	/**
 	 * 获取创建时间。
 	 * 
 	 * @return
 	 */
+	@Override
 	Date getCreateTime();
 
 	/**
@@ -104,5 +121,22 @@ public interface DataSetEntity
 	 * 
 	 * @param createTime
 	 */
+	@Override
 	void setCreateTime(Date createTime);
+
+	/**
+	 * 获取描述。
+	 * 
+	 * @return
+	 */
+	@Override
+	String getDescription();
+
+	/**
+	 * 设置描述。
+	 * 
+	 * @param description
+	 */
+	@Override
+	void setDescription(String description);
 }

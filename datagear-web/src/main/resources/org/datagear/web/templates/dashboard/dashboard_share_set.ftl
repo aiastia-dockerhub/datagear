@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -59,12 +59,16 @@
 		        <div class="field-input col-12 md:col-9">
 		        	<p-password id="${pid}password" v-model="fm.password" class="input w-full"
 		        		input-class="w-full" toggle-mask :feedback="false"
-		        		name="password" :required="fm.enablePassword" maxlength="20" autocomplete="new-password">
+		        		:required="fm.enablePassword"
+		        		:pt="{input:{name:'password',maxlength:'20',autocomplete:'new-password'}}">
 		        	</p-password>
+		        	<div class="desc text-color-secondary">
+		        		<small><@spring.message code='dashboardShareSet.password.input.desc' /></small>
+		        	</div>
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -82,10 +86,9 @@
 	po.vueMethod(
 	{
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

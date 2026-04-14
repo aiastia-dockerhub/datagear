@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -33,11 +33,12 @@ import org.datagear.util.JdbcSupport;
 import org.datagear.util.JdbcUtil;
 import org.datagear.util.SqlScriptParser;
 import org.datagear.util.SqlScriptParser.SqlStatement;
-import org.datagear.web.config.ApplicationPropertiesConfig;
+import org.datagear.web.config.ApplicationPropertiesConfigSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.env.Environment;
 
 /**
@@ -72,7 +73,7 @@ public class DerbySqlClient extends JdbcSupport
 
 		try
 		{
-			applicationContext = new AnnotationConfigApplicationContext(ApplicationPropertiesConfig.class,
+			applicationContext = new AnnotationConfigApplicationContext(DerbySqlClientPropertiesConfig.class,
 					DerbySqlClientDataSourceConfig.class);
 
 			DataSource dataSource = applicationContext.getBean(DataSource.class);
@@ -152,7 +153,7 @@ public class DerbySqlClient extends JdbcSupport
 
 					try
 					{
-						reader = IOUtil.getReader(FileUtil.getFile(filePath), "UTF-8");
+						reader = IOUtil.getReader(FileUtil.getFile(filePath), IOUtil.CHARSET_UTF_8);
 						SqlScriptParser sqlScriptParser = new SqlScriptParser(reader);
 						SqlStatement sql = null;
 
@@ -217,7 +218,7 @@ public class DerbySqlClient extends JdbcSupport
 
 				for (int i = 1; i <= columnCount; i++)
 				{
-					String columnLabel = getColumnName(metaData, i);
+					String columnLabel = getColumnLabel(metaData, i);
 
 					if (i > 1)
 						print(", ");
@@ -290,6 +291,16 @@ public class DerbySqlClient extends JdbcSupport
 	public static void main(String[] args) throws Exception
 	{
 		new DerbySqlClient().run();
+	}
+
+	@Configuration
+	@PropertySource(value = ApplicationPropertiesConfigSupport.PROPERTY_SOURCE_PATH, encoding = IOUtil.CHARSET_UTF_8)
+	public static class DerbySqlClientPropertiesConfig extends ApplicationPropertiesConfigSupport
+	{
+		public DerbySqlClientPropertiesConfig()
+		{
+			super();
+		}
 	}
 
 	@Configuration

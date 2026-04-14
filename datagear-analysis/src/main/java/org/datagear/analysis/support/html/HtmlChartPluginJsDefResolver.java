@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -135,14 +135,14 @@ public class HtmlChartPluginJsDefResolver extends TextParserSupport
 				// 字符串
 				if (isJsQuote(c))
 				{
-					prevToken = availableStringBuilder(prevToken);
+					prevToken.setLength(0);
 					appendChar(prevToken, c);
 
 					writeAfterQuote(in, jsonOut, c, '\\', prevToken);
 				}
 				else if (c == '{' || c == ',')
 				{
-					prevToken = availableStringBuilder(prevToken);
+					prevToken.setLength(0);
 				}
 				else if (c == '/')
 				{

@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -16,6 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  *
 -->
+<#assign DataSetEntity=statics['org.datagear.management.domain.DataSetEntity']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -39,11 +40,11 @@
 				</label>
 		        <div class="field-input col-12 md:col-9">
 		        	<div class="p-inputgroup">
-		        		<p-inputtext id="${pid}dataSource" v-model="fm.shmConFactory.schema.title" type="text" class="input"
-			        		readonly="readonly" name="shmConFactory.schema.title" required maxlength="200">
+		        		<p-inputtext id="${pid}dataSource" v-model="fm.dtbsCnFty.dtbsSource.title" type="text" class="input"
+			        		readonly="readonly" name="dtbsCnFty.dtbsSource.title" required maxlength="200">
 			        	</p-inputtext>
 			        	<p-button type="button" label="<@spring.message code='select' />"
-			        		@click="onSelectSchema" v-if="!pm.isReadonlyAction">
+			        		@click="onSelectDtbsSource" v-if="!pm.isReadonlyAction">
 			        	</p-button>
 		        	</div>
 		        </div>
@@ -62,14 +63,13 @@
 		        	</div>
 		        </div>
 			</div>
-			<#include "include/dataSet_form_param_property.ftl">
+			<#include "include/dataSet_form_param_field.ftl">
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center h-opts">
-			<#include "include/dataSet_form_preview.ftl">
-			<p-button type="submit" label="<@spring.message code='save' />" class="hide-if-readonly"></p-button>
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
+			<#include "include/dataSet_form_submit_btn.ftl">
 		</div>
 	</form>
-	<#include "include/dataSet_form_param_property_form.ftl">
+	<#include "include/dataSet_form_param_field_form.ftl">
 </div>
 <#include "../include/page_form.ftl">
 <#include "../include/page_simple_form.ftl">
@@ -81,11 +81,11 @@
 (function(po)
 {
 	po.submitUrl = "/dataSet/"+po.submitAction;
-	po.previewUrl = "/dataSet/previewSql";
+	po.previewUrl = "/dataSet/preview/${DataSetEntity.DATA_SET_TYPE_SQL}";
 	
 	po.inflatePreviewFingerprint = function(fingerprint, dataSet)
 	{
-		fingerprint.schemaId = dataSet.shmConFactory.schema.id;
+		fingerprint.dtbsSourceId = dataSet.dtbsCnFty.dtbsSource.id;
 		fingerprint.sql = dataSet.sql;
 	};
 	
@@ -99,16 +99,16 @@
 			return false;
 	};
 	
-	po.getSqlEditorSchemaId = function()
+	po.getSqlEditorDtbsSourceId = function()
 	{
 		var fm = po.vueFormModel();
-		return fm.shmConFactory.schema.id;
+		return fm.dtbsCnFty.dtbsSource.id;
 	};
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
 	po.inflateDataSetModel(formModel);
-	formModel.shmConFactory = (formModel.shmConFactory == null ? { schema: {} } : formModel.shmConFactory);
-	formModel.shmConFactory.schema = (formModel.shmConFactory.schema == null ? {} : formModel.shmConFactory.schema);
+	formModel.dtbsCnFty = (formModel.dtbsCnFty == null ? { dtbsSource: {} } : formModel.dtbsCnFty);
+	formModel.dtbsCnFty.dtbsSource = (formModel.dtbsCnFty.dtbsSource == null ? {} : formModel.dtbsCnFty.dtbsSource);
 	
 	po.setupForm(formModel,
 	{
@@ -131,12 +131,12 @@
 	
 	po.vueMethod(
 	{
-		onSelectSchema: function()
+		onSelectDtbsSource: function()
 		{
-			po.handleOpenSelectAction("/schema/select", function(schema)
+			po.handleOpenSelectAction("/dtbsSource/select", function(dtbsSource)
 			{
 				var fm = po.vueFormModel();
-				fm.shmConFactory.schema = schema;
+				fm.dtbsCnFty.dtbsSource = dtbsSource;
 			});
 		}
 	});
@@ -149,10 +149,9 @@
 							po.inflateSqlEditorOptions({ value: "" }));
 		po.setCodeTextTimeout(po.codeEditor, fm.sql);
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

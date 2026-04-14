@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,8 +17,11 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.datagear.util.Global;
 
 /**
  * 数据集查询。
@@ -29,8 +32,21 @@ import java.util.Map;
  * @author datagear@163.com
  *
  */
-public class DataSetQuery implements ResultDataFormatAware
+public class DataSetQuery implements ResultDataFormatAware, IgnoreFetchAware, Serializable
 {
+	private static final long serialVersionUID = 1L;
+
+	/**
+	 * 内置参数名前缀。
+	 * <p>
+	 * 所有内置参数名都应以此作为前缀，避免名称冲突。
+	 * </p>
+	 * <p>
+	 * 注意：谨慎重构此常量值，因为它可能已被用于系统已创建的数据集中，重构它将导致这些数据集执行出错。
+	 * </p>
+	 */
+	public static final String BUILTIN_PARAM_PREFIX = Global.NAME_SHORT_UCUS;
+
 	/** 参数值映射表 */
 	private Map<String, Object> paramValues = new HashMap<String, Object>();
 
@@ -39,6 +55,9 @@ public class DataSetQuery implements ResultDataFormatAware
 
 	/** 结果数据最大返回数目 */
 	private int resultFetchSize = -1;
+
+	/** 是否忽略获取结果 */
+	private boolean ignoreFetch = IgnoreFetchAware.DEFAULT;
 
 	public DataSetQuery()
 	{
@@ -51,6 +70,7 @@ public class DataSetQuery implements ResultDataFormatAware
 		setParamValues(query.getParamValues());
 		this.resultDataFormat = query.resultDataFormat;
 		this.resultFetchSize = query.resultFetchSize;
+		this.ignoreFetch = query.ignoreFetch;
 	}
 
 	public Map<String, ?> getParamValues()
@@ -111,6 +131,18 @@ public class DataSetQuery implements ResultDataFormatAware
 	public void setResultFetchSize(int resultFetchSize)
 	{
 		this.resultFetchSize = resultFetchSize;
+	}
+
+	@Override
+	public boolean isIgnoreFetch()
+	{
+		return ignoreFetch;
+	}
+
+	@Override
+	public void setIgnoreFetch(boolean ignoreFetch)
+	{
+		this.ignoreFetch = ignoreFetch;
 	}
 
 	/**

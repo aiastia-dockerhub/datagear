@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,11 +21,16 @@ import java.io.File;
 import java.util.Date;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
+import org.datagear.analysis.ResultJsonRuleUtil;
 import org.datagear.analysis.support.AbstractJsonFileDataSet;
+import org.datagear.analysis.support.FileResolvedInfo;
 import org.datagear.analysis.support.JsonDirectoryFileDataSet;
+import org.datagear.analysis.support.ResultJsonRule;
 import org.springframework.beans.BeanUtils;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * {@linkplain JsonDirectoryFileDataSet}实体。
@@ -33,7 +38,8 @@ import org.springframework.beans.BeanUtils;
  * @author datagear@163.com
  *
  */
-public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements DirectoryFileDataSetEntity, CloneableEntity
+public class JsonFileDataSetEntity extends AbstractJsonFileDataSet
+		implements DirectoryFileDataSetEntity, CloneableEntity, ResultJsonRuleAwareSplitEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -49,17 +55,17 @@ public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements Di
 	/** 展示名 */
 	private String displayName = "";
 
-	/** 服务器端文件所在的目录 */
-	private DataSetResDirectory dataSetResDirectory = null;
+	/** 服务器端文件源 */
+	private FileSource fileSource = null;
 
-	/** 服务器端文件的文件名（相对于{@linkplain #getDataSetResDirectory()}） */
+	/** 服务器端文件的文件名（相对于{@linkplain #getFileSource()}） */
 	private String dataSetResFileName = "";
 
 	/** 创建用户 */
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime = new Date();
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -69,13 +75,12 @@ public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements Di
 	public JsonFileDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
-	public JsonFileDataSetEntity(String id, String name, List<DataSetProperty> properties, File directory,
+	public JsonFileDataSetEntity(String id, String name, List<DataSetField> fields, File directory,
 			String fileName, String displayName, User createUser)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.fileSourceType = FILE_SOURCE_TYPE_UPLOAD;
 		this.directory = directory;
 		this.fileName = fileName;
@@ -83,14 +88,13 @@ public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements Di
 		this.createUser = createUser;
 	}
 
-	public JsonFileDataSetEntity(String id, String name, List<DataSetProperty> properties,
-			DataSetResDirectory dataSetResDirectory, String dataSetResFileName, User createUser)
+	public JsonFileDataSetEntity(String id, String name, List<DataSetField> fields,
+			FileSource fileSource, String dataSetResFileName, User createUser)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.fileSourceType = FILE_SOURCE_TYPE_SERVER;
-		this.dataSetResDirectory = dataSetResDirectory;
+		this.fileSource = fileSource;
 		this.dataSetResFileName = dataSetResFileName;
-		this.createTime = new Date();
 		this.createUser = createUser;
 	}
 
@@ -143,15 +147,15 @@ public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements Di
 	}
 
 	@Override
-	public DataSetResDirectory getDataSetResDirectory()
+	public FileSource getFileSource()
 	{
-		return dataSetResDirectory;
+		return fileSource;
 	}
 
 	@Override
-	public void setDataSetResDirectory(DataSetResDirectory dataSetResDirectory)
+	public void setFileSource(FileSource fileSource)
 	{
-		this.dataSetResDirectory = dataSetResDirectory;
+		this.fileSource = fileSource;
 	}
 
 	@Override
@@ -228,15 +232,56 @@ public class JsonFileDataSetEntity extends AbstractJsonFileDataSet implements Di
 	}
 
 	@Override
+	@JsonIgnore
+	public String getResultJsonRuleJson()
+	{
+		return null;
+	}
+
+	@Override
+	@JsonIgnore
+	public void setResultJsonRuleJson(ResultJsonRule resultJsonRule)
+	{
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstDataJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultDataJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstDataJsonPath(String rstDataJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultDataJsonPath(getResultJsonRule(), rstDataJsonPath));
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstAdditionJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultAdditionJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstAdditionJsonPath(String rstAdditionJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultAdditionJsonPath(getResultJsonRule(), rstAdditionJsonPath));
+	}
+
+	@Override
 	public String resolveTemplateFileName(String fileName, DataSetQuery query)
 	{
 		return resolveTemplatePlain(fileName, query);
 	}
 
 	@Override
-	protected File getJsonFile(DataSetQuery query) throws Throwable
+	protected FileResolvedInfo getJsonFile(DataSetQuery query) throws Throwable
 	{
-		return FILE_SUPPORT.getFile(this, query);
+		return getFileForDataSetQuery(query);
 	}
 
 	@Override

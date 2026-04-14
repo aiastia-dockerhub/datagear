@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,6 +25,7 @@ page_manager.ftl
 <script>
 (function(po)
 {
+	//page.js
 	$.inflatePageTable(po);
 })
 (${pid});

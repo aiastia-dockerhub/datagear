@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -38,32 +38,32 @@
 				</label>
 		        <div class="field-input col-12 md:col-9">
 		        	<p-inputtext id="${pid}name" v-model="fm.name" type="text" class="input w-full"
-		        		name="name" required maxlength="50" autofocus>
+		        		name="name" required maxlength="50" :autofocus="!pm.disableEditName" :readonly="pm.disableEditName">
 		        	</p-inputtext>
 		        </div>
 			</div>
-			<div class="field grid" v-if="!pm.isReadonlyAction">
+			<div class="field grid" v-if="pm.enablePassword">
 				<label for="${pid}password" class="field-label col-12 mb-2 md:col-3 md:mb-0">
 					<@spring.message code='password' />
 				</label>
 		        <div class="field-input col-12 md:col-9">
 		        	<p-password id="${pid}password" v-model="fm.password" class="input w-full"
-		        		input-class="w-full" toggle-mask :feedback="false"
-		        		name="password" :required="pm.isAddAction" maxlength="50" autocomplete="new-password">
+		        		input-class="w-full" toggle-mask :feedback="false" :required="pm.enablePassword"
+		        		:pt="{input:{name:'password',maxlength:'50',autocomplete:'new-password'}}">
 		        	</p-password>
-		        	<div class="desc text-color-secondary">
-		        		<small><@spring.message code='wontModifyIfEmpty' /></small>
+		        	<div class="desc text-color-secondary" v-if="pm.userPasswordStrengthTip != ''">
+		        		<small>{{pm.userPasswordStrengthTip}}</small>
 		        	</div>
 		        </div>
 			</div>
-			<div class="field grid" v-if="!pm.isReadonlyAction">
+			<div class="field grid" v-if="pm.enablePassword">
 				<label for="${pid}confirmPassword" class="field-label col-12 mb-2 md:col-3 md:mb-0">
 					<@spring.message code='confirmPassword' />
 				</label>
 		        <div class="field-input col-12 md:col-9">
 		        	<p-password id="${pid}confirmPassword" v-model="fm.confirmPassword" class="input w-full"
-		        		input-class="w-full" toggle-mask :feedback="false"
-		        		name="confirmPassword" :required="pm.isAddAction" maxlength="50" autocomplete="new-password">
+		        		input-class="w-full" toggle-mask :feedback="false" :required="pm.enablePassword"
+		        		:pt="{input:{name:'confirmPassword',maxlength:'50',autocomplete:'new-password'}}">
 		        	</p-password>
 		        </div>
 			</div>
@@ -73,7 +73,7 @@
 				</label>
 		        <div class="field-input col-12 md:col-9">
 		        	<p-inputtext id="${pid}realName" v-model="fm.realName" type="text" class="input w-full"
-		        		name="realName" maxlength="50">
+		        		name="realName" maxlength="50" :autofocus="pm.disableEditName && !pm.enablePassword">
 		        	</p-inputtext>
 		        </div>
 			</div>
@@ -104,7 +104,7 @@
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -115,25 +115,46 @@
 {
 	po.submitUrl = "/user/"+po.submitAction;
 	po.disableRoles = ("${(disableRoles!false)?string('true', 'false')}"  == "true");
+	po.enablePassword = ("${(enablePassword!false)?string('true', 'false')}"  == "true");
+	po.disableEditName = ("${(disableEditName!false)?string('true', 'false')}"  == "true");
+	po.userPasswordStrengthTip = "${userPasswordStrengthTip}";
+
+	po.beforeSubmitForm = function(action)
+	{
+		var data = action.options.data;
+		data.confirmPassword = undefined;
+	};
 	
 	po.vuePageModel(
 	{
-		disableRoles: po.disableRoles
+		disableRoles: po.disableRoles,
+		enablePassword: po.enablePassword,
+		disableEditName: po.disableEditName,
+		userPasswordStrengthTip: po.userPasswordStrengthTip
 	});
 	
 	var formModel = $.unescapeHtmlForJson(<@writeJson var=formModel />);
 	po.setupForm(formModel, {}, function()
 	{
-		var options =
+		var options = {};
+		
+		if(po.enablePassword)
 		{
-			rules:
+			options =
 			{
-				"confirmPassword":
+				rules:
 				{
-					"equalTo" : po.elementOfName("password")
+					"password":
+					{
+						"pattern" : ${userPasswordStrengthRegex}
+					},
+					"confirmPassword":
+					{
+						"equalTo" : po.elementOfName("password")
+					}
 				}
-			}
-		};
+			};
+		}
 		
 		return options;
 	});
@@ -157,10 +178,9 @@
 			});
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

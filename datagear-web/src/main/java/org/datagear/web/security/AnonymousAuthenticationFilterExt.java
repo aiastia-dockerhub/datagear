@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -35,12 +35,14 @@ import javax.servlet.http.HttpSession;
 import org.datagear.management.domain.Role;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.RoleService;
+import org.datagear.util.Global;
 import org.datagear.util.IDUtil;
 import org.datagear.web.util.WebUtils;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
@@ -57,7 +59,7 @@ public class AnonymousAuthenticationFilterExt extends AnonymousAuthenticationFil
 {
 	public static final String SESSION_KEY_AUTH_USER_ANONYMOUS = "AUTH_USER_ANONYMOUS";
 
-	public static final String COOKIE_USER_ID_ANONYMOUS = "USER_ID_ANONYMOUS";
+	public static final String COOKIE_USER_ID_ANONYMOUS =  Global.NAME_SHORT_UCUS + "USER_ID_ANONYMOUS";
 
 	private String key;
 
@@ -95,10 +97,13 @@ public class AnonymousAuthenticationFilterExt extends AnonymousAuthenticationFil
 	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 			throws IOException, ServletException
 	{
+		// 此处代码修改自父类
 		if (SecurityContextHolder.getContext().getAuthentication() == null)
 		{
-			SecurityContextHolder.getContext()
-					.setAuthentication(createAuthentication((HttpServletRequest) req, (HttpServletResponse) res));
+			Authentication authentication = createAuthentication((HttpServletRequest) req, (HttpServletResponse) res);
+			SecurityContext context = SecurityContextHolder.createEmptyContext();
+			context.setAuthentication(authentication);
+			SecurityContextHolder.setContext(context);
 		}
 
 		chain.doFilter(req, res);

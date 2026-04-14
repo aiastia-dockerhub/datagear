@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -33,7 +33,7 @@ public class DataValueConvertionException extends RuntimeException
 
 	public DataValueConvertionException(Object source, String type)
 	{
-		super("Convert from [" + source + "] to [" + type + "] is not supported");
+		super("Convert from [" + source + "] to [" + type + "] unsupported");
 		this.type = type;
 		this.source = source;
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,9 +20,13 @@ package org.datagear.management.domain;
 import java.util.Date;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
+import org.datagear.analysis.ResultJsonRuleUtil;
 import org.datagear.analysis.support.JsonValueDataSet;
+import org.datagear.analysis.support.ResultJsonRule;
 import org.springframework.beans.BeanUtils;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * {@linkplain JsonValueDataSet}实体。
@@ -30,7 +34,8 @@ import org.springframework.beans.BeanUtils;
  * @author datagear@163.com
  *
  */
-public class JsonValueDataSetEntity extends JsonValueDataSet implements DataSetEntity, CloneableEntity
+public class JsonValueDataSetEntity extends JsonValueDataSet
+		implements DataSetEntity, CloneableEntity, ResultJsonRuleAwareSplitEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -38,7 +43,7 @@ public class JsonValueDataSetEntity extends JsonValueDataSet implements DataSetE
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -48,14 +53,12 @@ public class JsonValueDataSetEntity extends JsonValueDataSet implements DataSetE
 	public JsonValueDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
-	public JsonValueDataSetEntity(String id, String name, List<DataSetProperty> properties, String value,
+	public JsonValueDataSetEntity(String id, String name, List<DataSetField> fields, String value,
 			User createUser)
 	{
-		super(id, name, properties, value);
-		this.createTime = new Date();
+		super(id, name, fields, value);
 		this.createUser = createUser;
 	}
 
@@ -118,6 +121,47 @@ public class JsonValueDataSetEntity extends JsonValueDataSet implements DataSetE
 	public void setAnalysisProject(AnalysisProject analysisProject)
 	{
 		this.analysisProject = analysisProject;
+	}
+
+	@Override
+	@JsonIgnore
+	public String getResultJsonRuleJson()
+	{
+		return null;
+	}
+
+	@Override
+	@JsonIgnore
+	public void setResultJsonRuleJson(ResultJsonRule resultJsonRule)
+	{
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstDataJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultDataJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstDataJsonPath(String rstDataJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultDataJsonPath(getResultJsonRule(), rstDataJsonPath));
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstAdditionJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultAdditionJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstAdditionJsonPath(String rstAdditionJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultAdditionJsonPath(getResultJsonRule(), rstAdditionJsonPath));
 	}
 
 	@Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -34,6 +34,36 @@ public class AsteriskPatternMatcherTest
 	public void test()
 	{
 		AsteriskPatternMatcher matcher = new AsteriskPatternMatcher();
+
+		{
+			String pattern = null;
+
+			assertTrue(matcher.matches(pattern, null));
+			assertFalse(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+
+		{
+			String pattern = "";
+
+			assertTrue(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, null));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+
+		{
+			String pattern = null;
+
+			assertTrue(matcher.matches(pattern, null));
+			assertFalse(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+
+		{
+			assertTrue(matcher.matches(null, null));
+			assertFalse(matcher.matches("", null));
+			assertFalse(matcher.matches("abc", null));
+		}
 
 		{
 			String pattern = "*";
@@ -74,6 +104,14 @@ public class AsteriskPatternMatcherTest
 		}
 
 		{
+			String pattern = "abc";
+
+			assertTrue(matcher.matches(pattern, "abc"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
+			assertFalse(matcher.matches(pattern, "defabc"));
+		}
+
+		{
 			String pattern = "abc*ghi";
 
 			assertTrue(matcher.matches(pattern, "abcghi"));
@@ -104,6 +142,105 @@ public class AsteriskPatternMatcherTest
 
 			assertTrue(matcher.matches(pattern, "jdbc:mysql://192.168.1.1:3306/dg_test"));
 			assertFalse(matcher.matches(pattern, "jdbc:mysql://192.168.1.2:3306/dg_test"));
+		}
+
+		{
+			String pattern = "abc*";
+
+			assertFalse(matcher.matches(pattern, "Abc"));
+			assertFalse(matcher.matches(pattern, "ABCd"));
+		}
+
+		{
+			String pattern = "";
+
+			assertTrue(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, "a"));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+
+		{
+			String pattern = "asterisk:";
+
+			assertTrue(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, "a"));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+		{
+			String pattern = "asterisk:abc*";
+
+			assertTrue(matcher.matches(pattern, "abc"));
+			assertTrue(matcher.matches(pattern, "abcdef"));
+			assertFalse(matcher.matches(pattern, "ac"));
+		}
+
+		{
+			String pattern = "regex:";
+
+			assertTrue(matcher.matches(pattern, ""));
+			assertFalse(matcher.matches(pattern, "a"));
+			assertFalse(matcher.matches(pattern, "abc"));
+		}
+		{
+			String pattern = "regex:^abc$";
+
+			assertTrue(matcher.matches(pattern, "abc"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
+			assertFalse(matcher.matches(pattern, "ac"));
+		}
+		{
+			String pattern = "regex:^abc\\d+$";
+
+			assertTrue(matcher.matches(pattern, "abc1"));
+			assertFalse(matcher.matches(pattern, "Abc1"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
+		}
+	}
+
+	@Test
+	public void test_ignoreCase_true()
+	{
+		AsteriskPatternMatcher matcher = new AsteriskPatternMatcher();
+		matcher.setIgnoreCase(true);
+
+		{
+			String pattern = "abc*";
+
+			assertTrue(matcher.matches(pattern, "Abc"));
+			assertTrue(matcher.matches(pattern, "ABCd"));
+		}
+
+		{
+			String pattern = "*abc";
+
+			assertTrue(matcher.matches(pattern, "aBc"));
+			assertTrue(matcher.matches(pattern, "defAbc"));
+		}
+
+		{
+			String pattern = "abc";
+
+			assertTrue(matcher.matches(pattern, "abc"));
+			assertTrue(matcher.matches(pattern, "aBc"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
+			assertFalse(matcher.matches(pattern, "defabc"));
+		}
+
+		{
+			String pattern = "asterisk:abc";
+
+			assertTrue(matcher.matches(pattern, "abc"));
+			assertTrue(matcher.matches(pattern, "aBc"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
+			assertFalse(matcher.matches(pattern, "defabc"));
+		}
+
+		{
+			String pattern = "regex:^abc\\d+$";
+
+			assertTrue(matcher.matches(pattern, "abc1"));
+			assertTrue(matcher.matches(pattern, "Abc1"));
+			assertFalse(matcher.matches(pattern, "abcdef"));
 		}
 	}
 }

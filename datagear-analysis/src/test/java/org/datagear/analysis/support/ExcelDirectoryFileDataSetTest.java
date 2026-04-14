@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -26,7 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.ResolvedDataSetResult;
@@ -46,13 +46,13 @@ public class ExcelDirectoryFileDataSetTest
 	@Test
 	public void getResultTest_xlsx()
 	{
-		List<DataSetProperty> properties = new ArrayList<>();
-		properties.add(new DataSetProperty("name", DataSetProperty.DataType.STRING));
-		properties.add(new DataSetProperty("value", DataSetProperty.DataType.NUMBER));
-		properties.add(new DataSetProperty("size", DataSetProperty.DataType.NUMBER));
-		properties.add(new DataSetProperty("date", DataSetProperty.DataType.DATE));
+		List<DataSetField> fields = new ArrayList<>();
+		fields.add(new DataSetField("name", DataSetField.DataType.STRING));
+		fields.add(new DataSetField("value", DataSetField.DataType.NUMBER));
+		fields.add(new DataSetField("size", DataSetField.DataType.NUMBER));
+		fields.add(new DataSetField("date", DataSetField.DataType.DATE));
 
-		ExcelDirectoryFileDataSet dataSet = new ExcelDirectoryFileDataSet("a", "a", properties, DIRECTORY,
+		ExcelDirectoryFileDataSet dataSet = new ExcelDirectoryFileDataSet("a", "a", fields, DIRECTORY,
 				"ExcelDirectoryFileDataSetTest-0.xlsx");
 		dataSet.setNameRow(1);
 
@@ -95,15 +95,15 @@ public class ExcelDirectoryFileDataSetTest
 	}
 
 	@Test
-	public void getResultTest_xlsx_convertPropertyValue()
+	public void getResultTest_xlsx_convertFieldValue()
 	{
-		List<DataSetProperty> properties = new ArrayList<>();
-		properties.add(new DataSetProperty("name", DataSetProperty.DataType.STRING));
-		properties.add(new DataSetProperty("value", DataSetProperty.DataType.NUMBER));
-		properties.add(new DataSetProperty("size", DataSetProperty.DataType.STRING));
-		properties.add(new DataSetProperty("date", DataSetProperty.DataType.STRING));
+		List<DataSetField> fields = new ArrayList<>();
+		fields.add(new DataSetField("name", DataSetField.DataType.STRING));
+		fields.add(new DataSetField("value", DataSetField.DataType.NUMBER));
+		fields.add(new DataSetField("size", DataSetField.DataType.STRING));
+		fields.add(new DataSetField("date", DataSetField.DataType.STRING));
 
-		ExcelDirectoryFileDataSet dataSet = new ExcelDirectoryFileDataSet("a", "a", properties, DIRECTORY,
+		ExcelDirectoryFileDataSet dataSet = new ExcelDirectoryFileDataSet("a", "a", fields, DIRECTORY,
 				"ExcelDirectoryFileDataSetTest-0.xlsx");
 		dataSet.setNameRow(1);
 
@@ -154,33 +154,33 @@ public class ExcelDirectoryFileDataSetTest
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) resolvedResult.getResult().getData();
-		List<DataSetProperty> properties = resolvedResult.getProperties();
+		List<DataSetField> fields = resolvedResult.getFields();
 
 		{
-			assertEquals(4, properties.size());
+			assertEquals(4, fields.size());
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(2);
-				assertEquals("size", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(2);
+				assertEquals("size", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(3);
-				assertEquals("date", property.getName());
-				assertEquals(DataSetProperty.DataType.DATE, property.getType());
+				DataSetField field = fields.get(3);
+				assertEquals("date", field.getName());
+				assertEquals(DataSetField.DataType.DATE, field.getType());
 			}
 		}
 
@@ -229,33 +229,33 @@ public class ExcelDirectoryFileDataSetTest
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) resolvedResult.getResult().getData();
-		List<DataSetProperty> properties = resolvedResult.getProperties();
+		List<DataSetField> fields = resolvedResult.getFields();
 
 		{
-			assertEquals(4, properties.size());
+			assertEquals(4, fields.size());
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(2);
-				assertEquals("size", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(2);
+				assertEquals("size", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(3);
-				assertEquals("date", property.getName());
-				assertEquals(DataSetProperty.DataType.DATE, property.getType());
+				DataSetField field = fields.get(3);
+				assertEquals("date", field.getName());
+				assertEquals(DataSetField.DataType.DATE, field.getType());
 			}
 		}
 
@@ -306,27 +306,27 @@ public class ExcelDirectoryFileDataSetTest
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) resolvedResult.getResult().getData();
-		List<DataSetProperty> properties = resolvedResult.getProperties();
+		List<DataSetField> fields = resolvedResult.getFields();
 
 		{
-			assertEquals(3, properties.size());
+			assertEquals(3, fields.size());
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("size", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("size", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(2);
-				assertEquals("date", property.getName());
-				assertEquals(DataSetProperty.DataType.DATE, property.getType());
+				DataSetField field = fields.get(2);
+				assertEquals("date", field.getName());
+				assertEquals(DataSetField.DataType.DATE, field.getType());
 			}
 		}
 
@@ -372,27 +372,27 @@ public class ExcelDirectoryFileDataSetTest
 
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) resolvedResult.getResult().getData();
-		List<DataSetProperty> properties = resolvedResult.getProperties();
+		List<DataSetField> fields = resolvedResult.getFields();
 
 		{
-			assertEquals(3, properties.size());
+			assertEquals(3, fields.size());
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("a", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("a", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("b", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("b", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(2);
-				assertEquals("c", property.getName());
-				assertEquals(DataSetProperty.DataType.DECIMAL, property.getType());
+				DataSetField field = fields.get(2);
+				assertEquals("c", field.getName());
+				assertEquals(DataSetField.DataType.DECIMAL, field.getType());
 			}
 		}
 

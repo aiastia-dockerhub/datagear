@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -348,7 +348,7 @@ public class ExpressionResolver
 				}
 
 				expValue = cache.toString();
-				cache.delete(0, cache.length());
+				cache.setLength(0);
 			}
 
 			expValues.add(expValue);

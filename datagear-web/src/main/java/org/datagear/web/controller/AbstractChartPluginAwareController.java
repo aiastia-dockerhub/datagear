@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,37 +17,47 @@
 
 package org.datagear.web.controller;
 
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Set;
 
+import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.datagear.analysis.Category;
-import org.datagear.analysis.ChartDataSet;
-import org.datagear.analysis.ChartDefinition;
+import org.datagear.analysis.ChartPlugin;
 import org.datagear.analysis.ChartPluginAttribute;
 import org.datagear.analysis.ChartPluginResource;
 import org.datagear.analysis.DashboardTheme;
+import org.datagear.analysis.DataSetBind;
 import org.datagear.analysis.DataSetResult;
 import org.datagear.analysis.DataSign;
-import org.datagear.analysis.RenderContext;
-import org.datagear.analysis.RenderException;
 import org.datagear.analysis.support.ChartPluginCategorizationResolver;
 import org.datagear.analysis.support.ChartPluginCategorizationResolver.Categorization;
 import org.datagear.analysis.support.ProfileDataSet;
 import org.datagear.analysis.support.html.DirectoryHtmlChartPluginManager;
-import org.datagear.analysis.support.html.HtmlChart;
 import org.datagear.analysis.support.html.HtmlChartPlugin;
-import org.datagear.management.domain.ChartDataSetVO;
+import org.datagear.analysis.support.html.HtmlChartPluginLoadException;
+import org.datagear.analysis.support.html.HtmlChartPluginLoader;
+import org.datagear.management.domain.DataSetBindVO;
+import org.datagear.management.domain.HtmlChartPluginVo;
+import org.datagear.util.IOUtil;
+import org.datagear.util.KeywordMatcher;
+import org.datagear.util.KeywordMatcher.MatchValue;
 import org.datagear.util.StringUtil;
 import org.datagear.util.i18n.Label;
 import org.datagear.util.i18n.LabelUtil;
-import org.datagear.web.util.KeywordMatcher;
 import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.context.ServletContextAware;
+import org.springframework.web.context.request.WebRequest;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -57,12 +67,16 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * @author datagear@163.com
  *
  */
-public class AbstractChartPluginAwareController extends AbstractDataAnalysisController
+public class AbstractChartPluginAwareController extends AbstractDataAnalysisController implements ServletContextAware
 {
 	@Autowired
 	private DirectoryHtmlChartPluginManager directoryHtmlChartPluginManager;
 
 	private ChartPluginCategorizationResolver chartPluginCategorizationResolver = new ChartPluginCategorizationResolver();
+
+	private KeywordMatcher keywordMatcher = new KeywordMatcher();
+
+	private ServletContext servletContext;
 
 	public AbstractChartPluginAwareController()
 	{
@@ -90,9 +104,81 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 		this.chartPluginCategorizationResolver = chartPluginCategorizationResolver;
 	}
 
+	public KeywordMatcher getKeywordMatcher()
+	{
+		return keywordMatcher;
+	}
+
+	public void setKeywordMatcher(KeywordMatcher keywordMatcher)
+	{
+		this.keywordMatcher = keywordMatcher;
+	}
+
+	public ServletContext getServletContext()
+	{
+		return servletContext;
+	}
+
+	@Override
+	public void setServletContext(ServletContext servletContext)
+	{
+		this.servletContext = servletContext;
+	}
+
 	protected List<Categorization> resolveCategorizations(List<HtmlChartPluginView> chartPluginVOs)
 	{
 		return this.chartPluginCategorizationResolver.resolve(chartPluginVOs);
+	}
+
+	protected void writeChartPluginResource(HttpServletRequest request, HttpServletResponse response,
+			WebRequest webRequest, ChartPlugin chartPlugin, ChartPluginResource resource) throws Exception
+	{
+		if (resource == null)
+		{
+			response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			return;
+		}
+
+		long lastModified = resource.getLastModified();
+		if (webRequest.checkNotModified(lastModified))
+			return;
+
+		setContentTypeByName(request, response, servletContext, resource.getName());
+		setCacheControlNoCache(response);
+
+		InputStream in = null;
+		OutputStream out = response.getOutputStream();
+
+		try
+		{
+			in = resource.getInputStream();
+			IOUtil.write(in, out);
+		}
+		finally
+		{
+			IOUtil.close(in);
+		}
+	}
+
+	protected Set<HtmlChartPlugin> resolveHtmlChartPlugins(File directory)
+	{
+		Set<HtmlChartPlugin> loaded = Collections.emptySet();
+
+		try
+		{
+			loaded = resolveHtmlChartPluginsThrow(directory);
+		}
+		catch (HtmlChartPluginLoadException e)
+		{
+		}
+
+		return loaded;
+	}
+
+	protected Set<HtmlChartPlugin> resolveHtmlChartPluginsThrow(File directory) throws HtmlChartPluginLoadException
+	{
+		HtmlChartPluginLoader loader = getDirectoryHtmlChartPluginManager().getHtmlChartPluginLoader();
+		return loader.loadAll(directory);
 	}
 
 	/**
@@ -143,14 +229,13 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 				pluginViews.add(toHtmlChartPluginView(plugin, themeName, locale));
 		}
 
-		return KeywordMatcher.<HtmlChartPluginView> match(pluginViews, keyword,
-				new KeywordMatcher.MatchValue<HtmlChartPluginView>()
+		return this.keywordMatcher.match(pluginViews, keyword, new MatchValue<HtmlChartPluginView>()
 				{
 					@Override
 					public String[] get(HtmlChartPluginView t)
 					{
 						return new String[] { (t.getNameLabel() == null ? null : t.getNameLabel().getValue()),
-								(t.getDescLabel() == null ? null : t.getDescLabel().getValue()) };
+						(t.getDescLabel() == null ? null : t.getDescLabel().getValue()), t.getAuthor() };
 					}
 				});
 	}
@@ -177,6 +262,10 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 		pluginView.setCategories(Category.clone(chartPlugin.getCategories(), locale));
 		pluginView.setCategoryOrders(chartPlugin.getCategoryOrders());
 		pluginView.setAttributes(ChartPluginAttribute.clone(chartPlugin.getAttributes(), locale));
+		pluginView.setAuthor(chartPlugin.getAuthor());
+		pluginView.setContact(chartPlugin.getContact());
+		pluginView.setIssueDate(chartPlugin.getIssueDate());
+		pluginView.setPlatformVersion(chartPlugin.getPlatformVersion());
 
 		return pluginView;
 	}
@@ -208,15 +297,15 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 		return "/chartPlugin/icon/" + plugin.getId();
 	}
 
-	protected ChartDataSetView[] toChartDataSetViews(ChartDataSet[] chartDataSets)
+	protected DataSetBindView[] toDataSetBindViews(DataSetBind[] dataSetBinds)
 	{
-		if (chartDataSets == null)
+		if (dataSetBinds == null)
 			return null;
 
-		ChartDataSetView[] views = new ChartDataSetView[chartDataSets.length];
+		DataSetBindView[] views = new DataSetBindView[dataSetBinds.length];
 
-		for (int i = 0; i < chartDataSets.length; i++)
-			views[i] = new ChartDataSetView(chartDataSets[i]);
+		for (int i = 0; i < dataSetBinds.length; i++)
+			views[i] = new DataSetBindView(dataSetBinds[i]);
 
 		return views;
 	}
@@ -227,7 +316,7 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 	 * @author datagear@163.com
 	 *
 	 */
-	public static class HtmlChartPluginView extends HtmlChartPlugin implements Serializable
+	public static class HtmlChartPluginView extends HtmlChartPluginVo implements Serializable
 	{
 		private static final long serialVersionUID = 1L;
 
@@ -240,8 +329,7 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 
 		public HtmlChartPluginView(String id, Label nameLabel)
 		{
-			super.setId(id);
-			super.setNameLabel(nameLabel);
+			super(id, nameLabel);
 		}
 
 		public String getIconUrl()
@@ -253,81 +341,34 @@ public class AbstractChartPluginAwareController extends AbstractDataAnalysisCont
 		{
 			this.iconUrl = iconUrl;
 		}
-
-		@JsonIgnore
-		@Override
-		public List<ChartPluginResource> getResources()
-		{
-			return super.getResources();
-		}
-
-		@JsonIgnore
-		@Override
-		public Map<String, String> getIconResourceNames()
-		{
-			return super.getIconResourceNames();
-		}
-
-		@JsonIgnore
-		@Override
-		public String getElementTagName()
-		{
-			return super.getElementTagName();
-		}
-
-		@JsonIgnore
-		@Override
-		public long getLastModified()
-		{
-			return super.getLastModified();
-		}
-
-		@JsonIgnore
-		@Override
-		public String getNewLine()
-		{
-			return super.getNewLine();
-		}
-
-		@Override
-		public int getOrder()
-		{
-			return super.getOrder();
-		}
-
-		@Override
-		public HtmlChart renderChart(ChartDefinition chartDefinition, RenderContext renderContext)
-				throws RenderException
-		{
-			throw new UnsupportedOperationException();
-		}
 	}
 
 	/**
-	 * {@linkplain ChartDataSet}视图对象。
+	 * {@linkplain DataSetBind}视图对象。
 	 * 
 	 * @author datagear@163.com
 	 *
 	 */
-	public static class ChartDataSetView extends ChartDataSetVO
+	public static class DataSetBindView extends DataSetBindVO
 	{
 		private static final long serialVersionUID = 1L;
 
-		public ChartDataSetView()
+		public DataSetBindView()
 		{
 			super();
 		}
 
-		public ChartDataSetView(ChartDataSet chartDataSet)
+		public DataSetBindView(DataSetBind dataSetBind)
 		{
 			super();
-			setDataSet(ProfileDataSet.valueOf(chartDataSet.getDataSet()));
-			setPropertySigns(chartDataSet.getPropertySigns());
-			setAlias(chartDataSet.getAlias());
-			setAttachment(chartDataSet.isAttachment());
-			setQuery(chartDataSet.getQuery());
-			setPropertyAliases(chartDataSet.getPropertyAliases());
-			setPropertyOrders(chartDataSet.getPropertyOrders());
+			setDataSet(ProfileDataSet.valueOf(dataSetBind.getDataSet()));
+			setDataSetSigns(dataSetBind.getDataSetSigns());
+			setFieldSigns(dataSetBind.getFieldSigns());
+			setAlias(dataSetBind.getAlias());
+			setAttachment(dataSetBind.isAttachment());
+			setQuery(dataSetBind.getQuery());
+			setFieldAliases(dataSetBind.getFieldAliases());
+			setFieldOrders(dataSetBind.getFieldOrders());
 		}
 
 		@JsonIgnore

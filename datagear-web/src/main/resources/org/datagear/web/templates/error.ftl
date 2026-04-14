@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -47,7 +47,8 @@
 	<#include "include/page_obj.ftl">
 	<div id="${pid}" class="page horizontal">
 		<div class="flex flex-column h-screen m-0">
-			<#include "include/page_main_header.ftl">
+			<#-- 这里不能引用page_main_header.ftl，参考CustomFreeMarkerView类内注释 -->
+			<#include "include/page_main_header_simple.ftl">
 			<div class="flex-grow-1 p-0">
 				<div class="grid grid-nogutter justify-content-center">
 					<p-card class="col-10 md:col-8 mt-6 p-inline-message p-inline-message-error">
@@ -71,13 +72,7 @@
 			</div>
 		</div>
 	</div>
-	<script>
-	(function(po)
-	{
-		po.vueMount();
-	})
-	(${pid});
-	</script>
+	<#include "include/page_vue_mount.ftl">
 </#if>
 </body>
 </html>

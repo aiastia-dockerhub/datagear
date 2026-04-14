@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -36,16 +36,17 @@ public interface BatchDataExchangeListener extends DataExchangeListener
 	 * 子数据交换提交失败。
 	 * 
 	 * @param subDataExchange
-	 * @param cause
+	 * @param exception
 	 */
-	void onSubmitFail(SubDataExchange subDataExchange);
+	void onSubmitFail(SubDataExchange subDataExchange, SubmitFailException exception);
 
 	/**
 	 * 子数据交换取消。
 	 * 
 	 * @param subDataExchange
+	 * @param reason
 	 */
-	void onCancel(SubDataExchange subDataExchange);
+	void onCancel(SubDataExchange subDataExchange, CancelReason reason);
 
 	/**
 	 * 成功。

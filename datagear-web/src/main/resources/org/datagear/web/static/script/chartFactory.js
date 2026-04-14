@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -36,8 +36,6 @@
  * 
  * 此图表工厂支持为<body>元素、图表元素添加elementAttrConst.LISTENER属性来设置图表监听器，格式参考chartBase.listener函数参数说明。
  * 
- * 此图表工厂支持为图表元素添加elementAttrConst.MAP属性来设置地图图表的地图名。
- * 
  * 此图表工厂支持为<body>元素、图表元素添加elementAttrConst.ECHARTS_THEME属性来设置图表ECharts主题名。
  * 
  * 此图表工厂支持为<body>元素、图表元素添加elementAttrConst.DISABLE_SETTING属性，用于禁用图表交互设置功能，
@@ -49,15 +47,18 @@
  * 
  * 此图表工厂要求图表插件的图表渲染器（chartBase.plugin.renderer）格式为：
  * {
+ *   //可选，渲染器依赖库，具体结构参考chartFactory.loadLib()函数说明
+ *   //注意库源URL规范不同，具体参考chartFactory.trimPluginRendererLibSourceUrl()函数说明
+ *   depend: { ... }、[ {...}, ... ]、function(){ return { ... }、[ {...}, ... ]; }
  *   //可选，渲染图表函数是否是异步函数，默认为false
  *   asyncRender: true、false、function(chart){ ...; return true 或者 false; }
  *   //必选，渲染图表函数
  *   render: function(chart){ ... },
  *   //可选，更新图表数据函数是否是异步函数，默认为false
- *   asyncUpdate: true、false、function(chart, results){ ...; return true 或者 false; }
+ *   asyncUpdate: true、false、function(chart, chartResult){ ...; return true 或者 false; }
  *   //必选，更新图表数据函数
- *   //results 要更新的图表数据
- *   update: function(chart, results){ ... },
+ *   //chartResult 要更新的图表结果
+ *   update: function(chart, chartResult){ ... },
  *   //可选，调整图表尺寸函数
  *   resize: function(chart){ ... },
  *   //可选，绑定图表事件处理函数
@@ -69,7 +70,9 @@
  *   //handler 图表事件处理函数引用
  *   off: function(chart, eventType, handler){ ... },
  *   //可选，销毁图表函数
- *   destroy: function(chart){ ... }
+ *   destroy: function(chart){ ... },
+ *   //可选，渲染器附加数据
+ *   additions: { 名: 值, ... }、function(chart){ return { 名: 值, ... }; };
  * }
  * 
  * 此图表工厂和dashboardFactory.js一起可以支持异步图表插件，示例如下：
@@ -89,7 +92,7 @@
  *   
  *   asyncUpdate: true,
  *   
- *   update: function(chart, results)
+ *   update: function(chart, chartResult)
  *   {
  *     $.get("...", function()
  *     {
@@ -138,6 +141,9 @@
 	
 	/** 渲染上下文属性名常量 */
 	var renderContextAttrConst = (chartFactory.renderContextAttrConst || (chartFactory.renderContextAttrConst = {}));
+	
+	/**内置图表选项名定义，所有内置图表选项名都应定义于此，便于因名字冲突需要重新定义*/
+	var builtinOptionNames = (chartFactory.builtinOptionNames || (chartFactory.builtinOptionNames = {}));
 	
 	//----------------------------------------
 	// chartStatusConst开始
@@ -196,9 +202,6 @@
 	/**图表监听器*/
 	elementAttrConst.LISTENER = "dg-chart-listener";
 	
-	/**图表地图*/
-	elementAttrConst.MAP = "dg-chart-map";
-	
 	/**图表ECharts主题*/
 	elementAttrConst.ECHARTS_THEME = "dg-echarts-theme";
 	
@@ -233,17 +236,26 @@
 	// renderContextAttrConst结束
 	//----------------------------------------
 	
-	/** 内置图表选项：是否美化滚动条 */
-	chartFactory.OPTION_BEAUTIFY_SCROLLBAR = "beautifyScrollbar";
-	
-	/** 内置图表选项：处理图表渲染选项 */
-	chartFactory.OPTION_PROCESS_RENDER_OPTIONS = "processRenderOptions";
-	
-	/** 内置图表选项：处理图表更新选项 */
-	chartFactory.OPTION_PROCESS_UPDATE_OPTIONS = "processUpdateOptions";
+	/** 内置图表选项名：自定义选项名 */
+	builtinOptionNames.customOptionNames = "customOptionNames";
+	/** 内置图表选项名：是否美化滚动条 */
+	builtinOptionNames.beautifyScrollbar = "beautifyScrollbar";
+	/** 内置图表选项名：处理图表渲染选项 */
+	builtinOptionNames.processRenderOptions = "processRenderOptions";
+	/** 内置图表选项名：处理图表更新选项 */
+	builtinOptionNames.processUpdateOptions = "processUpdateOptions";
+	/** 内置图表选项名：更新追加模式 */
+	builtinOptionNames.updateAppendMode = "updateAppendMode";
+	/** 内置图表选项名：是否禁用内置设置（参数/数据透视表） */
+	builtinOptionNames.disableSetting = "disableSetting";
+	/** 内置图表选项名：内置设置（参数/数据透视表） */
+	builtinOptionNames.builtinSetting = "builtinSetting";
 	
 	/** 图表标识样式名，所有已绘制的图表元素都会添加此样式名 */
 	chartFactory.CHART_STYLE_NAME_FOR_INDICATION = "dg-chart-for-indication";
+	
+	/** 看板引入库标识属性，同：org.datagear.analysis.support.html.HtmlTplDashboardWidgetRenderer.DASHBOARD_LIB_NAME_ATTR */
+	chartFactory.LIB_ATTR_NAME = "dg-lib-name";
 	
 	/**
 	 * 图表属性值集中图表选项名，同：org.datagear.management.domain.HtmlChartWidgetEntity.ATTR_CHART_OPTIONS
@@ -254,6 +266,22 @@
 	 * 图表属性值集中图表部件名，同：org.datagear.analysis.support.ChartWidget.ATTR_CHART_WIDGET
 	 */
 	chartFactory._CHART_ATTR_VALUE_NAME_WIDGET = "DG_CHART_WIDGET";
+	
+	/**
+	 * 数据标记全名分隔符
+	 */
+	chartFactory.DATA_SIGN_FULLNAME_SEPARATOR = ".";
+	
+	/**图表渲染器附加属性：是否支持忽略获取结果，默认值为：false */
+	chartFactory.RENDERER_ADDITION_SUPPORT_IGNORE_FETCH = "supportIgnoreFetch";
+	
+	//org.datagear.analysis.DataSetParam.DataType
+	chartFactory.DataSetParamType =
+	{
+		STRING: "STRING",
+		BOOLEAN: "BOOLEAN",
+		NUMBER: "NUMBER"
+	};
 	
 	/**
 	 * 初始化渲染上下文。
@@ -317,8 +345,8 @@
 	 *				  plugin: {...},
 	 *				  //可选，名称
 	 *				  name: "...",
-	 *				  //可选，图表数据集数组
-	 *				  chartDataSets: [...],
+	 *				  //可选，数据集绑定数组
+	 *				  dataSetBinds: [...],
 	 *				  //可选，更新间隔
 	 *				  updateInterval: 数值,
 	 *				  //可选，图表结果数据格式
@@ -343,25 +371,53 @@
 	chartFactory._initChartBaseProperties = function(chart)
 	{
 		chart.name = (chart.name || "");
-		chart.chartDataSets = (chart.chartDataSets || []);
 		chart.updateInterval = (chart.updateInterval == null ? -1 : chart.updateInterval);
-		for(var i=0; i<chart.chartDataSets.length; i++)
+		chart.dataSetBinds = (chart.dataSetBinds || []);
+		for(var i=0; i<chart.dataSetBinds.length; i++)
 		{
-			var cds = chart.chartDataSets[i];
-			cds.propertySigns = (cds.propertySigns || {});
-			cds.alias = (cds.alias == null ?  "" : cds.alias);
-			cds.attachment = (cds.attachment == true ? true : false);
-			cds.query = (cds.query || {});
-			cds.query.paramValues = (cds.query.paramValues || {});
-			//为chartDataSets元素添加index属性，便于后续根据其索引获取结果集等信息
-			cds.index = i;
+			var dsb = chart.dataSetBinds[i];
+			dsb.dataSetSigns = (dsb.dataSetSigns || []);
+			dsb.fieldSigns = (dsb.fieldSigns || {});
+			dsb.alias = (dsb.alias == null ?  "" : dsb.alias);
+			dsb.attachment = (dsb.attachment == true ? true : false);
+			dsb.query = (dsb.query || {});
+			dsb.query.paramValues = (dsb.query.paramValues || {});
+			//为dataSetBinds元素添加index属性，便于后续根据其索引获取结果集等信息
+			dsb.index = i;
 			
-			// < @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
-			cds.paramValues = cds.query.paramValues;
-			// > @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
+			// < @deprecated 兼容2.4.0版本的dataSetBinds.paramValues，将在未来版本移除，已被dataSetBinds.query.paramValues取代
+			dsb.paramValues = dsb.query.paramValues;
+			// > @deprecated 兼容2.4.0版本的dataSetBinds.paramValues，将在未来版本移除，已被dataSetBinds.query.paramValues取代
+			
+			// < @deprecated 兼容5.0.0版本的DataSetBind.propertySigns，将在未来版本移除，已被DataSetBind.fieldSigns取代
+			dsb.propertySigns = dsb.fieldSigns;
+			// > @deprecated 兼容5.0.0版本的DataSetBind.propertySigns，将在未来版本移除，已被DataSetBind.fieldSigns取代
+			
+			// < @deprecated 兼容5.0.0版本的DataSetBind.propertyAliases，将在未来版本移除，已被DataSetBind.fieldAliases取代
+			dsb.propertyAliases = dsb.fieldAliases;
+			// > @deprecated 兼容5.0.0版本的DataSetBind.propertyAliases，将在未来版本移除，已被DataSetBind.fieldAliases取代
+			
+			// < @deprecated 兼容5.0.0版本的DataSetBind.propertyOrders，将在未来版本移除，已被DataSetBind.fieldOrders取代
+			dsb.propertyOrders = dsb.fieldOrders;
+			// > @deprecated 兼容5.0.0版本的DataSetBind.propertyOrders，将在未来版本移除，已被DataSetBind.fieldOrders取代
+			
+			// < @deprecated 兼容5.0.0版本的DataSetBind.dataSet.properties，将在未来版本移除，已被DataSetBind.dataSet.fields取代
+			if(dsb.dataSet)
+			{
+				dsb.dataSet.properties = dsb.dataSet.fields;
+			}
+			// > @deprecated 兼容5.0.0版本的DataSetBind.dataSet.properties，将在未来版本移除，已被DataSetBind.dataSet.fields取代
 		}
 		
+		chart._dataSetBinds = (chart.dataSetBinds || []);
+		delete chart.dataSetBinds;
+		
+		// < @deprecated 兼容4.7.0版本的chart.chartDataSets，将在未来版本移除，已被chart._dataSetBinds取代
+		chart.chartDataSets = chart._dataSetBinds;
+		// > @deprecated 兼容4.7.0版本的chart.chartDataSets，将在未来版本移除，已被chart._dataSetBinds取代
+		
 		chart._attrValues = (chart.attrValues || {});
+		chart._options = (chart._options || {});
 		
 		//将内置属性值提取出来，避免被chart.attrValues()设置操作清除
 		chart._widget = chart._attrValues[chartFactory._CHART_ATTR_VALUE_NAME_WIDGET];
@@ -424,23 +480,30 @@
 			throw new Error("chart element '#"+this.elementId+"' required");
 		
 		if(!this.statusPreInit() && !this.statusDestroyed())
-			throw new Error("chart is illegal state for init()");
+			throw new Error("chart is illegal state for : init()");
 		
 		if(!this._isRenderContextInited())
-			throw new Error("chart is illegal state for init()");
+			throw new Error("chart is illegal state for : init()");
 		
 		this.statusIniting(true);
 		
 		this._initForPre();
+		
 		this._initOptions();
 		this._initTheme();
 		this._initListener();
+		
+		// < @deprecated 兼容4.7.0版本的dg-chart-map功能，将在未来版本移除，请使用chartSupport中的builtinOptionNames.mapName图表选项
 		this._initMap();
+		// > @deprecated 兼容4.7.0版本的dg-chart-map功能，将在未来版本移除，请使用chartSupport中的builtinOptionNames.mapName图表选项
+		
 		this._initEchartsThemeName();
 		this._initDisableSetting();
 		this._initEventHandlers();
 		this._initRenderer();
 		this._initAttrValues();
+		this._initUpdateAppendMode();
+		
 		this._initForPost();
 		
 		this.statusInited(true);
@@ -564,12 +627,12 @@
 					if(dl)
 						return dl.render(chart);
 				},
-				update: function(chart, results)
+				update: function(chart, chartResult)
 				{
 					var dl = this._findListenerOfFunc("update");
 					
 					if(dl)
-						return dl.update(chart, results);
+						return dl.update(chart, chartResult);
 				},
 				destroy: function(chart)
 				{
@@ -585,12 +648,12 @@
 					if(dl)
 						return dl.onRender(chart);
 				},
-				onUpdate: function(chart, results)
+				onUpdate: function(chart, chartResult)
 				{
 					var dl = this._findListenerOfFunc("onUpdate");
 					
 					if(dl)
-						return dl.onUpdate(chart, results);
+						return dl.onUpdate(chart, chartResult);
 				},
 				onDestroy: function(chart)
 				{
@@ -629,17 +692,6 @@
 	};
 	
 	/**
-	 * 初始化图表的地图名。
-	 * 此函数从图表元素的elementAttrConst.MAP属性获取图表地图名。
-	 */
-	chartBase._initMap = function()
-	{
-		var map = this.elementJquery().attr(elementAttrConst.MAP);
-		
-		this.map(map);
-	};
-	
-	/**
 	 * 初始化图表的ECharts主题名。
 	 * 此函数依次从图表元素、<body>元素的elementAttrConst.ECHARTS_THEME属性获取ECharts主题名。
 	 */
@@ -658,18 +710,32 @@
 	 */
 	chartBase._initDisableSetting = function()
 	{
-		var globalSetting = $(document.body).attr(elementAttrConst.DISABLE_SETTING);
-		var localSetting = this.elementJquery().attr(elementAttrConst.DISABLE_SETTING);
+		var localSetting;
 		
-		globalSetting = this._evalDisableSettingAttr(globalSetting);
+		var options = this.options();
+		var optionValue = chartFactory.builtinOptionValue(options, builtinOptionNames.disableSetting);
 		
-		if(localSetting != null && localSetting != "")
+		//图表选项里的优先级应最高，不然图表展示页的选项不起效
+		if(!chartFactory.isNullOrEmpty(optionValue))
 		{
-			localSetting = this._evalDisableSettingAttr(localSetting);
-			localSetting = $.extend({}, globalSetting, localSetting);
+			localSetting = this._evalDisableSettingAttr(optionValue);
 		}
 		else
-			localSetting = globalSetting;
+		{
+			var globalSetting = $(document.body).attr(elementAttrConst.DISABLE_SETTING);
+			globalSetting = this._evalDisableSettingAttr(globalSetting);
+			localSetting = this.elementJquery().attr(elementAttrConst.DISABLE_SETTING);
+			
+			if(!chartFactory.isNullOrEmpty(localSetting))
+			{
+				localSetting = this._evalDisableSettingAttr(localSetting);
+				localSetting = $.extend({}, globalSetting, localSetting);
+			}
+			else
+			{
+				localSetting = globalSetting;
+			}
+		}
 		
 		this.disableSetting(localSetting);
 	};
@@ -691,10 +757,16 @@
 			setting.param = true;
 			setting.data = true;
 		}
+		//字符串
+		else if(chartFactory.isString(settingAttr))
+		{
+			var evalSetting = chartFactory.evalSilently(settingAttr, {});
+			setting = $.extend(setting, evalSetting);
+		}
+		//对象
 		else
 		{
-			var tmpSetting = chartFactory.evalSilently(settingAttr, {});
-			setting = $.extend(setting, tmpSetting);
+			setting = $.extend(setting, settingAttr);
 		}
 		
 		return setting;
@@ -761,6 +833,24 @@
 	};
 	
 	/**
+	 * 初始化更新追加模式。
+	 */
+	chartBase._initUpdateAppendMode = function()
+	{
+		var options = this.options();
+		var mode = chartFactory.builtinOptionValue(options, builtinOptionNames.updateAppendMode);
+		
+		// < @deprecated 兼容5.2.0版本的dgUpdateAppendMode选项，将在未来版本移除
+		if(mode == null)
+		{
+			mode = chartFactory.builtinOptionValue(options, "dgUpdateAppendMode");
+		}
+		// > @deprecated 兼容5.2.0版本的dgUpdateAppendMode选项，将在未来版本移除
+		
+		this.updateAppendMode(mode);
+	};
+	
+	/**
 	 * 初始化开始扩展函数，默认什么也不做，留作扩展使用。
 	 */
 	chartBase._initForPre = function(){};
@@ -779,13 +869,21 @@
 	 * 图表渲染器应使用此函数获取并应用图表选项，另参考chart.inflateRenderOptions()、chart.inflateUpdateOptions()。
 	 * 
 	 * @param options 可选，要设置的图表选项，没有则执行获取操作
+	 * @returns 要获取的图表选项，格式为：{ ... }，不会为null
 	 */
 	chartBase.options = function(options)
 	{
 		if(options === undefined)
-			return this._options;
+		{
+			return (this._options || (this._options = {}));
+		}
 		else
+		{
+			if(options == null)
+				options = {};
+			
 			this._options = options;
+		}
 	};
 	
 	/**
@@ -797,18 +895,21 @@
 	 * 图表渲染器应使用此函数获取并应用图表主题，另参考：chart.themeGradualColor()。
 	 * 
 	 * @param theme 可选，要设置的图表主题，会被此函数修改，没有则执行获取操作
+	 * @returns 要获取的主题，不会为null
 	 */
 	chartBase.theme = function(theme)
 	{
+		if(!this._isRenderContextInited())
+			throw new Error("chart is illegal state for : theme()");
+		
 		if(theme === undefined)
-			return this._theme;
+		{
+			return (this._theme || (this._theme = this._renderContextAttrChartTheme()));
+		}
 		else
 		{
 			if(theme == null)
-				throw new Error("[theme] required");
-			
-			if(!this._isRenderContextInited())
-				throw new Error("chart is illegal state for theme(theme)");
+				theme = {};
 			
 			var globalTheme = this._renderContextAttrChartTheme();
 			
@@ -832,32 +933,19 @@
 	};
 	
 	/**
-	 * 获取非空图表主题。
-	 */
-	chartBase._themeNonNull = function()
-	{
-		var theme = this.theme();
-		
-		if(theme == null)
-			throw new Error("[chart.theme()] required");
-		
-		return theme;
-	};
-	
-	/**
 	 * 获取/设置图表监听器。
 	 * 图表监听器格式为：
 	 * {
 	 *   //可选，渲染图表完成回调函数
 	 *   render: function(chart){ ... },
 	 *   //可选，更新图表数据完成回调函数
-	 *   update: function(chart, results){ ... },
+	 *   update: function(chart, chartResult){ ... },
 	 *   //可选，销毁图表完成回调函数
 	 *   destroy: function(chart){ ... },
 	 *   //可选，渲染图表前置回调函数，返回false将阻止渲染图表
 	 *   onRender: function(chart){ ... },
 	 *   //可选，更新图表数据前置回调函数，返回false将阻止更新图表数据
-	 *   onUpdate: function(chart, results){ ... },
+	 *   onUpdate: function(chart, chartResult){ ... },
 	 *   //可选，销毁图表前置回调函数，返回false将阻止销毁图表
 	 *   onDestroy: function(chart){ ... }
 	 * }
@@ -865,6 +953,7 @@
 	 * 图表初始化时会使用图表元素的"dg-chart-listener"属性值执行设置操作。
 	 * 
 	 * @param listener 可选，要设置的监听器对象，没有则执行获取操作
+	 * @returns 要获取的监听器、null
 	 */
 	chartBase.listener = function(listener)
 	{
@@ -872,25 +961,6 @@
 			return this._listener;
 		else
 			this._listener = listener;
-	};
-	
-	/**
-	 * 获取/设置图表地图名。
-	 * 此函数用于为地图类图表提供支持，如果不是地图类图表，则不必设置此项。
-	 * 
-	 * 图表初始化时会使用图表元素的"dg-chart-map"属性值执行设置操作。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应使用此函数获取并应用图表地图。
-	 * 
-	 * @param map 可选，要设置的地图名，没有则执行获取操作
-	 */
-	chartBase.map = function(map)
-	{
-		if(map === undefined)
-			return this._map;
-		else
-			this._map = map;
 	};
 	
 	/**
@@ -943,11 +1013,15 @@
 		
 		if(setting === undefined)
 		{
-			return (this._disableSetting == null ? defaultSetting : this._disableSetting);
+			return (this._disableSetting || (this._disableSetting = defaultSetting));
 		}
 		else
 		{
-			if(setting == true || setting == "true")
+			if(setting == null)
+			{
+				setting = {};
+			}
+			else if(setting == true || setting == "true")
 			{
 				setting = {param: true, data: true};
 			}
@@ -970,13 +1044,21 @@
 	 * 
 	 * @param eventHandlers 可选，要设置的初始事件处理函数数组，没有则执行获取操作。数组元素格式为：
 	 * 						{ eventType: "...", eventHandler: function(chartEvent){ ... } }
+	 * @returns 数组，不会null
 	 */
 	chartBase.eventHandlers = function(eventHandlers)
 	{
 		if(eventHandlers === undefined)
-			return this._eventHandlers;
+		{
+			return (this._eventHandlers || (this._eventHandlers = []));
+		}
 		else
+		{
+			if(eventHandlers == null)
+				eventHandlers = [];
+			
 			this._eventHandlers = eventHandlers;
+		}
 	};
 	
 	/**
@@ -1025,13 +1107,39 @@
 			this.init();
 		
 		if(!this.statusInited() && !this.statusPreRender() && !this.statusDestroyed())
-			throw new Error("chart is illegal state for render()");
+			throw new Error("chart is illegal state for : render()");
 		
 		if(chartFactory.renderedChart(this.elementJquery()) != null)
 			throw new Error("element '#"+this.elementId+"' has been rendered as chart");
 		
 		this.statusRendering(true);
 		
+		var lib = this._rendererLib();
+		
+		if(lib)
+		{
+			var contextCharts = this._contextCharts();
+			var thisChart = this;
+			
+			chartFactory.loadLib(lib, function()
+			{
+				thisChart._renderInner();
+			},
+			contextCharts);
+		}
+		else
+		{
+			this._renderInner();
+		}
+	};
+	
+	chartBase._contextCharts = function()
+	{
+		return [];
+	};
+	
+	chartBase._renderInner = function()
+	{
 		var doRender = true;
 		
 		var listener = this.listener();
@@ -1044,33 +1152,47 @@
 		}
 	};
 	
+	chartBase._rendererLib = function()
+	{
+		//优先
+		var lib = chartFactory.rendererLib(this.renderer());
+		
+		//其次
+		if(lib == null)
+		{
+			lib = chartFactory.rendererLib(this.plugin.renderer);
+			lib = chartFactory.convertPluginRendererLib(this, lib);
+		}
+		
+		return lib;
+	};
+	
 	/**
 	 * 调用底层图表渲染器的render函数，执行渲染。
 	 */
 	chartBase.doRender = function()
 	{
 		if(!this.statusRendering())
-			throw new Error("chart is illegal state for doRender()");
+			throw new Error("chart is illegal state for : doRender()");
 		
 		var $element = this.elementJquery();
-		var theme = this._themeNonNull();
+		var theme = this.theme();
 		
 		$element.addClass(chartFactory.CHART_STYLE_NAME_FOR_INDICATION);
+		//必须添加相对定位样式
+		$element.addClass(chartFactory._KEY_CHART_ELEMENT_STYLE_FOR_RELATIVE);
 		chartFactory.addThemeRefEntity(theme, this.id);
 		this._createChartThemeCssIfNon();
-		//如果图表元素不可作为相对定位的父元素，则设置，便于子元素在图表元素内处理定位
-		if(chartFactory.isStaticPosition($element))
-			$element.addClass(chartFactory._KEY_CHART_ELEMENT_STYLE_FOR_RELATIVE);
 		$element.addClass(this.themeStyleName());
 		
 		var options = this.options();
-		if(!options || options[chartFactory.OPTION_BEAUTIFY_SCROLLBAR] != false)
+		
+		if(chartFactory.builtinOptionValue(options, builtinOptionNames.beautifyScrollbar) !== false)
 			$element.addClass("dg-chart-beautify-scrollbar");
 		
 		$element.data(chartFactory._KEY_ELEMENT_RENDERED_CHART, this);
 		
 		var async = this.isAsyncRender();
-		
 		var renderer = this.renderer();
 		
 		if(renderer && renderer.render)
@@ -1088,7 +1210,7 @@
 	
 	chartBase._createChartThemeCssIfNon = function()
 	{
-		var theme = this._themeNonNull();
+		var theme = this.theme();
 		var thumbBgColor = this.themeGradualColor(0.2);
 		
 		this.themeStyleSheet(chartFactory.builtinPropName("Chart"), function()
@@ -1169,71 +1291,136 @@
 	 * 
 	 * 注意：只有this.statusRendered()或者this.statusPreUpdate()或者this.statusUpdated()为true，此函数才会执行。
 	 * 
-	 * @param results 可选，图表数据集结果，如果不设置，将使用this.updateResults()的返回值
+	 * @param chartResult 可选，图表结果、数据集结果数组，如果不设置，将使用this.updateResult()的返回值
 	 */
-	chartBase.update = function(results)
+	chartBase.update = function(chartResult)
 	{
 		if(!this.statusRendered() && !this.statusPreUpdate() && !this.statusUpdated())
-			throw new Error("chart is illegal state for update()");
+			throw new Error("chart is illegal state for : update()");
 		
-		if(arguments.length == 0)
-			results = this.updateResults();
+		if(chartResult === undefined)
+			chartResult = this.updateResult();
 		
-		if(results == null)
-			throw new Error("[results] required");
+		//内部统一结构
+		chartResult = this._toChartResult(chartResult);
 		
 		this.statusUpdating(true);
+		
+		var appendMode = this.updateAppendMode();
+		if(appendMode && appendMode.beforeListener)
+		{
+			chartResult = this._appendUpdateResult(chartResult, appendMode);
+		}
 		
 		var doUpdate = true;
 		
 		var listener = this.listener();
 		if(listener && listener.onUpdate)
-			doUpdate = listener.onUpdate(this, results);
+			doUpdate = listener.onUpdate(this, this._toApiSpecResult(chartResult));
 		
 		if(doUpdate != false)
 		{
-			this.doUpdate(results);
+			this.doUpdate(chartResult);
 		}
 	};
 	
 	/**
 	 * 调用底层图表渲染器的update函数，执行更新数据。
+	 * 
+	 * @param chartResult 图表结果、数据集结果数组
 	 */
-	chartBase.doUpdate = function(results)
+	chartBase.doUpdate = function(chartResult)
 	{
 		if(!this.statusUpdating())
-			throw new Error("chart is illegal state for doUpdate()");
+			throw new Error("chart is illegal state for : doUpdate()");
 		
-		//先保存结果，确保updateResults()在渲染器的update函数作用域内可用
-		this.updateResults(results);
+		//内部统一结构
+		chartResult = this._toChartResult(chartResult);
 		
-		var async = this.isAsyncUpdate(results);
+		var appendMode = this.updateAppendMode();
+		if(appendMode && !appendMode.beforeListener)
+		{
+			chartResult = this._appendUpdateResult(chartResult, appendMode);
+		}
 		
+		//先保存结果，确保updateResult()在渲染器的update函数作用域内可用
+		this.updateResult(chartResult);
+		
+		var async = this.isAsyncUpdate(chartResult);
 		var renderer = this.renderer();
 		
 		if(renderer && renderer.update)
 		{
-			renderer.update(this, results);
+			renderer.update(this, this._toApiSpecResult(chartResult));
 		}
 		else
 		{
-			this.plugin.renderer.update(this, results);
+			this.plugin.renderer.update(this, this._toApiSpecResult(chartResult));
 		}
 		
 		if(!async)
 			this.statusUpdated(true);
 	};
 	
+	//将上次更新结果前置合并至给定图表的结果
+	//只要设置了appendMode，此方法旧不会返回null，确保后续不会出现空指针问题
+	chartBase._appendUpdateResult = function(chartResult, appendMode)
+	{
+		if(!appendMode)
+			return chartResult;
+		
+		var oldChartResult = this.updateResult();
+		
+		var olds = (this.results(oldChartResult) || []);
+		var nows = (this.results(chartResult) || []);
+		
+		var merges = [];
+		var mergeDataSize = ($.isFunction(appendMode.size) ? appendMode.size(this, this._toApiSpecResult(chartResult)) : appendMode.size);
+		var mergesLength = Math.max(olds.length, nows.length);
+		
+		for(var i=0; i<mergesLength; i++)
+		{
+			var oldData = this.resultDatas(olds[i]);
+			var nowData = this.resultDatas(nows[i]);
+			
+			var mergeData = oldData.concat(nowData);
+			
+			if(mergeData.length > mergeDataSize)
+			{
+				mergeData = mergeData.slice(mergeData.length - mergeDataSize);
+			}
+			
+			//采用$.extend()方式，可保留nows[i]的其他属性
+			merges[i] = $.extend({}, nows[i]);
+			merges[i].data = mergeData;
+		}
+		
+		if(chartResult == null)
+			chartResult = {};
+		
+		this.results(chartResult, merges);
+		
+		return chartResult;
+	};
+	
 	/**
-	 * 获取/设置图表此次更新的结果数据。
+	 * 获取/设置图表此次更新的数据集结果数组。
 	 * 图表更新前会自动执行设置操作（通过chartBase.doUpdate()函数）。
 	 * 
-	 * @param results 可选，要设置的更新结果数据
-	 * @returns 要获取的更新结果数据，没有则返回null
+	 * @param dataSetResults 可选，要设置的数据集结果数组
+	 * @returns 要获取的数据集结果数组，没有则返回null
 	 */
-	chartBase.updateResults = function(results)
+	chartBase.updateResults = function(dataSetResults)
 	{
-		return chartFactory.extValueBuiltin(this, "updateResults", results);
+		if(dataSetResults === undefined)
+		{
+			var chartResult = this.updateResult();
+			return this.results(chartResult);
+		}
+		else
+		{
+			this.updateResult(dataSetResults);
+		}
 	};
 	
 	/**
@@ -1301,22 +1488,9 @@
 	chartBase.doDestroy = function()
 	{
 		if(!this.statusDestroying())
-			throw new Error("chart is illegal state for doDestroy()");
+			throw new Error("chart is illegal state for : doDestroy()");
 		
-		var $element = this.elementJquery();
-		
-		$element.removeClass(this.themeStyleName());
-		$element.removeClass(chartFactory._KEY_CHART_ELEMENT_STYLE_FOR_RELATIVE);
-		$element.removeClass("dg-chart-beautify-scrollbar");
-		$element.removeClass(chartFactory.CHART_STYLE_NAME_FOR_INDICATION);
-		$element.data(chartFactory._KEY_ELEMENT_RENDERED_CHART, null);
-		
-		//应在这里先销毁图表元素内部创建的元素，
-		//因为renderer.destroy()可能会清空图表元素（比如echarts.dispose()函数）
-		this._destroySetting();
-		
-		var theme = this._themeNonNull();
-		chartFactory.removeThemeRefEntity(theme, this.id);
+		this._doDestroy();
 		
 		var renderer = this.renderer();
 		
@@ -1341,17 +1515,34 @@
 		}
 		
 		this.internal(null);
-		
 		//最后清空扩展属性值，因为上面逻辑可能会使用到
 		this._clearExtValue();
 		
 		this.statusDestroyed(true);
 	};
 	
+	chartBase._doDestroy = function()
+	{
+		var $element = this.elementJquery();
+		
+		$element.removeClass(this.themeStyleName());
+		$element.removeClass(chartFactory._KEY_CHART_ELEMENT_STYLE_FOR_RELATIVE);
+		$element.removeClass("dg-chart-beautify-scrollbar");
+		$element.removeClass(chartFactory.CHART_STYLE_NAME_FOR_INDICATION);
+		$element.data(chartFactory._KEY_ELEMENT_RENDERED_CHART, null);
+		
+		//应在这里先销毁图表元素内部创建的元素，
+		//因为renderer.destroy()可能会清空图表元素（比如echarts.dispose()函数）
+		this._doDestroySetting();
+		
+		var theme = this.theme();
+		chartFactory.removeThemeRefEntity(theme, this.id);
+	};
+	
 	/**
 	 * 销毁图表交互设置。
 	 */
-	chartBase._destroySetting = function()
+	chartBase._doDestroySetting = function()
 	{
 		if(chartFactory.chartSetting && chartFactory.chartSetting.unbindChartSettingPanelEvent)
 			chartFactory.chartSetting.unbindChartSettingPanelEvent(this);
@@ -1366,45 +1557,62 @@
 		
 		if(renderer && renderer.asyncRender !== undefined)
 		{
-			if(typeof(renderer.asyncRender) == "function")
+			if($.isFunction(renderer.asyncRender))
+			{
 				return renderer.asyncRender(this);
-			
-			return (renderer.asyncRender == true);
+			}
+			else
+				return (renderer.asyncRender == true);
 		}
 		
-		if(this.plugin.renderer.asyncRender == undefined)
+		if(this.plugin.renderer.asyncRender === undefined)
+		{
 			return false;
+		}
 		
-		if(typeof(this.plugin.renderer.asyncRender) == "function")
+		if($.isFunction(this.plugin.renderer.asyncRender))
+		{
 			return this.plugin.renderer.asyncRender(this);
-		
-		return (this.plugin.renderer.asyncRender == true);
+		}
+		else
+			return (this.plugin.renderer.asyncRender == true);
 	};
 	
 	/**
 	 * 图表的update函数是否是异步的。
 	 * 
-	 * @param results 图表数据集结果
+	 * @param chartResult 图表结果、数据集结果数组
 	 */
-	chartBase.isAsyncUpdate = function(results)
+	chartBase.isAsyncUpdate = function(chartResult)
 	{
+		//内部统一结构
+		chartResult = this._toChartResult(chartResult);
+		
 		var renderer = this.renderer();
 		
 		if(renderer && renderer.asyncUpdate !== undefined)
 		{
-			if(typeof(renderer.asyncUpdate) == "function")
-				return renderer.asyncUpdate(this, results);
-			
-			return (renderer.asyncUpdate == true);
+			if($.isFunction(renderer.asyncUpdate))
+			{
+				return renderer.asyncUpdate(this, this._toApiSpecResult(chartResult));
+			}
+			else
+				return (renderer.asyncUpdate == true);
 		}
 		
-		if(this.plugin.renderer.asyncUpdate == undefined)
+		if(this.plugin.renderer.asyncUpdate === undefined)
+		{
 			return false;
+		}
 		
-		if(typeof(this.plugin.renderer.asyncUpdate) == "function")
-			return this.plugin.renderer.asyncUpdate(this, results);
-		
-		return (this.plugin.renderer.asyncUpdate == true);
+		if($.isFunction(this.plugin.renderer.asyncUpdate))
+		{
+			return this.plugin.renderer.asyncUpdate(this, this._toApiSpecResult(chartResult));
+		}
+		else
+		{
+			return (this.plugin.renderer.asyncUpdate == true);
+		}
 	};
 	
 	/**
@@ -1592,7 +1800,9 @@
 	{
 		var listener = this.listener();
 		if(listener && listener.update)
-			listener.update(this, this.updateResults());
+		{
+			listener.update(this, this._toApiSpecResult(this.updateResult()));
+		}
 	};
 	
 	/**
@@ -1655,84 +1865,6 @@
 	};
 	
 	/**
-	 * 绑定"click"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onClick = function(handler)
-	{
-		this.on("click", handler);
-	};
-	
-	/**
-	 * 绑定"dblclick"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onDblclick = function(handler)
-	{
-		this.on("dblclick", handler);
-	};
-	
-	/**
-	 * 绑定"mousedown"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onMousedown = function(handler)
-	{
-		this.on("mousedown", handler);
-	};
-	
-	/**
-	 * 绑定"mouseup"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onMouseup = function(handler)
-	{
-		this.on("mouseup", handler);
-	};
-	
-	/**
-	 * 绑定"mouseover"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onMouseover = function(handler)
-	{
-		this.on("mouseover", handler);
-	};
-	
-	/**
-	 * 绑定"mouseout"事件处理函数。
-	 * 
-	 * 图表渲染器实现相关：
-	 * 图表渲染器应实现on函数，以支持此特性。
-	 * 
-	 * @param handler 事件处理函数：function(chartEvent){}
-	 */
-	chartBase.onMouseout = function(handler)
-	{
-		this.on("mouseout", handler);
-	};
-	
-	/**
 	 * 绑定事件处理函数。
 	 * 
 	 * 图表渲染器实现相关：
@@ -1756,7 +1888,7 @@
 			this.plugin.renderer.on(this, eventType, handler);
 		}
 		else
-			throw new Error("chart '#"+this.elementId+"' [renderer.on] undefined");
+			throw new Error("chart '#"+this.elementId+"' [renderer.on] required");
 	};
 	
 	/**
@@ -1789,55 +1921,32 @@
 			this.echartsOffEventHandler(eventType, handler);
 		}
 		else
-			throw new Error("chart '#"+this.elementId+"' [renderer.off] undefined");
+			throw new Error("chart '#"+this.elementId+"' [renderer.off] required");
 	};
 	
-	/**
-	 * 判断图表的所有数据集参数值是否准备就绪，即：所有必填参数值都不为null。
-	 * 
-	 * @param msg 可选，格式应为：{}, 当校验参数值未齐备时用于写入必填参数信息：{ chartDataSetIndex: 数值, paramName: 参数名 }
-	 */
-	chartBase.isDataSetParamValueReady = function(msg)
-	{
-		var chartDataSets = (this.chartDataSets || []);
-		
-		for(var i=0; i<chartDataSets.length; i++)
-		{
-			var dataSet = chartDataSets[i].dataSet;
-			
-			if(!dataSet.params || dataSet.params.length == 0)
-				continue;
-			
-			var paramValues = chartDataSets[i].query.paramValues;
-			
-			for(var j=0; j<dataSet.params.length; j++)
-			{
-				var dsp = dataSet.params[j];
-				
-				if((dsp.required == true || dsp.required == "true") && paramValues[dsp.name] == null)
-				{
-					if(msg != null)
-					{
-						msg.chartDataSetIndex = i;
-						msg.paramName = dsp.name;
-					}
-					
-					return false;
-				}
-			}
-		}
-		
-		return true;
-	};
-	
-	chartBase._chartDataSetOf = function(chartDataSet, nullable)
+	chartBase._dataSetBindOf = function(dataSetBind, nullable)
 	{
 		nullable = (nullable == null ? false : nullable);
 		
-		var re = (chartFactory.isNumber(chartDataSet) ? this.chartDataSetAt(chartDataSet) : chartDataSet);
+		//数据集绑定对象
+		if(dataSetBind && dataSetBind.dataSet !== undefined)
+			return dataSetBind;
+		
+		var re;
+		
+		//索引数值
+		if(chartFactory.isNumber(dataSetBind))
+		{
+			re = this.dataSetBindAt(dataSetBind);
+		}
+		else
+		{
+			//其他情况应直接赋值且不校验合法性
+			re = dataSetBind;
+		}
 		
 		if(!nullable && re == null)
-			throw new Error("chart data set not found for : " + chartDataSet);
+			throw new Error("no DataSetBind found for : " + dataSetBind);
 		
 		return re;
 	};
@@ -1847,105 +1956,130 @@
 	 * 
 	 * @param name 参数名、参数索引
 	 * @param value 可选，要设置的参数值，不设置则执行获取操作
+	 * @param convert 可选，设置操作时是否将value转换为符合参数类型，默认值为：false
 	 */
-	chartBase.dataSetParamValueFirst = function(name, value)
+	chartBase.dataSetParamValueFirst = function(name, value, convert)
 	{
-		return this.dataSetParamValue(0, name, value);
+		return this.dataSetParamValue(0, name, value, convert);
 	};
 	
 	/**
 	 * 获取/设置指定数据集单个参数值。
 	 * 
-	 * @param chartDataSet 指定图表数据集对象、图表数据集索引
+	 * @param dataSetBind 指定数据集绑定或其索引
 	 * @param name 参数名、参数索引
 	 * @param value 可选，要设置的参数值，不设置则执行获取操作
+	 * @param convert 可选，设置操作时是否将value转换为符合参数类型，默认值为：false
 	 */
-	chartBase.dataSetParamValue = function(chartDataSet, name, value)
+	chartBase.dataSetParamValue = function(dataSetBind, name, value, convert)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
 		
-		//参数索引
-		if(typeof(name) == "number")
+		if(chartFactory.isString(name))
 		{
-			var dataSet = chartDataSet.dataSet;
-			
-			if(!dataSet.params || dataSet.params.length <= name)
-				throw new Error("no data set param defined at index : "+name);
-			
-			name = dataSet.params[name].name;
+			//name是字符串时不应使用下面的this._dataSetParamOf()函数逻辑，以允许获取/设置未定义的参数值，从而支持隐式参数
+		}
+		else
+		{
+			var param = this._dataSetParamOf(dataSetBind, name);
+			name = param.name;
 		}
 		
-		var paramValues = chartDataSet.query.paramValues;
-		
-		if(chartDataSet._originalParamValues == null)
-			chartDataSet._originalParamValues = $.extend({}, paramValues);
-		
 		if(value === undefined)
+		{
+			var paramValues = this.dataSetParamValues(dataSetBind);
 			return paramValues[name];
+		}
 		else
-			paramValues[name] = value;
+		{
+			var myParamValues = {};
+			myParamValues[name] = value;
+			
+			this.dataSetParamValues(dataSetBind, myParamValues, true, convert);
+		}
 	};
 	
 	/**
 	 * 获取/设置第一个数据集参数值集。
 	 * 
 	 * @param paramValues 可选，要设置的参数名/值集对象，或者是与数据集参数数组元素一一对应的参数值数组，不设置则执行获取操作
-	 * @param inflate 可选，设置操作是否仅填充在paramValues中出现的参数值，而保留旧参数值，默认值为：false
+	 * @param increment 可选，是否增量设置，保留未在paramValues中出现的参数值，默认值为：false
+	 * @param convert 可选，设置操作时是否将value转换为符合参数类型，默认值为：false
 	 */
-	chartBase.dataSetParamValuesFirst = function(paramValues, inflate)
+	chartBase.dataSetParamValuesFirst = function(paramValues, increment, convert)
 	{
-		return this.dataSetParamValues(0, paramValues, inflate);
+		return this.dataSetParamValues(0, paramValues, increment, convert);
 	};
 	
 	/**
 	 * 获取/设置指定数据集参数值集。
 	 * 
-	 * @param chartDataSet 指定图表数据集或其索引
+	 * @param dataSetBind 指定数据集绑定或其索引
 	 * @param paramValues 可选，要设置的参数值集对象，或者是与数据集参数数组元素一一对应的参数值数组，不设置则执行获取操作
-	 * @param inflate 可选，设置操作是否仅填充在paramValues中出现的参数值，而保留旧参数值，默认值为：false
+	 * @param increment 可选，是否增量设置，保留未在paramValues中出现的参数值，默认值为：false
+	 * @param convert 可选，设置操作时是否将value转换为符合参数类型，默认值为：false
+	 * @returns 要获取的参数值集，不会null
 	 */
-	chartBase.dataSetParamValues = function(chartDataSet, paramValues, inflate)
+	chartBase.dataSetParamValues = function(dataSetBind, paramValues, increment, convert)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		var paramValuesCurrent = dataSetBind.query.paramValues;
 		
-		var paramValuesCurrent = chartDataSet.query.paramValues;
-		
-		if(chartDataSet._originalParamValues == null)
-			chartDataSet._originalParamValues = $.extend({}, paramValuesCurrent);
+		if(dataSetBind._originalParamValues == null)
+			dataSetBind._originalParamValues = $.extend({}, paramValuesCurrent);
 		
 		if(paramValues === undefined)
-			return paramValuesCurrent;
+			return (paramValuesCurrent || (dataSetBind.query.paramValues = {}));
 		else
 		{
-			inflate = (inflate == null ? false : inflate);
+			paramValues = (paramValues || {});
+			increment = (increment == null ? false : increment);
+			convert = (convert == null ? false : convert);
+			
+			var params;
 			
 			if($.isArray(paramValues))
 			{
-				var params = (chartDataSet.dataSet.params || []);
+				params = this.dataSetParams(dataSetBind);
 				var len = Math.min(params.length, paramValues.length);
 				var paramValuesObj = {};
 				
 				for(var i=0; i<len; i++)
 				{
 					var name = params[i].name;
-					paramValuesObj[name] = paramValues[i];
+					paramValuesObj[name] = (convert ? chartFactory.convertDataSetParamValue(params[i], paramValues[i]) : paramValues[i]);
 				}
 				
 				paramValues = paramValuesObj;
 			}
+			else
+			{
+				if(convert)
+				{
+					params = this.dataSetParams(dataSetBind);
+					for(var i=0; i<params.length; i++)
+					{
+						var name = params[i].name;
+						if(paramValues[name] !== undefined)
+						{
+							paramValues[name] = chartFactory.convertDataSetParamValue(params[i], paramValues[name]);
+						}
+					}
+				}
+			}
 			
-			if(inflate)
+			if(increment)
 			{
 				$.extend(paramValuesCurrent, paramValues);
 			}
 			else
 			{
-				chartDataSet.query.paramValues = paramValues;
+				dataSetBind.query.paramValues = paramValues;
 			}
 			
-			// < @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
-			chartDataSet.paramValues = chartDataSet.query.paramValues;
-			// > @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
+			// < @deprecated 兼容2.4.0版本的dataSetBind.paramValues，将在未来版本移除，已被dataSetBind.query.paramValues取代
+			dataSetBind.paramValues = dataSetBind.query.paramValues;
+			// > @deprecated 兼容2.4.0版本的dataSetBind.paramValues，将在未来版本移除，已被dataSetBind.query.paramValues取代
 		}
 	};
 	
@@ -1960,20 +2094,20 @@
 	/**
 	 * 重置指定数据集参数值集。
 	 * 
-	 * @param chartDataSet 指定图表数据集或其索引
+	 * @param dataSetBind 指定数据集绑定或其索引
 	 */
-	chartBase.resetDataSetParamValues = function(chartDataSet)
+	chartBase.resetDataSetParamValues = function(dataSetBind)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
 		
-		if(chartDataSet._originalParamValues == null)
+		if(dataSetBind._originalParamValues == null)
 			return;
 		
-		chartDataSet.query.paramValues = $.extend({}, chartDataSet._originalParamValues);
+		dataSetBind.query.paramValues = $.extend({}, dataSetBind._originalParamValues);
 		
-		// < @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
-		chartDataSet.paramValues = chartDataSet.query.paramValues;
-		// > @deprecated 兼容2.4.0版本的chartDataSet.paramValues，将在未来版本移除，已被chartDataSet.query.paramValues取代
+		// < @deprecated 兼容2.4.0版本的dataSetBind.paramValues，将在未来版本移除，已被dataSetBind.query.paramValues取代
+		dataSetBind.paramValues = dataSetBind.query.paramValues;
+		// > @deprecated 兼容2.4.0版本的dataSetBind.paramValues，将在未来版本移除，已被dataSetBind.query.paramValues取代
 	};
 	
 	/**
@@ -2000,7 +2134,7 @@
 	 */
 	chartBase.elementJquery = function()
 	{
-		return $("#" + this.elementId);
+		return $(this.element());
 	};
 	
 	/**
@@ -2058,10 +2192,10 @@
 	chartBase.extValue = function(name, value)
 	{
 		if(value === undefined)
-			return (this._extValues ? this._extValues[name] : undefined);
+			return (this._extValues ? this._extValues[name] : null);
 		else
 		{
-			if(!this._extValues)
+			if(this._extValues == null)
 				this._extValues = {};
 			
 			this._extValues[name] = value;
@@ -2074,133 +2208,38 @@
 	};
 	
 	/**
-	 * 获取主件图表数据集对象数组，它们的用途是绘制图表。
+	 * 获取指定标记的数据集字段，没有则返回null。
 	 * 
-	 * @return []，空数组表示没有主件图表数据集
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSign 与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集字段
+	 * @param nonNull 可选，参考chartBase.dataSetFieldsOfSign的nonEmpty参数
+	 * @return 数据集字段、null
 	 */
-	chartBase.chartDataSetsMain = function()
+	chartBase.dataSetFieldOfSign = function(dataSetBind, dataSign, nonNull)
 	{
-		var re = [];
-		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
-		{
-			if(chartDataSets[i].attachment)
-				continue;
-			
-			re.push(chartDataSets[i]);
-		}
-		
-		return re;
+		var re = this._dataSetFieldsOfSign(dataSetBind, dataSign, 1, false, nonNull);
+		return (re.length > 0 ? re[0] : null);
 	};
 	
 	/**
-	 * 获取附件图表数据集对象数组，它们的用途不是绘制图表。
+	 * 获取指定标记的数据集字段数组。
 	 * 
-	 * @return []，空数组表示没有附件图表数据集
-	 */
-	chartBase.chartDataSetsAttachment = function()
-	{
-		var re = [];
-		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
-		{
-			if(chartDataSets[i].attachment)
-			{
-				re.push(chartDataSets[i]);
-			}
-		}
-		
-		return re;
-	};
-	
-	/**
-	 * 获取指定索引的图表数据集对象，没有则返回undefined。
-	 * 
-	 * @param index
-	 */
-	chartBase.chartDataSetAt = function(index)
-	{
-		return (!this.chartDataSets || this.chartDataSets.length <= index ? undefined : this.chartDataSets[index]);
-	};
-	
-	/**
-	 * 获取第一个主件图表数据集对象。
-	 * 主件图表数据集的用途是绘制图表。
-	 * 
-	 * @return 未找到时返回null
-	 * @since 3.0.0
-	 */
-	chartBase.chartDataSetMain = function()
-	{
-		var re = undefined;
-		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
-		{
-			if(!chartDataSets[i].attachment)
-			{
-				re = chartDataSets[i];
-				break;
-			}
-		}
-		
-		return re;
-	};
-	
-	/**
-	 * 获取第一个附件图表数据集对象。
-	 * 附件图表数据集的用途不是绘制图表。
-	 * 
-	 * @return 未找到时返回null
-	 * @since 3.0.0
-	 */
-	chartBase.chartDataSetAttachment = function()
-	{
-		var re = undefined;
-		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
-		{
-			if(chartDataSets[i].attachment)
-			{
-				re = chartDataSets[i];
-				break;
-			}
-		}
-		
-		return re;
-	};
-	
-	/**
-	 * 获取指定标记的数据集属性，没有则返回undefined。
-	 * 
-	 * @param chartDataSet 图表数据集、索引
-	 * @param dataSign 数据标记对象、标记名称
-	 * @param nonEmpty 可选，参考chartBase.dataSetPropertiesOfSign的nonEmpty参数
-	 * @return {...}、undefined
-	 */
-	chartBase.dataSetPropertyOfSign = function(chartDataSet, dataSign, nonEmpty)
-	{
-		var properties = this.dataSetPropertiesOfSign(chartDataSet, dataSign, false, nonEmpty);
-		return (properties.length > 0 ? properties[0] : undefined);
-	};
-	
-	/**
-	 * 获取指定标记的数据集属性数组。
-	 * 
-	 * @param chartDataSet 图表数据集、索引
-	 * @param dataSign 数据标记对象、标记名称
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSign 与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集字段
 	 * @param sort 可选，是否对返回结果进行重排序，true 是；false 否。默认值为：true
 	 * @param nonEmpty 可选（设置时需指定sort参数），是否要求返回数组非空并且在为空时抛出异常，
 	 * 					   "auto" 依据dataSign的required判断，为true则要求非空，否则不要求；
 	 * 					   true 要求非空；false 不要求非空。默认为："auto"。
-	 * @return [...]
+	 * @return []
 	 */
-	chartBase.dataSetPropertiesOfSign = function(chartDataSet, dataSign, sort, nonEmpty)
+	chartBase.dataSetFieldsOfSign = function(dataSetBind, dataSign, sort, nonEmpty)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		return this._dataSetFieldsOfSign(dataSetBind, dataSign, -1, sort, nonEmpty);
+	};
+	
+	chartBase._dataSetFieldsOfSign = function(dataSetBind, dataSign, count, sort, nonEmpty)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
 		sort = (sort === undefined ? true : sort);
 		nonEmpty = (nonEmpty == null ? "auto" : nonEmpty);
 		
@@ -2209,323 +2248,172 @@
 		if(dataSign == null)
 			return re;
 		
-		dataSetProperties = this.dataSetProperties(chartDataSet, sort);
-		var dataSignName = (chartFactory.isString(dataSign) ? dataSign : dataSign.name);
-		var propertySigns = (chartDataSet.propertySigns || {});
+		var fields = this.dataSetFields(dataSetBind, sort);
+		var dataSignName = this.dataSignFullname(dataSign);
 		
-		var signPropertyNames = [];
-		
-		for(var pname in propertySigns)
+		for(var i=0; i<fields.length; i++)
 		{
-			var mySigns = (propertySigns[pname] || []);
-			
-			for(var i=0; i<mySigns.length; i++)
+			if(this.isDataSetFieldSigned(dataSetBind, fields[i], dataSignName))
 			{
-				if(mySigns[i] == dataSignName)
-				{
-					signPropertyNames.push(pname);
+				re.push(fields[i]);
+				
+				if(count > -1 && re.length >= count)
 					break;
-				}
-			}
-		}
-		
-		for(var i=0; i<dataSetProperties.length; i++)
-		{
-			for(var j=0; j<signPropertyNames.length; j++)
-			{
-				if(dataSetProperties[i].name == signPropertyNames[j])
-					re.push(dataSetProperties[i]);
 			}
 		}
 		
 		if(nonEmpty == "auto")
 		{
-			var dataSignObj = (chartFactory.isString(dataSign) ? this._dataSignOfName(dataSign) : dataSign);
-			nonEmpty = (dataSignObj ? dataSignObj.required : false);
+			var dataSignNodes = this._dataSignPathNodes(dataSign);
+			nonEmpty = (dataSignNodes && dataSignNodes.length > 0 ? dataSignNodes[dataSignNodes.length-1].required : false);
 		}
 		
 		if(nonEmpty && re.length == 0)
-			throw new Error("data set property with '"+dataSignName+"' sign required");
+			throw new Error("DataSetField signed by '"+dataSignName+"' required");
 		
 		return re;
 	};
 	
-	chartBase._dataSignOfName = function(dataSignName)
+	/**
+	 * 转换为图表结果（org.datagear.analysis.ChartResult）
+	 * 
+	 * @param chartResult 图表结果（org.datagear.analysis.ChartResult）、数据集结果数组（org.datagear.analysis.DataSetResult）
+	 */
+	chartBase._toChartResult = function(chartResult)
 	{
-		var dataSigns = (this.plugin && this.plugin.dataSigns ? this.plugin.dataSigns : []);
+		if(chartResult == null)
+			return chartResult;
 		
-		for(var i=0; i<dataSigns.length; i++)
+		// 数据集结果数组
+		if($.isArray(chartResult))
 		{
-			if(dataSigns[i] && dataSigns[i].name == dataSignName)
-				return dataSigns[i];
+			var re = {};
+			this.results(re, chartResult);
+			
+			return re;
 		}
 		
-		return undefined;
+		return chartResult;
 	};
 	
 	/**
-	 * 返回指定索引的数据集结果，没有则返回undefined。
+	 * 将图表结果（org.datagear.analysis.ChartResult）转换为兼容此版本API规范的结构。
+	 * 此函数不应做非null校验和处理，避免干扰原始参数。
 	 * 
-	 * @param results
-	 * @param index
+	 * @param chartResult 图表结果（org.datagear.analysis.ChartResult）、数据集结果数组（org.datagear.analysis.DataSetResult）
 	 */
-	chartBase.resultAt = function(results, index)
+	chartBase._toApiSpecResult = function(chartResult)
 	{
-		return (!results || results.length <= index ? undefined : results[index]);
+		//目前版本的API都应返回数据集结果数组
+		var re = this.results(chartResult);
+		return re;
 	};
 	
 	/**
-	 * 返回指定图表数据集对应的数据集结果，没有则返回undefined。
+	 * 获取/设置图表结果包含的指定数据集绑定对应的数据集结果。
 	 * 
-	 * @param results
-	 * @param chartDataSet
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param dataSetBind 数据集绑定、索引数值
+	 * @param dataSetResult 可选，要设置的数据集结果
+	 * @return 要获取的数据集结果，没有则返回null
 	 */
-	chartBase.resultOf = function(results, chartDataSet)
+	chartBase.resultOf = function(chartResult, dataSetBind, dataSetResult)
 	{
-		return this.resultAt(results, chartDataSet.index);
+		var dataSetResults = this.results(chartResult);
+		var index = (chartFactory.isNumber(dataSetBind) ? dataSetBind : (dataSetBind != null ? dataSetBind.index : null));
+		
+		if(dataSetResult === undefined)
+		{
+			return (dataSetResults ? dataSetResults[index] : null);
+		}
+		else
+		{
+			//是图表结果，检查并初始化结构
+			if(chartResult && !$.isArray(chartResult) && dataSetResults == null)
+			{
+				dataSetResults = [];
+				this.results(chartResult, dataSetResults);
+			}
+			
+			dataSetResults[index] = dataSetResult;
+		}
 	};
 	
 	/**
 	 * 获取/设置数据集结果对象包含的数据。
 	 * 
-	 * @param result 数据集结果对象
+	 * @param dataSetResult 数据集结果
 	 * @param data 可选，要设置的数据，通常是：{ ... }、[ { ... }, ... ]，不设置则执行获取操作
 	 * @return 要获取的数据集结果数据，没有则返回null
 	 */
-	chartBase.resultData = function(result, data)
+	chartBase.resultData = function(dataSetResult, data)
 	{
 		if(data === undefined)
-			return (result ? result.data : undefined);
+			return (dataSetResult ? dataSetResult.data : undefined);
 		else
-			result.data = data;
+			dataSetResult.data = data;
 	};
 	
 	/**
-	 * 获取/设置指定图表数据集对应的数据集结果对象包含的数据。
+	 * 获取/设置指定数据集绑定对应的数据集结果对象包含的数据。
 	 * 
-	 * @param results
-	 * @param chartDataSet
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param dataSetBind 数据集绑定、索引数值
 	 * @param data 可选，要设置的数据，通常是：{ ... }、[ { ... }, ... ]，不设置则执行获取操作
 	 * @return 要获取的数据集结果数据，没有则返回null
 	 * @since 3.0.0
 	 */
-	chartBase.resultDataOf = function(results, chartDataSet, data)
+	chartBase.resultDataOf = function(chartResult, dataSetBind, data)
 	{
-		var result = this.resultOf(results, chartDataSet);
-		return this.resultData(result, data);
+		var dataSetResult = this.resultOf(chartResult, dataSetBind);
+		
+		if(data === undefined)
+		{
+			return this.resultData(dataSetResult);
+		}
+		else
+		{
+			//中间对象为null时，应该先初始化
+			if(dataSetResult == null)
+			{
+				dataSetResult = {};
+				this.resultOf(chartResult, dataSetBind, dataSetResult);
+			}
+			
+			this.resultData(dataSetResult, data);
+		}
 	};
 	
 	/**
-	 * 获取数据集结果的数据对象数组。
-	 * 如果数据对象是null，返回空数组：[]；如果数据对象是数组，则直接返回；否则，返回：[ 数据对象 ]。
+	 * 获取数据集结果包含的数据对象数组。
+	 * 如果dataSetResult为null，返回空数组：[]；如果数据对象是数组，则直接返回；否则，返回：[ 数据对象 ]。
 	 * 
-	 * @param result 数据集结果对象
+	 * @param dataSetResult 数据集结果
 	 * @return 不会为null的数组
 	 */
-	chartBase.resultDatas = function(result)
+	chartBase.resultDatas = function(dataSetResult)
 	{
-		if(result == null || result.data == null)
+		if(dataSetResult == null || dataSetResult.data == null)
 			return [];
 		
-		if($.isArray(result.data))
-			return result.data;
+		if($.isArray(dataSetResult.data))
+			return dataSetResult.data;
 		
-		return [ result.data ];
+		return [ dataSetResult.data ];
 	};
 	
 	/**
-	 * 获取指定图表数据集对应的数据集结果对象包含的数据对象数组。
+	 * 获取指定数据集绑定对应的数据集结果对象包含的数据对象数组。
 	 * 
-	 * @param results
-	 * @param chartDataSet
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param dataSetBind 数据集绑定、索引数值
 	 * @return 不会为null的数组
 	 * @since 3.0.0
 	 */
-	chartBase.resultDatasOf = function(results, chartDataSet)
+	chartBase.resultDatasOf = function(chartResult, dataSetBind)
 	{
-		var result = this.resultOf(results, chartDataSet);
-		return this.resultDatas(result);
-	};
-	
-	/**
-	 * 获取数据集结果数据的行对象指定属性值。
-	 * 
-	 * @param rowObj 行对象
-	 * @param property 属性对象、属性名
-	 */
-	chartBase.resultRowCell = function(rowObj, property)
-	{
-		if(!rowObj || !property)
-			return undefined;
-		
-		var name = (property.name || property);
-		return rowObj[name];
-	};
-	
-	/**
-	 * 将数据集结果数据的行对象按照指定properties顺序转换为行值数组。
-	 * 
-	 * @param result 数据集结果对象
-	 * @param properties 数据集属性对象数组、属性名数组、属性对象、属性名
-	 * @param row 可选，行索引，默认为0
-	 * @param count 可选，获取的最多行数，默认为全部
-	 * @return properties为数组时：[[..., ...], ...]；properties非数组时：[..., ...]
-	 */
-	chartBase.resultRowArrays = function(result, properties, row, count)
-	{
-		var re = [];
-		
-		if(!result || !properties)
-			return re;
-		
-		var datas = this.resultDatas(result);
-		
-		row = (row || 0);
-		var getCount = datas.length;
-		if(count != null && count < getCount)
-			getCount = count;
-		
-		if($.isArray(properties))
-		{
-			for(var i=row; i< getCount; i++)
-			{
-				var rowObj = datas[i];
-				var rowVal = [];
-				
-				for(var j=0; j<properties.length; j++)
-				{
-					var p = properties[j];
-					
-					var name = (p ? (p.name || p) : undefined);
-					if(!name)
-						continue;
-					
-					rowVal[j] = rowObj[name];
-				}
-				
-				re.push(rowVal);
-			}
-		}
-		else
-		{
-			var name = (properties ? (properties.name || properties) : undefined);
-			
-			if(name)
-			{
-				for(var i=row; i< getCount; i++)
-				{
-					var rowObj = datas[i];
-					re.push(rowObj[name]);
-				}
-			}
-		}
-		
-		return re;
-	};
-	
-	/**
-	 * 将数据集结果数据的行对象按照指定properties顺序转换为列值数组。
-	 * 
-	 * @param result 数据集结果对象
-	 * @param properties 数据集属性对象数组、属性名数组、属性对象、属性名
-	 * @param row 行索引，以0开始，可选，默认为0
-	 * @param count 获取的最多行数，可选，默认为全部
-	 * @return properties为数组时：[[..., ...], ...]；properties非数组时：[..., ...]
-	 */
-	chartBase.resultColumnArrays = function(result, properties, row, count)
-	{
-		var re = [];
-
-		if(!result || !properties)
-			return re;
-		
-		var datas = this.resultDatas(result);
-		
-		row = (row || 0);
-		var getCount = datas.length;
-		if(count != null && count < getCount)
-			getCount = count;
-		
-		if($.isArray(properties))
-		{
-			for(var i=0; i<properties.length; i++)
-			{
-				var p = properties[i];
-				
-				var name = (p ? (p.name || p) : undefined);
-				if(!name)
-					continue;
-				
-				var column = [];
-				
-				for(var j=row; j< getCount; j++)
-					column.push(datas[j][name]);
-				
-				re[i] = column;
-			}
-		}
-		else
-		{
-			var name = (properties ? (properties.name || properties) : undefined);
-
-			if(name)
-			{
-				for(var i=row; i< getCount; i++)
-				{
-					var rowObj = datas[i];
-					re.push(rowObj[name]);
-				}
-			}
-		}
-		
-		return re;
-	};
-	
-	/**
-	 * 获取数据集结果数据的名称/值对象数组。
-	 * 
-	 * @param result 数据集结果对象、对象数组
-	 * @param nameProperty 名称属性对象、属性名
-	 * @param valueProperty 值属性对象、属性名、数组
-	 * @param row 可选，行索引，以0开始，默认为0
-	 * @param count 可选，获取结果数据的最多行数，默认为全部
-	 * @return [{name: ..., value: ...}, ...]
-	 */
-	chartBase.resultNameValueObjects = function(result, nameProperty, valueProperty, row, count)
-	{
-		var propertyMap ={ "name": nameProperty, "value": valueProperty };
-		return this.resultMapObjects(result, propertyMap, row, count);
-	};
-	
-	/**
-	 * 获取数据集结果数据的值对象数组。
-	 * 
-	 * @param result 数据集结果对象、对象数组
-	 * @param valueProperty 值属性对象、属性名、数组
-	 * @param row 可选，行索引，以0开始，默认为0
-	 * @param count 可选，获取结果数据的最多行数，默认为全部
-	 * @return [{value: ...}, ...]
-	 */
-	chartBase.resultValueObjects = function(result, valueProperty, row, count)
-	{
-		var propertyMap ={ "value": valueProperty };
-		return this.resultMapObjects(result, propertyMap, row, count);
-	};
-	
-	/**
-	 * 获取数据集结果数据指定属性、指定行的单元格值，没有则返回undefined。
-	 * 
-	 * @param result 数据集结果对象
-	 * @param property 数据集属性对象、属性名
-	 * @param row 行索引，可选，默认为0
-	 */
-	chartBase.resultCell = function(result, property, row)
-	{
-		row = (row || 0);
-		
-		var re = this.resultRowArrays(result, property, row, 1);
-		
-		return (re.length > 0 ? re[0] : undefined);
+		var dataSetResult = this.resultOf(chartResult, dataSetBind);
+		return this.resultDatas(dataSetResult);
 	};
 	
 	/**
@@ -2536,25 +2424,19 @@
 	 */
 	chartBase.mapURL = function(name)
 	{
-		if(!this._isRenderContextInited())
-			throw new Error("chart is illegal state for mapURL(name)");
-		
 		var url = chartMapURLs[name];
 		
 		if(!url && typeof(chartMapURLs.mapURL) == "function")
 			url = chartMapURLs.mapURL(name);
 		
-		url = (url || name);
-		
-		var webContext = this._renderContextAttrWebContext();
-		url = chartFactory.toWebContextPathURL(webContext, url);
+		url = this.contextURL(url || name);
 		
 		return url;
 	};
 	
 	/**
 	 * 加载指定名称的地图资源（通常是*.json、*.svg）。
-	 * 注意：如果地图类图表插件的render/update函数中调用此函数，应该首先设置插件的asyncRender/asyncUpdate为true，
+	 * 注意：如果在图表渲染器的render/update函数中调用此函数，应该首先设置其的asyncRender/asyncUpdate为true，
 	 * 并在callback中调用chart.statusRendered(true)/chart.statusUpdated(true)，具体参考此文件顶部的注释。
 	 * 
 	 * @param name 地图名称
@@ -2596,16 +2478,19 @@
 	 * 此函数会自动应用chartBase.echartsGetThemeName()至初始化的ECharts图表。
 	 * 此函数会自动调用chartBase.internal()将初始化的ECharts实例对象设置为图表底层组件。
 	 * 
-	 * @param options 要设置的ECharts选项
+	 * @param options 要设置的ECharts选项，为null表示不设置
 	 * @param opts 可选，ECharts的init函数附加参数，具体参考ECharts.init()函数的opts参数
 	 * @returns ECharts实例对象
 	 */
 	chartBase.echartsInit = function(options, opts)
 	{
 		var instance = echarts.init(this.element(), this.echartsGetThemeName(), opts);
-		instance.setOption(options);
-		
 		this.internal(instance);
+		
+		if(options != null)
+		{
+			instance.setOption(options);
+		}
 		
 		return instance;
 	};
@@ -2621,7 +2506,7 @@
 		var internal = this.internal();
 		
 		if(!this._isEchartsInstance(internal))
-			throw new Error("chart not ECharts");
+			throw new Error("chart is not ECharts");
 		
 		internal.setOption(options, opts);
 	};
@@ -2760,14 +2645,15 @@
 	 * 
 	 * 图表渲染器应该在其render()中使用此函数构建图表渲染选项，然后使用它执行图表渲染逻辑，以符合图表API规范。
 	 * 
-	 * @param renderOptions 可选，待填充的渲染选项，通常由图表渲染器render函数内部生成，格式为：{ ... }，默认为空对象：{}
+	 * @param renderOptions 待填充的渲染选项，通常由图表渲染器render函数内部生成，格式为：{ ... }
 	 * @param beforeProcessHandler 可选，renderOptions.processRenderOptions调用前处理函数，
 								   格式为：function(renderOptions, chart){ ... }, 默认为：undefined
 	 * @returns renderOptions
 	 */
 	chartBase.inflateRenderOptions = function(renderOptions, beforeProcessHandler)
 	{
-		if(arguments.length == 1)
+		// < @deprecated 兼容5.3.1版本的renderOptions可选规则，将在未来版本移除
+		if(beforeProcessHandler === undefined)
 		{
 			//(beforeProcessHandler)
 			if($.isFunction(renderOptions))
@@ -2776,9 +2662,9 @@
 				renderOptions = undefined;
 			}
 		}
+		// > @deprecated 兼容5.3.1版本的renderOptions可选规则，将在未来版本移除
 		
-		if(renderOptions == null)
-			renderOptions = {};
+		renderOptions = (renderOptions == null ? {} : renderOptions);
 		
 		$.extend(true, renderOptions, this.options());
 		
@@ -2786,8 +2672,11 @@
 			beforeProcessHandler(renderOptions, this);
 		
 		//最后调用processRenderOptions
-		if(renderOptions[chartFactory.OPTION_PROCESS_RENDER_OPTIONS])
-			renderOptions[chartFactory.OPTION_PROCESS_RENDER_OPTIONS](renderOptions, this);
+		var proHandler = chartFactory.builtinOptionValue(renderOptions, builtinOptionNames.processRenderOptions);
+		if(proHandler)
+		{
+			proHandler.call(renderOptions, renderOptions, this);
+		}
 		
 		this.renderOptions(renderOptions);
 		
@@ -2798,53 +2687,60 @@
 	 * 填充指定图表更新选项。
 	 * 
 	 * 此函数先将renderOptions中与updateOptions的同名项高优先级深度合并至updateOptions，然后调用可选的beforeProcessHandler，
-	 * 最后，如果renderOptions或者chart.renderOptions()中有定义processUpdateOptions函数（格式为：function(updateOptions, chart, results){ ... }），
+	 * 最后，如果renderOptions或者chart.renderOptions()中有定义processUpdateOptions函数（格式为：function(updateOptions, chart, chartResult){ ... }），
 	 * 则调用它们两个的其中一个（renderOptions优先）。
 	 * 
 	 * 图表渲染器应该在其update()中使用此函数构建图表更新选项，然后使用它执行图表更新逻辑，以符合图表API规范。
 	 * 
-	 * @param results 图表更新结果
-	 * @param updateOptions 可选，待填充的更新选项，通常由图表渲染器update函数内部生成，格式为：{ ... }，默认为空对象：{}
-	 * @param renderOptions 可选，图表的渲染选项，格式为：{ ... }，默认为：chart.renderOptions()
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param updateOptions 待填充的更新选项，通常由图表渲染器update函数内部生成，格式为：{ ... }
+	 * @param renderOptions 可选，图表的渲染选项，格式为：{ ... }，默认为：this.renderOptions()，或者：this.options()
 	 * @param beforeProcessHandler 可选，renderOptions.processUpdateOptions调用前处理函数，
-								   格式为：function(updateOptions, chart, results){ ... }, 默认为：undefined
+								   格式为：function(updateOptions, chart, chartResult){ ... }, 默认为：undefined
 	 * @returns updateOptions
 	 */
-	chartBase.inflateUpdateOptions = function(results, updateOptions, renderOptions, beforeProcessHandler)
+	chartBase.inflateUpdateOptions = function(chartResult, updateOptions, renderOptions, beforeProcessHandler)
 	{
-		//(results)
+		// < @deprecated 兼容5.3.1版本的updateOptions可选规则，将在未来版本移除
+		//(chartResult)
 		if(arguments.length == 1)
 			;
+		// > @deprecated 兼容5.3.1版本的updateOptions可选规则，将在未来版本移除
+		
 		else if(arguments.length == 2)
 		{
-			//(results, beforeProcessHandler)
+			//(chartResult, beforeProcessHandler)
 			if($.isFunction(updateOptions))
 			{
 				beforeProcessHandler = updateOptions;
 				updateOptions = undefined;
 				renderOptions = undefined;
 			}
-			//(results, updateOptions)
+			//(chartResult, updateOptions)
 			else
 				;
 		}
 		else if(arguments.length == 3)
 		{
-			//(results, updateOptions, beforeProcessHandler)
+			//(chartResult, updateOptions, beforeProcessHandler)
 			if($.isFunction(renderOptions))
 			{
 				beforeProcessHandler = renderOptions;
 				renderOptions = undefined;
 			}
-			//(results, updateOptions, renderOptions)
+			//(chartResult, updateOptions, renderOptions)
 			else
 				;
 		}
 		
-		var chartRenderOptions = this.renderOptions();
-		
 		if(updateOptions == null)
 			updateOptions = {};
+		
+		var chartRenderOptions = this.renderOptions();
+		
+		if(chartRenderOptions == null)
+			chartRenderOptions = this.options();
+		
 		if(renderOptions == null)
 			renderOptions = (chartRenderOptions || {});
 		
@@ -2854,26 +2750,36 @@
 		for(var uop in updateOptions)
 			srcRenderOptions[uop] = renderOptions[uop];
 		
-		// < @deprecated 兼容2.6.0版本的chart.optionsUpdate()
-		// 待chart.optionsUpdate()移除后应改为：
-		// $.extend(true, updateOptions, srcRenderOptions);
-		$.extend(true, updateOptions, srcRenderOptions, this.optionsUpdate());
-		// > @deprecated 兼容2.6.0版本的chart.optionsUpdate()
+		$.extend(true, updateOptions, srcRenderOptions);
+		
+		// < @deprecated 兼容2.6.0版本的chart.optionsUpdate()，将在未来版本移除
+		$.extend(true, updateOptions, this.optionsUpdate());
+		// > @deprecated 兼容2.6.0版本的chart.optionsUpdate()，将在未来版本移除
 		
 		if(beforeProcessHandler != null)
-			beforeProcessHandler(updateOptions, this, results);
+			beforeProcessHandler(updateOptions, this, chartResult);
 		
 		//最后调用processUpdateOptions
-		if(renderOptions[chartFactory.OPTION_PROCESS_UPDATE_OPTIONS])
+		var puoHandler = chartFactory.builtinOptionValue(renderOptions, builtinOptionNames.processUpdateOptions);
+		
+		if(puoHandler)
 		{
-			renderOptions[chartFactory.OPTION_PROCESS_UPDATE_OPTIONS](updateOptions, this, results);
+			var chartResultMy = this._toApiSpecResult(chartResult);
+			puoHandler.call(renderOptions, updateOptions, this, chartResultMy);
 		}
 		//renderOptions可能不是chartRenderOptions，此时要确保chartRenderOptions.processUpdateOptions被调用
-		else if(chartRenderOptions && renderOptions !== chartRenderOptions
-					&& chartRenderOptions[chartFactory.OPTION_PROCESS_UPDATE_OPTIONS])
+		else if(chartRenderOptions && chartRenderOptions !== renderOptions)
 		{
-			chartRenderOptions[chartFactory.OPTION_PROCESS_UPDATE_OPTIONS](updateOptions, this, results);
+			puoHandler = chartFactory.builtinOptionValue(chartRenderOptions, builtinOptionNames.processUpdateOptions);
+			
+			if(puoHandler)
+			{
+				var chartResultMy = this._toApiSpecResult(chartResult);
+				puoHandler.call(chartRenderOptions, updateOptions, this, chartResultMy);
+			}
 		}
+		
+		this.updateOptions(updateOptions);
 		
 		return updateOptions;
 	};
@@ -2984,33 +2890,6 @@
 	};
 	
 	/**
-	 * 获取数据集结果数据指定索引的元素。
-	 * 
-	 * @param result 数据集结果对象
-	 * @param index 索引数值、数值数组
-	 * @return 数据对象、据对象数组，当result、index为null时，将返回null
-	 */
-	chartBase.resultDataElement = function(result, index)
-	{
-		if(result == null || result.data == null || index == null)
-			return undefined;
-		
-		var datas = this.resultDatas(result);
-		
-		if(!$.isArray(index))
-			return datas[index];
-		else
-		{
-			var re = [];
-			
-			for(var i=0; i<index.length; i++)
-				re.push(datas[index[i]]);
-			
-			return re;
-		}
-	};
-	
-	/**
 	 * 获取此图表主题对应的CSS类名。
 	 * 这个CSS类名是全局唯一的，可添加至HTML元素的"class"属性。
 	 * 
@@ -3021,7 +2900,7 @@
 	 */
 	chartBase.themeStyleName = function()
 	{
-		var theme = this._themeNonNull();
+		var theme = this.theme();
 		
 		// < @deprecated 兼容4.3.1版本的chartBase.themeStyleName(theme)格式，将在未来版本移除
 		if(arguments[0] != null)
@@ -3059,7 +2938,7 @@
 	 *       return { name: " .result-data-count", value: { color: chart.theme().color } };
 	 *     });
 	 *   },
-	 *   update: function(chart, results)
+	 *   update: function(chart, chartResult)
 	 *   {
 	 *     $(".result-data-count", chart.elementJquery()).text(chart.resultDatas(...).length);
 	 *   }
@@ -3073,7 +2952,7 @@
 	 */
 	chartBase.themeStyleSheet = function(name, css, force)
 	{
-		var theme = this._themeNonNull();
+		var theme = this.theme();
 		
 		// < @deprecated 兼容4.3.1版本的chartBase.themeStyleSheet(theme, ...)格式，将在未来版本移除
 		if(name != null && !chartFactory.isString(name))
@@ -3121,71 +3000,79 @@
 	/**
 	 * 获取/设置数据集别名。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
+	 * @param dataSetBind 数据集绑定或其索引
 	 * @param alias 可选，要设置的别名，不设置则执行获取操作
 	 * @returns 要获取的别名，不会为null
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetAlias = function(chartDataSet, alias)
+	chartBase.dataSetAlias = function(dataSetBind, alias)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
 		
 		if(alias === undefined)
 		{
-			if(chartDataSet.alias)
-				return chartDataSet.alias;
+			if(dataSetBind.alias)
+				return dataSetBind.alias;
 			
-			var dataSet = (chartDataSet.dataSet || chartDataSet);
+			var dataSet = (dataSetBind.dataSet || dataSetBind);
 			
 			return (dataSet ? (dataSet.name || "") : "");
 		}
 		else
 		{
-			chartDataSet.alias = alias;
+			dataSetBind.alias = alias;
 		}
 	};
 	
 	/**
-	 * 获取数据集属性数组。
+	 * 获取数据集字段数组。
 	 * 返回数组排序遵循如下规则：
 	 * 排序值越小越靠前；
 	 * 属性默认具有与其索引相同的排序值；
-	 * 当两个属性具有相同排序值时，设置了propertyOrders中排序值的那个属性靠前排（前置插入），否则，属性索引小的那个靠前排。
+	 * 当两个属性具有相同排序值时，设置了fieldOrders中排序值的那个属性靠前排（前置插入），否则，属性索引小的那个靠前排。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值、数据集
-	 * @param sort 可选，当chartDataSet是图表数据集时，是否依据其propertyOrders对返回结果进行重排序，true 是；false 否。默认值为：true
-	 * @returns 数据集属性数组，返回空数组表示没有属性
+	 * @param dataSetBind 数据集绑定或其索引、数据集
+	 * @param sort 可选，当dataSetBind是数据集绑定时，是否依据其fieldOrders对返回结果进行重排序，true 是；false 否。默认值为：true
+	 * @returns 数据集字段数组，返回空数组表示没有
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetProperties = function(chartDataSet, sort)
+	chartBase.dataSetFields = function(dataSetBind, sort)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
 		sort = (sort === undefined ? true : sort);
 		
-		var properties = null;
-		var isDataSet = (chartDataSet.properties !== undefined);
+		var dataSet;
+		var isDataSet;
 		
-		if(isDataSet)
-			properties = chartDataSet.properties;
+		//数据集
+		if(dataSetBind && dataSetBind.params !== undefined)
+		{
+			dataSet = dataSetBind;
+			isDataSet = true;
+		}
+		//数据集绑定、索引数值
 		else
-			properties = (chartDataSet.dataSet ? chartDataSet.dataSet.properties : null);
+		{
+			dataSetBind = this._dataSetBindOf(dataSetBind);
+			dataSet = dataSetBind.dataSet;
+			isDataSet = false;
+		}
 		
-		properties = (properties || []);
+		var fields = (dataSet && dataSet.fields ? dataSet.fields : []);
 		
 		if(isDataSet || !sort)
-			return properties;
+			return fields;
 		
-		var propertyOrders = chartDataSet.propertyOrders;
+		var fieldOrders = dataSetBind.fieldOrders;
 		
-		if(!propertyOrders)
-			return properties;
+		if(!fieldOrders)
+			return fields;
 		
 		var pos = [];
 		
-		for(var i=0; i<properties.length; i++)
+		for(var i=0; i<fields.length; i++)
 		{
-			var p = properties[i];
-			pos[i] = { property: p, order: propertyOrders[p.name], index: i };
+			var p = fields[i];
+			pos[i] = { field: p, order: fieldOrders[p.name], index: i };
 		}
 		
 		pos.sort(function(a, b)
@@ -3212,235 +3099,222 @@
 		var re = [];
 		
 		for(var i=0; i<pos.length; i++)
-			re[i] = pos[i].property;
+			re[i] = pos[i].field;
 		
 		return re;
 	};
 	
 	/**
-	 * 获取指定标识的数据集属性。
+	 * 获取指定标识的数据集字段。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值、数据集
-	 * @param info 数据集属性标识，可以是属性名、属性索引
-	 * @returns 数据集属性，没有找到则返回undefined
+	 * @param dataSetBind 数据集绑定或其索引、数据集
+	 * @param fieldInfo 数据集字段名、字段索引、字段对象
+	 * @returns 数据集字段，没有找到则返回null
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetProperty = function(chartDataSet, info)
+	chartBase.dataSetField = function(dataSetBind, fieldInfo)
 	{
-		var properties = this.dataSetProperties(chartDataSet, false);
+		return this._dataSetFieldOf(dataSetBind, fieldInfo, true);
+	};
+	
+	chartBase._dataSetFieldOf = function(dataSetBind, fieldInfo, nullable)
+	{
+		nullable = (nullable == null ? false : nullable);
 		
-		if(!properties)
-			return undefined;
+		//字段对象
+		if(fieldInfo && fieldInfo.name !== undefined)
+			return fieldInfo;
 		
-		if(chartFactory.isNumber(info))
-			return properties[info];
+		var re = null;
 		
-		for(var i=0; i<properties.length; i++)
+		var fields = this.dataSetFields(dataSetBind, false);
+		
+		//索引数值
+		if(chartFactory.isNumber(fieldInfo))
 		{
-			if(properties[i].name == info)
-				return properties[i];
+			re = fields[fieldInfo];
+		}
+		else
+		{
+			//字段名
+			for(var i=0; i<fields.length; i++)
+			{
+				if(fields[i].name == fieldInfo)
+				{
+					re = fields[i];
+					break;
+				}
+			}
 		}
 		
-		return undefined;
+		if(!nullable && re == null)
+			throw new Error("no DataSetField found for : " + fieldInfo);
+		
+		return re;
 	};
 	
 	/**
-	 * 获取/设置数据集属性别名。
+	 * 获取/设置数据集字段别名。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
-	 * @param dataSetProperty 数据集属性、属性名、属性索引
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param field 数据集字段、字段名、字段索引
 	 * @param alias 可选，要设置的别名，不设置则执行获取操作
 	 * @returns 要获取的别名，不会为null
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetPropertyAlias = function(chartDataSet, dataSetProperty, alias)
+	chartBase.dataSetFieldAlias = function(dataSetBind, field, alias)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
-		
-		if(chartFactory.isStringOrNumber(dataSetProperty))
-			dataSetProperty = this.dataSetProperty(chartDataSet, dataSetProperty);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		field = this._dataSetFieldOf(dataSetBind, field);
 		
 		if(alias === undefined)
 		{
-			if(!dataSetProperty)
-				return "";
-			
-			alias =  (chartDataSet.propertyAliases ?
-							chartDataSet.propertyAliases[dataSetProperty.name] : null);
+			alias =  (dataSetBind.fieldAliases ?
+							dataSetBind.fieldAliases[field.name] : null);
 			
 			if(!alias)
-				alias = (dataSetProperty.label ||  dataSetProperty.name);
+				alias = (field.label ||  field.name);
 			
 			return (alias || "");
 		}
 		else
 		{
-			if(!chartDataSet.propertyAliases)
-				chartDataSet.propertyAliases = {};
+			if(!dataSetBind.fieldAliases)
+				dataSetBind.fieldAliases = {};
 			
-			chartDataSet.propertyAliases[dataSetProperty.name] = alias;
+			dataSetBind.fieldAliases[field.name] = alias;
 		}
 	};
 	
 	/**
-	 * 获取/设置数据集属性排序值。
+	 * 获取/设置数据集字段排序值。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
-	 * @param dataSetProperty 数据集属性、属性名、属性索引
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param field 数据集字段、字段名、字段索引
 	 * @param order 可选，要设置的排序数值，不设置则执行获取操作
 	 * @returns 要获取的排序数值，没有设置过则返回null
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetPropertyOrder = function(chartDataSet, dataSetProperty, order)
+	chartBase.dataSetFieldOrder = function(dataSetBind, field, order)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
-		
-		var name = null;
-		
-		if(chartFactory.isString(dataSetProperty))
-			name = dataSetProperty;
-		else
-		{
-			if(chartFactory.isNumber(dataSetProperty))
-				dataSetProperty = this.dataSetProperty(chartDataSet, dataSetProperty);
-			
-			name = (dataSetProperty ? dataSetProperty.name : null);
-		}
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		field = this._dataSetFieldOf(dataSetBind, field);
 		
 		if(order === undefined)
 		{
-			return (chartDataSet.propertyOrders ?
-							chartDataSet.propertyOrders[name] : undefined);
+			return (dataSetBind.fieldOrders ?
+							dataSetBind.fieldOrders[field.name] : null);
 		}
 		else
 		{
-			if(!chartDataSet.propertyOrders)
-				chartDataSet.propertyOrders = {};
+			if(!dataSetBind.fieldOrders)
+				dataSetBind.fieldOrders = {};
 			
-			chartDataSet.propertyOrders[name] = order;
+			dataSetBind.fieldOrders[field.name] = order;
 		}
 	};
 	
 	/**
 	 * 获取数据集参数数组。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值、数据集
+	 * @param dataSetBind 数据集绑定或其索引、数据集
 	 * @returns 数据集参数数组，空数组表示没有参数
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetParams = function(chartDataSet)
+	chartBase.dataSetParams = function(dataSetBind)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		var dataSet;
 		
-		var params = null;
-		
-		if(chartDataSet.params !== undefined)
-			params = chartDataSet.params;
+		//数据集
+		if(dataSetBind && dataSetBind.params !== undefined)
+		{
+			dataSet = dataSetBind;
+		}
+		//数据集绑定、索引数值
 		else
-			params = (chartDataSet.dataSet ? chartDataSet.dataSet.params : null);
+		{
+			dataSetBind = this._dataSetBindOf(dataSetBind);
+			dataSet = dataSetBind.dataSet;
+		}
 		
-		return (params || []);
+		return (dataSet && dataSet.params ? dataSet.params : []);
 	};
 	
 	/**
 	 * 获取指定标识的数据集参数。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值、数据集
-	 * @param info 数据集参数标识，可以是参数名、参数索引
-	 * @returns 数据集参数，没有找到则返回undefined
+	 * @param dataSetBind 数据集绑定或其索引、数据集
+	 * @param paramInfo 数据集参数名、参数索引、参数对象
+	 * @returns 数据集参数，没有找到则返回null
 	 * @since 2.10.0
 	 */
-	chartBase.dataSetParam = function(chartDataSet, info)
+	chartBase.dataSetParam = function(dataSetBind, paramInfo)
 	{
-		var params = this.dataSetParams(chartDataSet);
+		return this._dataSetParamOf(dataSetBind, paramInfo, true);
+	};
+	
+	chartBase._dataSetParamOf = function(dataSetBind, paramInfo, nullable)
+	{
+		nullable = (nullable == null ? false : nullable);
+		
+		//参数对象
+		if(paramInfo && paramInfo.name !== undefined)
+			return paramInfo;
+		
+		var re = null;
+		
+		var params = this.dataSetParams(dataSetBind);
 		
 		if(!params)
-			return undefined;
-		
-		if(chartFactory.isNumber(info))
-			return params[info];
-		
-		for(var i=0; i<params.length; i++)
 		{
-			if(params[i].name == info)
-				return params[i];
+			re =  null;
+		}
+		//索引数值
+		else if(chartFactory.isNumber(paramInfo))
+		{
+			re = params[paramInfo];
+		}
+		else
+		{
+			//参数名
+			for(var i=0; i<params.length; i++)
+			{
+				if(params[i].name == paramInfo)
+				{
+					re = params[i];
+					break;
+				}
+			}
 		}
 		
-		return undefined;
+		if(!nullable && re == null)
+			throw new Error("no DataSetParam found for : " + paramInfo);
+		
+		return re;
 	};
 	
 	/**
 	 * 判断是否有数据集参数。
 	 * 
+	 * @param dataSetBinds 可选，要判断的数据集绑定、索引数值，或者它们的数组，默认为：this.dataSetBinds()
+	 * @return true、false
 	 * @since 2.10.0
 	 */
-	chartBase.hasDataSetParam = function()
+	chartBase.hasDataSetParam = function(dataSetBinds)
 	{
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
+		dataSetBinds = (dataSetBinds === undefined ? this.dataSetBinds() :
+							($.isArray(dataSetBinds) ? dataSetBinds : [ dataSetBinds ]));
+		
+		for(var i=0; i<dataSetBinds.length; i++)
 		{
-			var params = chartDataSets[i].dataSet.params;
+			var dsb = this._dataSetBindOf(dataSetBinds[i]);
+			var params = this.dataSetParams(dsb);
 			
 			if(params && params.length > 0)
 				return true;
 		}
 		
 		return false;
-	};
-	
-	/**
-	 * 获取数据集结果数据经属性映射后的对象数组。
-	 * 
-	 * @param result 数据集结果对象、对象数组
-	 * @param propertyMap 返回对象属性映射表，格式为：{ 返回对象属性名: 数据集结果数据属性对象、属性名、属性数组、属性名数组 }
-	 * @param row 可选，行索引，以0开始，默认为0
-	 * @param count 可选，获取结果数据的最多行数，默认为全部
-	 * @return [{"...": ..., "...": ...}, ...]
-	 * @since 2.10.0
-	 */
-	chartBase.resultMapObjects = function(result, propertyMap, row, count)
-	{
-		var re = [];
-		
-		var datas = this.resultDatas(result);
-		row = (row == null ? 0 : row);
-		count = (count == null ? datas.length : (count < datas.length ? count : datas.length));
-		
-		var propIsArray = {};
-		for(var opn in propertyMap)
-			propIsArray[opn] = $.isArray(propertyMap[opn]);
-		
-		for(var i=row; i<count; i++)
-		{
-			var di = datas[i];
-			var obj = (di == null ? null : {});
-			
-			for(var opn in propertyMap)
-			{
-				var dp = propertyMap[opn];
-				
-				if(dp == null){}
-				else if(propIsArray[opn])
-				{
-					obj[opn] = [];
-					
-					for(var j=0; j<dp.length; j++)
-					{
-						var dpn = (dp[j].name || dp[j]);
-						obj[opn][j] = di[dpn];
-					}
-				}
-				else
-				{
-					var dpn = (dp.name || dp);
-					obj[opn] = di[dpn];
-				}
-			}
-			
-			re.push(obj);
-		}
-		
-		return re;
 	};
 	
 	/**
@@ -3457,7 +3331,7 @@
 		//从ChartTheme构建ECharts主题
 		if(!themeName)
 		{
-			var theme = this._themeNonNull();
+			var theme = this.theme();
 			themeName = theme[chartFactory._KEY_REGISTERED_ECHARTS_THEME_NAME];
 			
 			if(!themeName)
@@ -3473,155 +3347,110 @@
 	};
 	
 	/**
-	 * 获取/设置指定数据集属性标记。
+	 * 获取/设置指定数据集字段标记。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
-	 * @param dataSetProperty 数据集属性、属性名、属性索引
-	 * @param dataSign 可选，要设置的数据标记对象、对象数组，或者名称字符串、字符串数组，或者null，不设置则执行获取操作
-	 * @returns 要获取的标记名字符串数组、null
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param field 数据集字段名、字段索引、字段对象
+	 * @param sign 可选，不设置则执行获取操作，与this.dataSignFullname()函数参数相同、或者其数组
+	 * @returns 要获取的标记名字符串数组，空数组表示没有
 	 * @since 2.11.0
 	 */
-	chartBase.dataSetPropertySign = function(chartDataSet, dataSetProperty, dataSign)
+	chartBase.dataSetFieldSign = function(dataSetBind, field, sign)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		field = this._dataSetFieldOf(dataSetBind, field);
+		var fieldName = field.name;
 		
-		var name = null;
-		
-		if(chartFactory.isString(dataSetProperty))
-			name = dataSetProperty;
-		else
+		if(sign === undefined)
 		{
-			if(chartFactory.isNumber(dataSetProperty))
-				dataSetProperty = this.dataSetProperty(chartDataSet, dataSetProperty);
+			var re = (dataSetBind.fieldSigns ? dataSetBind.fieldSigns[fieldName] : null);
+			re = (re == null ? [] : re);
 			
-			name = (dataSetProperty ? dataSetProperty.name : null);
-		}
-		
-		if(dataSign === undefined)
-		{
-			return (chartDataSet.propertySigns ?
-							chartDataSet.propertySigns[name] : undefined);
+			return re;
 		}
 		else
 		{
-			if(!chartDataSet.propertySigns)
-				chartDataSet.propertySigns = {};
+			if(!dataSetBind.fieldSigns)
+				dataSetBind.fieldSigns = {};
 			
-			dataSign = this._trimDataSetPropertySign(dataSign);
-			chartDataSet.propertySigns[name] = dataSign;
+			sign = this._toDataSignValues(sign);
+			dataSetBind.fieldSigns[fieldName] = sign;
 		}
+	};
+	
+	chartBase._toDataSignValues = function(dataSigns)
+	{
+		if(dataSigns == null)
+			return [];
+		
+		//字段标记值应是数组
+		if(!$.isArray(dataSigns))
+			dataSigns = [ dataSigns ];
+		
+		var re = [];
+		
+		for(var i=0; i<dataSigns.length; i++)
+		{
+			var dsi = dataSigns[i];
+			var value = this.dataSignFullname(dsi);
+			
+			//标记数组不应包含null，也不应有重复项
+			if(value != null && chartFactory.indexInArray(re, value) < 0)
+			{
+				re.push(value);
+			}
+		}
+		
+		return re;
 	};
 	
 	/**
-	 * 获取/设置数据集属性标记映射表。
+	 * 判断给定数据集绑定是否是易变模型的。
 	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
-	 * @param signs 可选，要设置的数据标记映射表，格式为：{ 数据集属性名: 数据标记对象、对象数组，或者名称字符串、字符串数组，或者null, ... }，不设置则执行获取操作
-	 * @param increment 可选，设置操作时是否执行增量设置，仅设置signs中出现的项，true 是；false 否。默认值为：true
-	 * @returns 要获取的标记映射表，格式为：{ 数据集属性名: 标记名字符串数组、null, ... }，不会为null
-	 * @since 2.11.0
-	 */
-	chartBase.dataSetPropertySigns = function(chartDataSet, signs, increment)
-	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
-		increment = (increment == null ? true : increment);
-		
-		if(signs === undefined)
-		{
-			return (chartDataSet.propertySigns || {});
-		}
-		else
-		{
-			var trimSigns = {};
-			
-			if(signs)
-			{
-				for(var p in signs)
-				{
-					var ps = this._trimDataSetPropertySign(signs[p]);
-					trimSigns[p] = ps;
-				}
-			}
-			
-			if(!chartDataSet.propertySigns || !increment)
-				chartDataSet.propertySigns = trimSigns;
-			else
-			{
-				for(var p in trimSigns)
-					chartDataSet.propertySigns[p] = trimSigns[p];
-			}
-		}
-	};
-	
-	chartBase._trimDataSetPropertySign = function(dataSign)
-	{
-		if(dataSign == null)
-			return null;
-		
-		if(!$.isArray(dataSign))
-			dataSign = [ dataSign ];
-		
-		var signNames = [];
-		
-		for(var i=0; i<dataSign.length; i++)
-		{
-			var signName = (dataSign[i] && dataSign[i].name !== undefined ? dataSign[i].name : dataSign[i]);
-			
-			if(signName != null)
-				signNames.push(signName);
-		}
-		
-		return signNames;
-	};
-	
-	/**
-	 * 判断给定图表数据集是否是可变模型的。
-	 * 
-	 * @param chartDataSet 图表数据集、图表数据集索引数值
+	 * @param dataSetBind 数据集绑定或其索引
 	 * @returns true、false
 	 * @since 3.0.0
 	 */
-	chartBase.isMutableModel = function(chartDataSet)
+	chartBase.isMutableModel = function(dataSetBind)
 	{
-		chartDataSet = this._chartDataSetOf(chartDataSet);
-		return (chartDataSet.dataSet.mutableModel == true);
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		return (dataSetBind.dataSet.mutableModel == true);
 	};
 	
 	/**
-	 * 获取/设置多条图表展示数据的原始数据索引（图表ID、图表数据集索引、结果数据索引）。
+	 * 获取/设置多条图表展示数据的原始数据索引（图表ID、数据集绑定索引、结果数据索引）。
 	 * 图表展示数据是指由图表数据集结果数据转换而得，用于渲染图表的数据。
 	 * 图表渲染器在构建图表展示数据时，应使用此函数设置其原始数据索引信息，以支持在后续的交互、事件处理中获取它们。
 	 * 
-	 * @param data 展示数据数组，格式为：[ ... ]，元素格式允许为：{ ... }、[ ... ]，对于设置操作，当元素是对象时，将为其添加一个额外属性；
-	 * 			   当元素是数组时，如果末尾元素已是原始数据索引对象，替换；否则，追加
-	 * @param chartDataSetIndex 要设置的图表数据集对象（自动取其索引）、图表数据集对象数组（自动取其索引）、图表数据集索引数值、索引数值数组
+	 * @param data 展示数据数组，格式为：[ ... ]，元素格式允许为：{ ... }、[ ... ]
+	 * @param dataSetBindIndex 要设置的数据集绑定对象（自动取其索引）、数据集绑定对象数组（自动取其索引）、数据集绑定索引数值、索引数值数组
 	 * @param resultDataIndex 要设置的结果数据索引，格式为：
-	 *                        当chartDataSetIndex是图表数据集对象、索引数值时：
+	 *                        当dataSetBindIndex是数据集绑定对象、索引数值时：
 	 *                        数值、数值数组
-	 *                        当chartDataSetIndex是图表数据集对象数组、索引数值数组时：
-	 *                        数值，表示chartDataSetIndex数组每个元素的结果数据索引都是此数值
-	 *                        数组（元素可以是数值、数值数组），与chartDataSetIndex数组元素一一对应
+	 *                        当dataSetBindIndex是数据集绑定对象数组、索引数值数组时：
+	 *                        数值，表示dataSetBindIndex数组每个元素的结果数据索引都是此数值
+	 *                        数组（元素可以是数值、数值数组），与dataSetBindIndex数组元素一一对应
 	 *                        默认值为：0
 	 * @param autoIncrement 可选，
-	 *                      当chartDataSetIndex是图表数据集对象、图表数据集索引数值且resultDataIndex是数值时，是否自动递增resultDataIndex；
-	 *                      当chartDataSetIndex是图表数据集对象数组、图表数据集索引数值数组且其元素对应位置的resultDataIndex是数值时，是否自动递增resultDataIndex。
+	 *                      当dataSetBindIndex是数据集绑定对象、数据集绑定索引数值且resultDataIndex是数值时，是否自动递增resultDataIndex；
+	 *                      当dataSetBindIndex是数据集绑定对象数组、数据集绑定索引数值数组且其元素对应位置的resultDataIndex是数值时，是否自动递增resultDataIndex。
 	 *                      默认值为：true
 	 * @returns 要获取的原始数据索引数组(元素可能为null），原始数据索引对象格式为：
 	 *									{
 	 *										//图表ID
 	 *										chartId: "...",
-	 *										//图表数据集索引，格式为：数值、数值数组
-	 *										chartDataSetIndex: ...,
+	 *										//数据集绑定索引，格式为：数值、数值数组
+	 *										dataSetBindIndex: ...,
 	 *										//结果数据索引，格式为：
-	 *                                      //当chartDataSetIndex是数值时：
+	 *                                      //当dataSetBindIndex是数值时：
 	 *                                      //数值、数值数组
-	 *                                      //当chartDataSetIndex是数值数组时：
+	 *                                      //当dataSetBindIndex是数值数组时：
 	 *                                      //数组（元素可能是数值、数值数组）
 	 *										resultDataIndex: ...
 	 *									}
 	 * @since 3.1.0
 	 */
-	chartBase.originalDataIndexes = function(data, chartDataSetIndex, resultDataIndex, autoIncrement)
+	chartBase.originalDataIndexes = function(data, dataSetBindIndex, resultDataIndex, autoIncrement)
 	{
 		//获取
 		if(arguments.length <= 1)
@@ -3639,48 +3468,22 @@
 			if(data == null)
 				return;
 			
-			//(data, chartDataSetIndex, true)、(data, chartDataSetIndex, false)
+			//(data, dataSetBindIndex, true)、(data, dataSetBindIndex, false)
 			if(resultDataIndex === true || resultDataIndex === false)
 			{
 				autoIncrement = resultDataIndex;
 				resultDataIndex = undefined;
 			}
-			resultDataIndex = (resultDataIndex === undefined ? 0 : resultDataIndex);
 			
-			var isCdsiArray = $.isArray(chartDataSetIndex);
-			
-			if(isCdsiArray)
-			{
-				var cdsiNew = [];
-				
-				for(var i=0; i<chartDataSetIndex.length; i++)
-				{
-					cdsiNew[i] = (chartDataSetIndex[i] != null && chartDataSetIndex[i].index !== undefined ?
-									chartDataSetIndex[i].index : chartDataSetIndex[i]);
-				}
-				
-				chartDataSetIndex = cdsiNew;
-				
-				if(!$.isArray(resultDataIndex))
-				{
-					var rdiNew = [];
-					
-					for(var i=0; i<chartDataSetIndex.length; i++)
-						rdiNew[i] = resultDataIndex;
-					
-					resultDataIndex = rdiNew;
-				}
-			}
-			else
-			{
-				chartDataSetIndex = (chartDataSetIndex != null && chartDataSetIndex.index !== undefined ?
-										chartDataSetIndex.index : chartDataSetIndex);
-			}
-			
+			var trimIndex = this._trimOriginalDataIndex(dataSetBindIndex, resultDataIndex);
+			dataSetBindIndex = trimIndex.dataSetBindIndex;
+			resultDataIndex = trimIndex.resultDataIndex;
 			autoIncrement = (autoIncrement === undefined ? true : autoIncrement);
-			var isRdiNumber = (typeof(resultDataIndex) == "number");
 			
+			var isRdiNumber = chartFactory.isNumber(resultDataIndex);
 			var needAutoIncrementEle = (autoIncrement == true && $.isArray(resultDataIndex));
+			var eleIsNumbers = [];
+			
 			if(needAutoIncrementEle == true)
 			{
 				needAutoIncrementEle = false;
@@ -3688,60 +3491,51 @@
 				//任一元素是数值的话，才需要自增处理
 				for(var i=0; i<resultDataIndex.length; i++)
 				{
-					if(typeof(resultDataIndex[i]) == "number")
+					eleIsNumbers[i] = chartFactory.isNumber(resultDataIndex[i]);
+					if(eleIsNumbers[i] && !needAutoIncrementEle)
 					{
 						needAutoIncrementEle = true;
-						break;
 					}
 				}
 			}
 			
 			for(var i=0; i<data.length; i++)
 			{
-				var resultDataIndexMy;
+				var resultDataIndexMy = resultDataIndex;
 				
-				if(!autoIncrement)
+				if(autoIncrement)
 				{
-					resultDataIndexMy = resultDataIndex;
-				}
-				else
-				{
-					resultDataIndexMy = resultDataIndex;
-					
 					if(isRdiNumber)
 					{
-						resultDataIndexMy = resultDataIndex + i;
+						resultDataIndexMy = resultDataIndexMy + i;
 					}
 					else if(needAutoIncrementEle)
 					{
 						resultDataIndexMy = [];
 						for(var j=0; j<resultDataIndex.length; j++)
 						{
-							resultDataIndexMy[j] = resultDataIndex[j];
-							if(typeof(resultDataIndexMy[j]) == "number")
-								resultDataIndexMy[j] = resultDataIndexMy[j] + i;
+							resultDataIndexMy[j] = (eleIsNumbers[j] ? (resultDataIndex[j]+i) : resultDataIndex[j]);
 						}
 					}
 				}
 				
-				this._originalDataIndex(data[i], chartDataSetIndex, resultDataIndexMy);
+				this._originalDataIndex(data[i], dataSetBindIndex, resultDataIndexMy);
 			}
 		}
 	};
 	
 	/**
-	 * 获取/设置单条图表展示数据的原始数据索引（图表ID、图表数据集索引、结果数据索引）。
+	 * 获取/设置单条图表展示数据的原始数据索引（图表ID、数据集绑定索引、结果数据索引）。
 	 * 图表展示数据是指由图表数据集结果数据转换而得，用于渲染图表的数据。
 	 * 图表渲染器在构建图表展示数据时，应使用此函数设置其原始数据索引，以支持在后续的交互、事件处理中获取它们。
 	 * 
-	 * @param data 展示数据，格式为：{ ... }、[ ... ]，对于设置操作，当展示数据是对象时，将为其添加一个额外属性；
-	 * 			   当展示数据是数组时，如果末尾元素已是索引信息对象，则替换；否则，追加一个元素
-	 * @param chartDataSetIndex 同chartBase.originalDataIndexes()函数的chartDataSetIndex参数
+	 * @param data 展示数据，格式为：{ ... }、[ ... ]
+	 * @param dataSetBindIndex 同chartBase.originalDataIndexes()函数的dataSetBindIndex参数
 	 * @param resultDataIndex 同chartBase.originalDataIndexes()函数的resultDataIndex参数
 	 * @returns 要获取的原始数据索引(可能为null），格式参考chartBase.originalDataIndexes()函数返回值
 	 * @since 3.1.0
 	 */
-	chartBase.originalDataIndex = function(data, chartDataSetIndex, resultDataIndex)
+	chartBase.originalDataIndex = function(data, dataSetBindIndex, resultDataIndex)
 	{
 		//获取
 		if(arguments.length <= 1)
@@ -3750,22 +3544,65 @@
 		}
 		else
 		{
-			data = [ data ];
-			this.originalDataIndexes(data, chartDataSetIndex, resultDataIndex, false);
+			if(data == null)
+				return;
+			
+			var trimIndex = this._trimOriginalDataIndex(dataSetBindIndex, resultDataIndex);
+			this._originalDataIndex(data, trimIndex.dataSetBindIndex, trimIndex.resultDataIndex);
 		}
 	};
 	
+	chartBase._trimOriginalDataIndex = function(dataSetBindIndex, resultDataIndex)
+	{
+		var re = {};
+		
+		resultDataIndex = (resultDataIndex === undefined ? 0 : resultDataIndex);
+		
+		if($.isArray(dataSetBindIndex))
+		{
+			var dsbIdxNew = [];
+			
+			for(var i=0; i<dataSetBindIndex.length; i++)
+			{
+				dsbIdxNew[i] = (dataSetBindIndex[i] != null && dataSetBindIndex[i].index !== undefined ?
+								dataSetBindIndex[i].index : dataSetBindIndex[i]);
+			}
+			
+			dataSetBindIndex = dsbIdxNew;
+			
+			if(!$.isArray(resultDataIndex))
+			{
+				var rdIdxNew = [];
+				
+				for(var i=0; i<dataSetBindIndex.length; i++)
+					rdIdxNew[i] = resultDataIndex;
+				
+				resultDataIndex = rdIdxNew;
+			}
+		}
+		else
+		{
+			dataSetBindIndex = (dataSetBindIndex != null && dataSetBindIndex.index !== undefined ?
+									dataSetBindIndex.index : dataSetBindIndex);
+		}
+		
+		re.dataSetBindIndex = dataSetBindIndex;
+		re.resultDataIndex = resultDataIndex;
+		
+		return re;
+	};
+	
 	//获取/设置单条图表展示数据的原始数据索引
-	chartBase._originalDataIndex = function(data, chartDataSetIndex, resultDataIndex)
+	chartBase._originalDataIndex = function(data, dataSetBindIndex, resultDataIndex)
 	{
 		if(arguments.length <= 1)
 			return chartFactory.originalDataIndex(data);
 		else
-			chartFactory.originalDataIndex(data, this.id, chartDataSetIndex, resultDataIndex);
+			chartFactory.originalDataIndex(data, this.id, dataSetBindIndex, resultDataIndex);
 	};
 	
 	/**
-	 * 图表事件支持函数：获取/设置图表事件对象的原始数据索引（图表ID、图表数据集索引、结果数据索引），即：chartEvent.originalDataIndex。
+	 * 图表事件支持函数：获取/设置图表事件对象的原始数据索引（图表ID、数据集绑定索引、结果数据索引），即：chartEvent.originalDataIndex。
 	 * 
 	 * @param chartEvent 图表事件对象，格式应为：{ ... }
 	 * @param originalDataIndex 要设置的原始数据索引对象、数组，通常是chartBase.originalDataIndex()或chartBase.originalDataIndexes()函数的返回值
@@ -3790,14 +3627,14 @@
 			// < @deprecated 兼容3.0.1版本的chartEvent.originalChartDataSetIndex、originalResultDataIndex结构，将在未来版本移除
 			var isArray = $.isArray(originalDataIndex);
 			var originalDataIndexAry = (isArray ? originalDataIndex : [ originalDataIndex ]);
-			var originalChartDataSetIndex = [];
+			var originalDataSetBindIndex = [];
 			var originalResultDataIndex = [];
 			for(var i=0; i<originalDataIndexAry.length; i++)
 			{
-				originalChartDataSetIndex[i] = originalDataIndexAry[i].chartDataSetIndex;
+				originalDataSetBindIndex[i] = originalDataIndexAry[i].dataSetBindIndex;
 				originalResultDataIndex[i] = originalDataIndexAry[i].resultDataIndex;
 			}
-			chartEvent["originalChartDataSetIndex"] = (isArray ? originalChartDataSetIndex : originalChartDataSetIndex[0]);
+			chartEvent["originalChartDataSetIndex"] = (isArray ? originalDataSetBindIndex : originalDataSetBindIndex[0]);
 			chartEvent["originalResultDataIndex"] = (isArray ? originalResultDataIndex : originalResultDataIndex[0]);
 			// > @deprecated 兼容3.0.1版本的chartEvent.originalChartDataSetIndex、originalResultDataIndex结构，将在未来版本移除
 		}
@@ -3864,15 +3701,16 @@
 	 */
 	chartBase.pluginResourceURL = function(name)
 	{
-		if(!this._isRenderContextInited())
-			throw new Error("chart is illegal state for pluginResourceURL(name)");
-		
 		name = (name || "");
 		
 		var webContext = this._renderContextAttrWebContext();
 		
-		var url = "/chartPlugin/resource/"+encodeURIComponent(this.plugin.id)+"/"+name;
-		url = chartFactory.toWebContextPathURL(webContext, url);
+		if(!webContext)
+			throw new Error("chart is illegal state for : pluginResourceURL(name)");
+		
+		var urlPrefix = webContext.attributes.pluginResUrlPrefix;
+		var url = urlPrefix+"/"+encodeURIComponent(this.plugin.id)+"/"+name;
+		url = this.contextURL(url);
 		
 		return url;
 	};
@@ -4037,13 +3875,1636 @@
 	 */
 	chartBase.themeGradualColor = function(factor)
 	{
-		var theme = this._themeNonNull();
+		var theme = this.theme();
 		return chartFactory.themeGradualColor(theme, factor);
 	};
+	
+	/**
+	 * 获取/设置更新追加模式。
+	 * 更新追加模式是指：每次调用chart.update()更新图表时，使用上次的数据追加合并新数据更新图表。
+	 * 图表初始化时，会使用图表选项里的updateAppendMode选项设置。
+	 * 
+	 * @param appendMode 可选，要设置的追加模式，格式为：
+	 * 					//等同于下面的：{ size: 10, beforeListener: false }
+	 * 					true、
+	 * 					//等同于下面的：{ size: 数值, beforeListener: false }
+	 * 					数值、
+	 * 					//等同于下面的：{ size: 函数, beforeListener: false }
+	 * 					function(chart, chartResult){ return 数值; }、
+	 * 					//具体追加模式
+	 * 					//size：数据窗口大小，追加后保留的最大数据数目（新数据优先），
+	 * 					//      可以是具体数值，也可以是数值计算函数：function(chart, chartResult){ return 数值; }
+	 * 					//beforeListener：是否在图表监听器的onUpdate前追加，否则，将在之后追加
+	 * 					{ size: 数值或者函数, beforeListener: false }
+	 * @returns 更新追加模式，格式为：{ size: 数值, beforeListener: true、false }、null 表示没有开启追加模式
+	 * 
+	 * @since 5.0.0
+	 */
+	chartBase.updateAppendMode = function(appendMode)
+	{
+		if(arguments.length == 0)
+		{
+			return this._updateAppendMode;
+		}
+		else
+		{
+			if(appendMode === true)
+			{
+				appendMode = { size: 10, beforeListener: false };
+			}
+			else if(chartFactory.isNumber(appendMode))
+			{
+				appendMode = { size: appendMode, beforeListener: false };
+			}
+			else if($.isFunction(appendMode))
+			{
+				appendMode = { size: appendMode, beforeListener: false };
+			}
+			
+			this._updateAppendMode = appendMode;
+		}
+	};
+	
+	/**
+	 * 获取全部数据集绑定数组。
+	 * 
+	 * @returns []，空数组表示没有数据集绑定
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBinds = function()
+	{
+		return (this._dataSetBinds || (this._dataSetBinds = []));
+	};
+	
+	/**
+	 * 获取指定索引的数据集绑定。
+	 * 
+	 * @param index
+	 * @returns 数据集绑定，null表示没有
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBindAt = function(index)
+	{
+		var dsbs = this.dataSetBinds();
+		return dsbs[index];
+	};
+	
+	/**
+	 * 获取全部主件数据集绑定，或者设置了指定数据标记的全部主件数据集绑定。
+	 * 主件数据集绑定的用途是绘制图表。
+	 * 
+	 * @param dataSign 可选，要筛选的数据集标记，与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集绑定
+	 * @returns []，空数组表示没有主件数据集绑定
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBindsMain = function(dataSign)
+	{
+		return this._dataSetBindsOf(-1, false, dataSign);
+	};
+	
+	/**
+	 * 获取第一个主件数据集绑定，或者设置了指定数据标记的第一个主件数据集绑定。
+	 * 主件数据集绑定的用途是绘制图表。
+	 * 
+	 * @param dataSign 可选，要筛选的数据集标记，与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集绑定
+	 * @returns 数据集绑定、null
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBindMain = function(dataSign)
+	{
+		var re = this._dataSetBindsOf(1, false, dataSign);
+		return (re.length > 0 ? re[0] : null);
+	};
+	
+	/**
+	 * 获取全部附件数据集绑定，或者设置了指定数据标记的全部附件数据集绑定。
+	 * 附件数据集绑定的用途不是绘制图表。
+	 * 
+	 * @param dataSign 可选，要筛选的数据集标记，与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集绑定
+	 * @returns []，空数组表示没有附件数据集绑定
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBindsAttachment = function(dataSign)
+	{
+		return this._dataSetBindsOf(-1, true, dataSign);
+	};
+	
+	/**
+	 * 获取第一个附件数据集绑定，或者设置了指定数据标记的第一个附件数据集绑定。
+	 * 附件数据集绑定的用途不是绘制图表。
+	 * 
+	 * @param dataSign 可选，要筛选的数据集标记，与this.dataSignFullname()函数参数相同，为null表示筛选无任何标记的数据集绑定
+	 * @returns 数据集绑定、null
+	 * @since 5.0.0
+	 */
+	chartBase.dataSetBindAttachment = function(dataSign)
+	{
+		var re = this._dataSetBindsOf(1, true, dataSign);
+		return (re.length > 0 ? re[0] : null);
+	};
+	
+	chartBase._dataSetBindsOf = function(count, attachment, dataSign)
+	{
+		var re = [];
+		
+		var signFullname = (dataSign === undefined ? undefined : this.dataSignFullname(dataSign));
+		
+		var dataSetBinds = this.dataSetBinds();
+		for(var i=0; i<dataSetBinds.length; i++)
+		{
+			if(count > -1 && re.length >= count)
+				break;
+			
+			var dsb = dataSetBinds[i];
+			var dsbAttachment = this.dataSetAttachment(dsb);
+			
+			if((!attachment && dsbAttachment) || (attachment && !dsbAttachment))
+				continue;
+			
+			if(dataSign !== undefined && !this.isDataSetSigned(dsb, signFullname))
+				continue;
+			
+			re.push(dsb);
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 为以"/"开头的URL添加系统根路径前缀，否则，将直接返回原URL。
+	 * 当需要访问系统内其他功能模块的资源时，应为其URL添加系统根路径前缀。
+	 * 
+	 * @param url 可选，要处理的URL
+	 * @returns 添加后的新URL，如果没有url参数，将返回系统根路径
+	 * @since 5.0.0
+	 */
+	chartBase.contextURL = function(url)
+	{
+		var webContext = this._renderContextAttrWebContext();
+		
+		if(!webContext)
+		{
+			throw new Error("chart is illegal state for : contextURL(url)");
+		}
+		
+		return chartFactory.toWebContextPathURL(webContext, url);
+	};
+	
+	/**
+	 * 加载库，并在全部加载完成后（无论是否成功）执行回调函数。
+	 * 注意：如果在图表渲染器的render/update函数中调用此函数，应该首先设置其asyncRender/asyncUpdate为true，
+	 * 并在callback中调用chart.statusRendered(true)/chart.statusUpdated(true)，具体参考此文件顶部的注释。
+	 * 
+	 * @param lib 库对象、数组，结构参考chartFactory.loadLib()函数说明，注意，其中库源URL应是可以直接加载的
+	 * @param callback 可选，加载完成后回调函数（无论是否成功都将执行），格式参考chartFactory.loadLib()函数说明
+	 * @since 5.2.0
+	 */
+	chartBase.loadLib = function(lib, callback)
+	{
+		callback = (callback ? callback : function(){});
+		
+		var contextCharts = this._contextCharts();
+		chartFactory.loadLib(lib,  callback, contextCharts);
+	};
+	
+	/**
+	 * 获取/设置图表此次更新的结果数据。
+	 * 图表更新前会自动执行设置操作（通过chartBase.doUpdate()函数）。
+	 * 
+	 * @param chartResult 可选，要设置的图表结果、数据集结果数组
+	 * @returns 要获取的图表结果，没有则返回null
+	 * @since 5.3.0 此API暂不开放，因为5.3.0版本的开放API中没有用到chartResult设计概念
+	 */
+	chartBase.updateResult = function(chartResult)
+	{
+		if(chartResult === undefined)
+			return chartFactory.extValueBuiltin(this, "updateResult");
+		else
+		{
+			chartResult = this._toChartResult(chartResult);
+			chartFactory.extValueBuiltin(this, "updateResult", chartResult);
+		}
+	};
+	
+	/**
+	 * 获取/设置图表结果包含的数据集结果数组。
+	 * 
+	 * @param chartResult 图表结果、数据集结果数组（仅获取时）
+	 * @param dataSetResults 可选，要设置的数据集结果数组
+	 * @returns 要获取的数据集结果数组，没有则返回null
+	 * @since 5.3.0 此API暂不开放，因为5.3.0版本的开放API中没有用到chartResult设计概念
+	 */
+	chartBase.results = function(chartResult, dataSetResults)
+	{
+		if(dataSetResults === undefined)
+		{
+			if(chartResult == null)
+			{
+				return chartResult;
+			}
+			// 数据集结果数组
+			else if($.isArray(chartResult))
+			{
+				return chartResult;
+			}
+			else
+			{
+				return chartResult.dataSetResults;
+			}
+		}
+		else
+		{
+			//应禁止此操作，因为会引起读取操作歧义
+			if(chartResult && $.isArray(chartResult))
+				throw new Error("set results for array unsupported");
+			
+			chartResult.dataSetResults = dataSetResults;
+		}
+	};
+	
+	/**
+	 * 获取图表插件指定附加属性值。
+	 * 
+	 * @param name 附加属性名
+	 * @returns 要获取的附加属性值，没有则返回null
+	 * @since 5.4.0
+	 */
+	chartBase.pluginAddition = function(name)
+	{
+		return (this.plugin && this.plugin.additions ? this.plugin.additions[name] : null);
+	};
+	
+	/**
+	 * 获取图表插件所有数据标记。
+	 * 
+	 * @returns []，空数组表示没有
+	 * @since 5.4.0
+	 */
+	chartBase.pluginDataSigns = function()
+	{
+		return (this.plugin && this.plugin.dataSigns ? this.plugin.dataSigns : []);
+	};
+	
+	/**
+	 * 获取图表插件指定数据标记。
+	 * 
+	 * @param name 数据标记名称、索引数字、数据标记对象
+	 * @param dataSigns 可选，要查找的数据标记数组，默认为：this.pluginDataSigns()
+	 * @returns 数据标记，没有则是null
+	 * @since 5.4.0
+	 */
+	chartBase.pluginDataSign = function(name, dataSigns)
+	{
+		dataSigns = (dataSigns === undefined ? this.pluginDataSigns() : dataSigns);
+		
+		if(dataSigns == null)
+			return null;
+		
+		if(chartFactory.isNumber(name))
+		{
+			return dataSigns[name];
+		}
+		else
+		{
+			//数据标记对象
+			name = (name && name.name !== undefined ? name.name : name);
+			
+			for(var i=0; i<dataSigns.length; i++)
+			{
+				if(dataSigns[i] && dataSigns[i].name == name)
+				{
+					return dataSigns[i];
+				}
+			}
+			
+			return null;
+		}
+	};
+	
+	/**
+	 * 获取数据标记全名。
+	 * 
+	 * @param name 字符串全名、数据标记数组索引数值、数据标记对象，或者由数据标记名/索引数值/对象组成的层级数组（数组索引表示查找层级）
+	 * @param dataSigns 可选，要查找的数据标记数组，默认为：this.pluginDataSigns()
+	 * @returns 标记全名，层级间以'.'分隔，可能是null
+	 * @since 5.4.0
+	 */
+	chartBase.dataSignFullname = function(name, dataSigns)
+	{
+		if(name == null)
+			return null;
+		
+		//字符串全名，直接返回
+		if(chartFactory.isString(name))
+			return name;
+		
+		var isArray = $.isArray(name);
+		
+		if(!isArray)
+		{
+			var dataSign = null;
+			
+			//插件数据标记数组索引数值
+			if(chartFactory.isNumber(name))
+			{
+				dataSign = this.pluginDataSign(name, dataSigns);
+				
+				if(dataSign == null)
+					throw new Error("no DataSign found for : " + name);
+				
+				return dataSign.name;
+			}
+			//数据标记对象
+			else if(name.name !== undefined)
+			{
+				dataSign = name;
+			}
+			
+			return (dataSign ? dataSign.name : null);
+		}
+		else
+		{
+			var re = "";
+			
+			//默认查找数据标记数组，不能设为undefined，纤细参考this.pluginDataSign()函数
+			var dftDataSigns = [];
+			
+			for(var i=0; i<name.length; i++)
+			{
+				var myPart = null;
+				
+				var ni = name[i];
+				var dataSign = this.pluginDataSign(ni, dataSigns);
+				
+				if(dataSign == null)
+				{
+					if(ni == null || chartFactory.isString(ni))
+					{
+						myPart = ni;
+					}
+					//数据标记对象
+					else if(ni.name !== undefined)
+					{
+						myPart = ni.name;
+						dataSign = ni;
+					}
+					else
+					{
+						throw new Error("no DataSign found for : name["+i+"]");
+					}
+				}
+				else
+				{
+					myPart = dataSign.name;
+				}
+				
+				re += (re ? (chartFactory.DATA_SIGN_FULLNAME_SEPARATOR + myPart) : myPart);
+				dataSigns = (dataSign && dataSign.children ? dataSign.children : dftDataSigns);
+			}
+			
+			return re;
+		}
+	};
+	
+	/**
+	 * 获取数据标记路径节点数组。
+	 * 
+	 * @param fullname 字符串全名、数据标记数组索引数值、数据标记对象，或者由数据标记名/索引数值/对象组成的层级数组（数组索引表示查找层级）
+	 * @param dataSigns 可选，要查找的数据标记数组，默认为：this.pluginDataSigns()
+	 * @returns 数据标记数组，空数组表示任一级没找到
+	 * @since 5.4.0
+	 */
+	chartBase._dataSignPathNodes = function(fullname, dataSigns)
+	{
+		var re = [];
+		
+		if(fullname == null)
+			return re;
+		
+		if(chartFactory.isString(fullname))
+		{
+			//尝试作为数据标记名查找
+			var dataSign = this.pluginDataSign(fullname, dataSigns);
+			
+			if(dataSign != null)
+			{
+				re.push(dataSign);
+			}
+			//标记全名
+			else
+			{
+				re = this._dataSignPathNodes(fullname.split(chartFactory.DATA_SIGN_FULLNAME_SEPARATOR), dataSigns);
+			}
+		}
+		//插件数据标记层级数组
+		else if($.isArray(fullname))
+		{
+			for(var i=0; i<fullname.length; i++)
+			{
+				var dataSign = this.pluginDataSign(fullname[i], dataSigns);
+				
+				if(dataSign == null)
+				{
+					re = [];
+					break;
+				}
+				else
+				{
+					re.push(dataSign);
+					dataSigns = (dataSign.children ? dataSign.children : []);
+				}
+			}
+		}
+		//插件数据标记数组索引
+		else if(chartFactory.isNumber(fullname))
+		{
+			var dataSign = this.pluginDataSign(fullname, dataSigns);
+			
+			if(dataSign != null)
+			{
+				re.push(dataSign);
+			}
+		}
+		//数据标记对象
+		else if(fullname.name !== undefined)
+		{
+			re.push(fullname);
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 获取/设置是否附件数据集。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param attachment 可选，要设置的值
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetAttachment = function(dataSetBind, attachment)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		
+		if(attachment === undefined)
+		{
+			return (dataSetBind.attachment ? true : false);
+		}
+		else
+		{
+			dataSetBind.attachment = attachment;
+		}
+	};
+	
+	/**
+	 * 判断数据集是否有指定数据标记。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSign 与this.dataSignFullname()函数参数相同
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.isDataSetSigned = function(dataSetBind, dataSign)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		var dss = this.dataSetSigns(dataSetBind);
+		dataSign = this.dataSignFullname(dataSign);
+		
+		//此情况应返回true，用于支持查找没有任何标记的数据集绑定
+		if(dataSign == null && (dss == null || dss.length == 0))
+			return true;
+		
+		return (chartFactory.indexInArray(dss, dataSign) >= 0);
+	};
+	
+	/**
+	 * 判断数据集字段是否有指定数据标记。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param field 数据集字段名、字段索引、字段对象
+	 * @param dataSign 与this.dataSignFullname()函数参数相同
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.isDataSetFieldSigned = function(dataSetBind, field, dataSign)
+	{
+		var fieldSigns = this.dataSetFieldSign(dataSetBind, field);
+		dataSign = this.dataSignFullname(dataSign);
+		
+		//此情况应返回true，用于支持查找没有任何标记的数据集字段
+		if(dataSign == null && (fieldSigns == null || fieldSigns.length == 0))
+			return true;
+		
+		return (chartFactory.indexInArray(fieldSigns, dataSign) >= 0);
+	};
+	
+	/**
+	 * 获取/设置数据集数据标记。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSigns 可选，要设置的标记，与this.dataSignFullname()函数参数相同、或者其数组
+	 * @returns 标记数组，空数组表示没有
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetSigns = function(dataSetBind, dataSigns)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		
+		if(dataSigns === undefined)
+		{
+			return (dataSetBind.dataSetSigns || (dataSetBind.dataSetSigns = []));
+		}
+		else
+		{
+			dataSigns = this._toDataSignValues(dataSigns);
+			dataSetBind.dataSetSigns = dataSigns;
+		}
+	};
+	
+	/**
+	 * 获取/设置数据集字段标记映射表。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSigns 可选，要设置的数据标记映射表，格式为：{ 数据集字段名: 与this.dataSignFullname()函数参数相同、或者其数组, ... }，不设置则执行获取操作
+	 * @param increment 可选，设置操作时是否执行增量设置，仅设置signs中出现的项，true 是；false 否。默认值为：false
+	 * @returns 要获取的标记映射表，格式为：{ 数据集字段名: 标记名字符串数组、null, ... }，不会为null
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetFieldsSigns = function(dataSetBind, dataSigns, increment)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		increment = (increment == null ? false : increment);
+		
+		if(dataSigns === undefined)
+		{
+			return (dataSetBind.fieldSigns || (dataSetBind.fieldSigns = {}));
+		}
+		else
+		{
+			var trimSigns = {};
+			
+			if(dataSigns)
+			{
+				for(var p in dataSigns)
+				{
+					var ps = this._toDataSignValues(dataSigns[p]);
+					trimSigns[p] = ps;
+				}
+			}
+			
+			if(!dataSetBind.fieldSigns || !increment)
+			{
+				dataSetBind.fieldSigns = trimSigns;
+			}
+			else
+			{
+				for(var p in trimSigns)
+				{
+					dataSetBind.fieldSigns[p] = trimSigns[p];
+				}
+			}
+		}
+	};
+	
+	/**
+	 * 获取/设置图表更新选项。
+	 * 
+	 * 图表渲染器可在其update()中使用此函保存图表更新选项，供后续图表监听器使用。
+	 * 调用chart.inflateUpdateOptions()后，会自动调用此函数设置图表更新选项。
+	 * 
+	 * @param updateOptions 可选，要设置的渲染选项对象，格式应为：{ ... }
+	 * @returns 要获取的图表更新选项，没有则返回null
+	 * @since 5.4.0
+	 */
+	chartBase.updateOptions = function(updateOptions)
+	{
+		return chartFactory.extValueBuiltin(this, "updateOptions", updateOptions);
+	};
+	
+	/**
+	 * 获取/设置数据集结果指定名称的附加数据。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param name 名称
+	 * @param value 可选，要设置的附加数据
+	 * @returns 附加数据，可能null
+	 * @since 5.4.0
+	 */
+	chartBase.resultAddition = function(dataSetResult, name, value)
+	{
+		var additions = (dataSetResult ? dataSetResult.additions : null);
+		
+		if(value === undefined)
+		{
+			return (additions ? additions[name] : null);
+		}
+		else
+		{
+			if(additions == null)
+			{
+				additions = {};
+				dataSetResult.additions = additions;
+			}
+			
+			additions[name] = value;
+		}
+	};
+	
+	/**
+	 * 获取未准备好（必填但值为null）的数据集参数信息。
+	 * 此函数支持的调用格式：
+	 * chart.unreadyDataSetParams();
+	 * chart.unreadyDataSetParams(stopOnFirst);
+	 * chart.unreadyDataSetParams(stopOnFirst, checkIgnoreFetch);
+	 * chart.unreadyDataSetParams(dataSetBinds);
+	 * chart.unreadyDataSetParams(dataSetBinds, stopOnFirst);
+	 * chart.unreadyDataSetParams(dataSetBinds, stopOnFirst, checkIgnoreFetch);
+	 * 
+	 * @param dataSetBinds 可选，要查找的数据集绑定、索引数值，或者它们的数组，默认为：this.dataSetBinds()
+	 * @param stopOnFirst 可选，是否在找到第一个后就返回，默认值为：false
+	 * @param checkIgnoreFetch 可选，是否校验忽略获取结果的数据集，默认值为：false
+	 * @returns 未准备好的数据集参数信息数组，格式为：
+	 * 				[
+	 * 					{ dataSetBind: 数据集绑定, dataSetBindIndex: 数据集绑定索引, param: 数据集参数对象, paramIndex: 参数索引 },
+	 * 					...
+	 * 				]，空数组表示都已准备好
+	 * @since 5.4.0
+	 */
+	chartBase.unreadyDataSetParams = function(dataSetBinds, stopOnFirst, checkIgnoreFetch)
+	{
+		//(true, ...)、(false, ...)
+		if(dataSetBinds === true || dataSetBinds === false)
+		{
+			checkIgnoreFetch = stopOnFirst;
+			stopOnFirst = dataSetBinds;
+			dataSetBinds = undefined;
+		}
+		
+		dataSetBinds = (dataSetBinds === undefined ? this.dataSetBinds() :
+							($.isArray(dataSetBinds) ? dataSetBinds : [ dataSetBinds ]));
+		stopOnFirst = (stopOnFirst == null ? false : stopOnFirst);
+		checkIgnoreFetch = (checkIgnoreFetch == null ? false: checkIgnoreFetch);
+		
+		var re = [];
+		
+		for(var i=0; i<dataSetBinds.length; i++)
+		{
+			var dsb = this._dataSetBindOf(dataSetBinds[i]);
+			
+			if(!checkIgnoreFetch && this.dataSetIgnoreFetch(dsb))
+				continue;
+			
+			var params = this.dataSetParams(dsb);
+			
+			if(!params || params.length == 0)
+				continue;
+			
+			var paramValues = (this.dataSetParamValues(dsb) || {});
+			
+			for(var j=0; j<params.length; j++)
+			{
+				var param = params[j];
+				
+				if(this._isDataSetParamUnready(param, paramValues))
+				{
+					var info = { dataSetBind: dsb, dataSetBindIndex: i, param: param, paramIndex: j };
+					re.push(info);
+					
+					if(stopOnFirst === true)
+						return re;
+				}
+			}
+		}
+		
+		return re;
+	};
+	
+	chartBase._isDataSetParamUnready = function(dataSetParam, paramValues)
+	{
+		var required = (dataSetParam.required == true || dataSetParam.required == "true");
+		return (required && (paramValues == null || paramValues[dataSetParam.name] == null));
+	};
+	
+	/**
+	 * 获取数据集结果数据指定字段、指定行的单元格值，没有则返回null。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param field 数据集字段对象、字段名
+	 * @param row 行索引，可选，默认为：0
+	 * @since 5.4.0
+	 */
+	chartBase.resultDataCell = function(dataSetResult, field, row)
+	{
+		row = (row == null ? 0 : row);
+		
+		var re = this.resultRowArrayDatas(dataSetResult, field, row, 1);
+		return (re.length > 0 ? re[0] : null);
+	};
+	
+	/**
+	 * 将数据集结果数据的行对象按照指定fields顺序转换为列值数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fields 数据集字段对象数组、字段名数组、字段对象、字段名
+	 * @param row 行索引，以0开始，可选，默认值为：0
+	 * @param count 获取的最多行数，可选，默认为全部
+	 * @returns fields为数组时：[[..., ...], ...]；fields非数组时：[..., ...]
+	 * @since 5.4.0
+	 */
+	chartBase.resultColumnArrayDatas = function(dataSetResult, fields, row, count)
+	{
+		var re = [];
+
+		if(!dataSetResult || !fields)
+			return re;
+		
+		var datas = this.resultDatas(dataSetResult);
+		
+		row = (row == null ? 0 : row);
+		var endIdx = (count == null ? datas.length : (row + count));
+		endIdx = (endIdx > datas.length ? datas.length : endIdx);
+		
+		if($.isArray(fields))
+		{
+			for(var i=0; i<fields.length; i++)
+			{
+				var p = fields[i];
+				
+				var name = (p ? (p.name || p) : undefined);
+				if(!name)
+					continue;
+				
+				var column = [];
+				
+				for(var j=row; j<endIdx; j++)
+					column.push(datas[j][name]);
+				
+				re[i] = column;
+			}
+		}
+		else
+		{
+			var name = (fields ? (fields.name || fields) : undefined);
+
+			if(name)
+			{
+				for(var i=row; i<endIdx; i++)
+				{
+					var rowObj = datas[i];
+					re.push(rowObj[name]);
+				}
+			}
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 获取数据集结果数据指定行索引的元素。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param row 行索引数值、数值数组
+	 * @returns 数据对象、据对象数组，当result、row为null时，将返回null
+	 * @since 5.4.0
+	 */
+	chartBase.resultDataRow = function(dataSetResult, row)
+	{
+		if(dataSetResult == null || dataSetResult.data == null || row == null)
+			return null;
+		
+		var datas = this.resultDatas(dataSetResult);
+		
+		if(!$.isArray(row))
+		{
+			return datas[row];
+		}
+		else
+		{
+			var re = [];
+			
+			for(var i=0; i<row.length; i++)
+				re.push(datas[row[i]]);
+			
+			return re;
+		}
+	};
+	
+	/**
+	 * 获取数据集结果数据经字段映射后的数据对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fieldMap 返回字段映射表，格式为：{ 返回对象字段名: 数据集字段对象、字段名、字段数组、字段名数组 }
+	 * @param row 可选，行索引，以0开始，默认为：0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @returns [{"...": ..., "...": ...}, ...]
+	 * @since 5.4.0
+	 */
+	chartBase.resultMapDatas = function(dataSetResult, fieldMap, row, count)
+	{
+		var re = [];
+		
+		var datas = this.resultDatas(dataSetResult);
+		row = (row == null ? 0 : row);
+		var endIdx = (count == null ? datas.length : (row + count));
+		endIdx = (endIdx > datas.length ? datas.length : endIdx);
+		
+		var propIsArray = {};
+		for(var opn in fieldMap)
+			propIsArray[opn] = $.isArray(fieldMap[opn]);
+		
+		for(var i=row; i<endIdx; i++)
+		{
+			var di = datas[i];
+			var obj = (di == null ? null : {});
+			
+			for(var opn in fieldMap)
+			{
+				var dp = fieldMap[opn];
+				
+				if(dp == null){}
+				else if(propIsArray[opn])
+				{
+					obj[opn] = [];
+					
+					for(var j=0; j<dp.length; j++)
+					{
+						var dpn = (dp[j].name || dp[j]);
+						obj[opn][j] = di[dpn];
+					}
+				}
+				else
+				{
+					var dpn = (dp.name || dp);
+					obj[opn] = di[dpn];
+				}
+			}
+			
+			re.push(obj);
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 获取数据集结果数据的名/值对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param nameField 名称数据集字段对象、字段名
+	 * @param valueField 值数据集字段对象、字段名、数组
+	 * @param row 可选，行索引，以0开始，默认为：0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @returns [{name: ..., value: ...}, ...]
+	 * @since 5.4.0
+	 */
+	chartBase.resultNameValueDatas = function(dataSetResult, nameField, valueField, row, count)
+	{
+		var fieldMap ={ "name": nameField, "value": valueField };
+		return this.resultMapDatas(dataSetResult, fieldMap, row, count);
+	};
+	
+	/**
+	 * 将数据集结果数据的行对象按照指定fields顺序转换为行值数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fields 数据集字段对象数组、字段名数组、字段对象、字段名
+	 * @param row 可选，行索引，默认为：0
+	 * @param count 可选，获取的最多行数，默认为全部
+	 * @returns fields为数组时：[[..., ...], ...]；fields非数组时：[..., ...]
+	 * @since 5.4.0
+	 */
+	chartBase.resultRowArrayDatas = function(dataSetResult, fields, row, count)
+	{
+		var re = [];
+		
+		if(!dataSetResult || !fields)
+			return re;
+		
+		var datas = this.resultDatas(dataSetResult);
+		
+		row = (row == null ? 0 : row);
+		var endIdx = (count == null ? datas.length : (row + count));
+		endIdx = (endIdx > datas.length ? datas.length : endIdx);
+		
+		if($.isArray(fields))
+		{
+			for(var i=row; i<endIdx; i++)
+			{
+				var rowObj = datas[i];
+				var rowVal = [];
+				
+				for(var j=0; j<fields.length; j++)
+				{
+					var p = fields[j];
+					
+					var name = (p ? (p.name || p) : undefined);
+					if(!name)
+						continue;
+					
+					rowVal[j] = rowObj[name];
+				}
+				
+				re.push(rowVal);
+			}
+		}
+		else
+		{
+			var name = (fields ? (fields.name || fields) : undefined);
+			
+			if(name)
+			{
+				for(var i=row; i<endIdx; i++)
+				{
+					var rowObj = datas[i];
+					re.push(rowObj[name]);
+				}
+			}
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 获取数据集结果数据的行对象指定字段值。
+	 * 
+	 * @param rowObj 行对象，格式为：{ ... }
+	 * @param field 数据集字段对象、字段名
+	 * @since 5.4.0
+	 */
+	chartBase.resultDataRowCell = function(rowObj, field)
+	{
+		if(!rowObj || !field)
+			return null;
+		
+		var name = (field.name || field);
+		return rowObj[name];
+	};
+	
+	/**
+	 * 获取数据集结果数据的值对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param valueField 值数据集字段对象、字段名、数组
+	 * @param row 可选，行索引，以0开始，默认为：0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @returns [{value: ...}, ...]
+	 * @since 5.4.0
+	 */
+	chartBase.resultValueDatas = function(dataSetResult, valueField, row, count)
+	{
+		var fieldMap ={ "value": valueField };
+		return this.resultMapDatas(dataSetResult, fieldMap, row, count);
+	};
+	
+	/**
+	 * 获取/设置指定数据集是否忽略获取结果，忽略后下次将不会加载结果数据。
+	 * 如果图表渲染器附加属性没有定义{ supportIgnoreFetch: true }，对于设置操作，将在控制台警告提示。
+	 * 
+	 * @param dataSetBind 指定数据集绑定或其索引
+	 * @param ignoreFetch 可选，要设置的值，true 忽略；false 不忽略
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetIgnoreFetch = function(dataSetBind, ignoreFetch)
+	{
+		dataSetBind = this._dataSetBindOf(dataSetBind);
+		
+		if(ignoreFetch === undefined)
+		{
+			return this._dataSetIgnoreFetch(dataSetBind);
+		}
+		else
+		{
+			this._checkSupportIgnoreFetch();
+			this._dataSetIgnoreFetch(dataSetBind, ignoreFetch);
+		}
+	};
+	
+	/**
+	 * 获取/设置全部数据集是否忽略获取结果，忽略后下次将不会加载结果数据。
+	 * 如果图表渲染器附加属性没有定义{ supportIgnoreFetch: true }，对于设置操作，将在控制台警告提示。
+	 * 
+	 * @param ignoreFetch 可选，要设置的值，true 全部忽略；false 全部不忽略；[ ... ] 指定元素值
+	 * @returns [ true、false, ... ]
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetIgnoreFetches = function(ignoreFetch)
+	{
+		var dataSetBinds = this.dataSetBinds();
+		
+		if(ignoreFetch === undefined)
+		{
+			var re = [];
+			
+			for(var i=0; i<dataSetBinds.length; i++)
+				re[i] = this._dataSetIgnoreFetch(dataSetBinds[i]);
+			
+			return re;
+		}
+		else
+		{
+			this._checkSupportIgnoreFetch();
+			
+			var isArray = $.isArray(ignoreFetch);
+			var len = (isArray ? Math.min(dataSetBinds.length, ignoreFetch.length) : dataSetBinds.length);
+			
+			for(var i=0; i<len; i++)
+			{
+				var myVal = (isArray ? ignoreFetch[i] : ignoreFetch);
+				this._dataSetIgnoreFetch(dataSetBinds[i], myVal);
+			}
+		}
+	};
+	
+	chartBase._dataSetIgnoreFetch = function(dataSetBind, ignoreFetch)
+	{
+		var query = dataSetBind.query;
+		
+		if(ignoreFetch === undefined)
+		{
+			return (!query || query.ignoreFetch == null ? false : query.ignoreFetch);
+		}
+		else
+		{
+			query.ignoreFetch = ignoreFetch;
+		}
+	};
+	
+	chartBase._checkSupportIgnoreFetch = function()
+	{
+		var support = this.rendererAddition(chartFactory.RENDERER_ADDITION_SUPPORT_IGNORE_FETCH);
+		
+		//这里不必抛出异常，因为后端没有禁用逻辑，只警告即可
+		if(support == null)
+		{
+			chartFactory.logWarn("chart '#"+this.elementId+"' renderer ["+chartFactory.RENDERER_ADDITION_SUPPORT_IGNORE_FETCH+"] addition undefined, feature may unsupported");
+		}
+		else if(support == false)
+		{
+			chartFactory.logWarn("chart '#"+this.elementId+"' renderer ["+chartFactory.RENDERER_ADDITION_SUPPORT_IGNORE_FETCH+"] feature unsupported");
+		}
+	};
+	
+	/**
+	 * 获取/设置数据集结果是否是忽略获取的。
+	 * 如果图表渲染器附加属性没有定义{ supportIgnoreFetch: true }，对于设置操作，将在控制台警告提示。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param ignoreFetch 可选，要设置的值，true 忽略；false 不忽略
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.resultIgnoreFetch = function(dataSetResult, ignoreFetch)
+	{
+		if(ignoreFetch === undefined)
+		{
+			return (dataSetResult && dataSetResult.ignoreFetch != null ? dataSetResult.ignoreFetch : false);
+		}
+		else
+		{
+			this._checkSupportIgnoreFetch();
+			dataSetResult.ignoreFetch = ignoreFetch;
+		}
+	};
+	
+	/**
+	 * 获取/设置指定数据集绑定对应的数据集结果是否是忽略获取的。
+	 * 如果图表渲染器附加属性没有定义{ supportIgnoreFetch: true }，对于设置操作，将在控制台警告提示。
+	 * 
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param dataSetBind 数据集绑定、索引数值
+	 * @param ignoreFetch 可选，要设置的值，true 忽略；false 不忽略
+	 * @returns true、false
+	 * @since 5.4.0
+	 */
+	chartBase.resultIgnoreFetchOf = function(chartResult, dataSetBind, ignoreFetch)
+	{
+		var dataSetResult = this.resultOf(chartResult, dataSetBind);
+		
+		if(ignoreFetch === undefined)
+		{
+			return this.resultIgnoreFetch(dataSetResult);
+		}
+		else
+		{
+			this.resultIgnoreFetch(dataSetResult, ignoreFetch);
+		}
+	};
+	
+	/**
+	 * 获取图表渲染器指定附加属性值。
+	 * 
+	 * @param name 附加属性名
+	 * @returns 要获取的附加属性值，没有则返回null
+	 * @since 5.4.0
+	 */
+	chartBase.rendererAddition = function(name)
+	{
+		var re = null;
+		
+		var additions = null;
+		var renderer = this.renderer();
+		
+		//优先取自定义渲染器中的
+		if(renderer && renderer.additions)
+		{
+			additions = ($.isFunction(renderer.additions) ? renderer.additions(this) : renderer.additions);
+			re = (additions ? additions[name] : undefined);
+			
+			if(re !== undefined)
+				return re;
+		}
+		
+		renderer = this.plugin.renderer;
+		
+		if(renderer && renderer.additions)
+		{
+			additions = ($.isFunction(renderer.additions) ? renderer.additions(this) : renderer.additions);
+			re = (additions ? additions[name] : undefined);
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 获取未忽略结果的数据集绑定数组。
+	 * 
+	 * @param dataSetBinds 数据集绑定、数组
+	 * @param chartResult 可选，用于校验的图表结果、数据集结果数组，如果未设置，则使用this.dataSetIgnoreFetch()匹配
+	 * @returns [ ... ]，空数组表示没有
+	 * @since 5.4.0
+	 */
+	chartBase.dataSetBindsFetched = function(dataSetBinds, chartResult)
+	{
+		dataSetBinds = (dataSetBinds == null ? [] : ($.isArray(dataSetBinds) ? dataSetBinds : [ dataSetBinds ]));
+		
+		var re = [];
+		
+		for(var i=0; i<dataSetBinds.length; i++)
+		{
+			var dsb = dataSetBinds[i];
+			var ignore = (chartResult === undefined ? this.dataSetIgnoreFetch(dsb) : this.resultIgnoreFetchOf(chartResult, dsb));
+			
+			if(ignore)
+				continue;
+			
+			re.push(dataSetBinds[i]);
+		}
+		
+		return re;
+	};
+	
 	
 	//-------------
 	// < 已弃用函数 start
 	//-------------
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultValueDatas()函数
+	/**
+	 * 获取数据集结果数据的值对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param valueField 值数据集字段对象、字段名、数组
+	 * @param row 可选，行索引，以0开始，默认为0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @return [{value: ...}, ...]
+	 */
+	chartBase.resultValueObjects = function(dataSetResult, valueField, row, count)
+	{
+		return this.resultValueDatas(dataSetResult, valueField, row, count);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultValueDatas()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataRowCell()函数
+	/**
+	 * 获取数据集结果数据的行对象指定属性值。
+	 * 
+	 * @param rowObj 行对象，格式为：{ ... }
+	 * @param field 数据集字段对象、字段名
+	 */
+	chartBase.resultRowCell = function(rowObj, field)
+	{
+		return this.resultDataRowCell(rowObj, field);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataRowCell()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultRowArrayDatas()函数
+	/**
+	 * 将数据集结果数据的行对象按照指定fields顺序转换为行值数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fields 数据集字段对象数组、字段名数组、字段对象、字段名
+	 * @param row 可选，行索引，默认为0
+	 * @param count 可选，获取的最多行数，默认为全部
+	 * @return fields为数组时：[[..., ...], ...]；fields非数组时：[..., ...]
+	 */
+	chartBase.resultRowArrays = function(dataSetResult, fields, row, count)
+	{
+		return this.resultRowArrayDatas(dataSetResult, fields, row, count);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultRowArrayDatas()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultNameValueDatas()函数
+	/**
+	 * 获取数据集结果数据的名称/值对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param nameField 名称数据集字段对象、字段名
+	 * @param valueField 值数据集字段对象、字段名、数组
+	 * @param row 可选，行索引，以0开始，默认为0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @return [{name: ..., value: ...}, ...]
+	 */
+	chartBase.resultNameValueObjects = function(dataSetResult, nameField, valueField, row, count)
+	{
+		return this.resultNameValueDatas(dataSetResult, nameField, valueField, row, count);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultNameValueDatas()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultMapDatas()函数
+	/**
+	 * 获取数据集结果数据经属性映射后的对象数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fieldMap 返回对象属性映射表，格式为：{ 返回对象字段名: 数据集字段对象、字段名、字段数组、字段名数组 }
+	 * @param row 可选，行索引，以0开始，默认为0
+	 * @param count 可选，获取结果数据的最多行数，默认为全部
+	 * @return [{"...": ..., "...": ...}, ...]
+	 * @since 2.10.0
+	 */
+	chartBase.resultMapObjects = function(dataSetResult, fieldMap, row, count)
+	{
+		return this.resultMapDatas(dataSetResult, fieldMap, row, count)
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultMapDatas()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataRow()函数
+	/**
+	 * 获取数据集结果数据指定索引的元素。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param index 索引数值、数值数组
+	 * @return 数据对象、据对象数组，当result、index为null时，将返回null
+	 */
+	chartBase.resultDataElement = function(dataSetResult, index)
+	{
+		return this.resultDataRow(dataSetResult, index);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataRow()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultColumnArrayDatas()函数
+	/**
+	 * 将数据集结果数据的行对象按照指定fields顺序转换为列值数组。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param fields 数据集字段对象数组、字段名数组、字段对象、字段名
+	 * @param row 行索引，以0开始，可选，默认为0
+	 * @param count 获取的最多行数，可选，默认为全部
+	 * @return fields为数组时：[[..., ...], ...]；fields非数组时：[..., ...]
+	 */
+	chartBase.resultColumnArrays = function(dataSetResult, fields, row, count)
+	{
+		return this.resultColumnArrayDatas(dataSetResult, fields, row, count);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultColumnArrayDatas()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataCell()函数
+	/**
+	 * 获取数据集结果数据指定字段、指定行的单元格值，没有则返回undefined。
+	 * 
+	 * @param dataSetResult 数据集结果
+	 * @param field 数据集字段对象、字段名
+	 * @param row 行索引，可选，默认为：0
+	 */
+	chartBase.resultCell = function(dataSetResult, field, row)
+	{
+		return this.resultDataCell(dataSetResult, field, row);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.resultDataCell()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.unreadyDataSetParams()函数
+	/**
+	 * 判断图表的所有数据集参数值是否准备就绪，即：所有必填参数值都不为null。
+	 */
+	chartBase.isDataSetParamValueReady = function()
+	{
+		return (this.unreadyDataSetParams(true).length == 0);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.unreadyDataSetParams()函数
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.dataSetFieldsSigns()
+	/**
+	 * 获取/设置数据集字段标记映射表。
+	 * 
+	 * @param dataSetBind 数据集绑定或其索引
+	 * @param dataSigns 可选，要设置的数据标记映射表，格式为：{ 数据集字段名: 与this.dataSignFullname()函数参数相同、或者其数组, ... }，不设置则执行获取操作
+	 * @param increment 可选，设置操作时是否执行增量设置，仅设置signs中出现的项，true 是；false 否。默认值为：true
+	 * @returns 要获取的标记映射表，格式为：{ 数据集字段名: 标记名字符串数组、null, ... }，不会为null
+	 * @since 2.11.0
+	 */
+	chartBase.dataSetFieldSigns = function(dataSetBind, dataSigns, increment)
+	{
+		return this.dataSetFieldsSigns(dataSetBind, dataSigns, (increment == null ? true : increment));
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.dataSetFieldsSigns()
+	
+	
+	// < @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.on()
+	/**
+	 * 绑定"click"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onClick = function(handler)
+	{
+		this.on("click", handler);
+	};
+	
+	/**
+	 * 绑定"dblclick"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onDblclick = function(handler)
+	{
+		this.on("dblclick", handler);
+	};
+	
+	/**
+	 * 绑定"mousedown"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onMousedown = function(handler)
+	{
+		this.on("mousedown", handler);
+	};
+	
+	/**
+	 * 绑定"mouseup"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onMouseup = function(handler)
+	{
+		this.on("mouseup", handler);
+	};
+	
+	/**
+	 * 绑定"mouseover"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onMouseover = function(handler)
+	{
+		this.on("mouseover", handler);
+	};
+	
+	/**
+	 * 绑定"mouseout"事件处理函数。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应实现on函数，以支持此特性。
+	 * 
+	 * @param handler 事件处理函数：function(chartEvent){}
+	 */
+	chartBase.onMouseout = function(handler)
+	{
+		this.on("mouseout", handler);
+	};
+	// > @deprecated 兼容5.3.1版本的API，将在未来版本移除，请使用chartBase.on()
+	
+	
+	// < @deprecated 兼容5.2.0版本的API，将在未来版本移除，请使用chartBase.resultOf()
+	
+	/**
+	 * 获取/设置图表结果包含的指定索引的数据集结果。
+	 * 
+	 * @param chartResult 图表结果、数据集结果数组
+	 * @param index 索引数值
+	 * @param dataSetResult 可选，要设置的数据集结果
+	 * @return 要获取的数据集结果，没有则返回undefined
+	 */
+	chartBase.resultAt = function(chartResult, index, dataSetResult)
+	{
+		if(dataSetResult === undefined)
+		{
+			return this.resultOf(chartResult, index);
+		}
+		else
+		{
+			this.resultOf(chartResult, index, dataSetResult);
+		}
+	};
+	
+	// > @deprecated 兼容5.2.0版本的API，将在未来版本移除，请使用chartBase.resultOf()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldOfSign()
+	
+	chartBase.dataSetPropertyOfSign = function(dataSetBind, dataSign, nonEmpty)
+	{
+		return this.dataSetFieldOfSign(dataSetBind, dataSign, nonEmpty);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldOfSign()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldsOfSign()
+	
+	chartBase.dataSetPropertiesOfSign = function(dataSetBind, dataSign, sort, nonEmpty)
+	{
+		return this.dataSetFieldsOfSign(dataSetBind, dataSign, sort, nonEmpty);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldsOfSign()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFields()
+	
+	chartBase.dataSetProperties = function(dataSetBind, sort)
+	{
+		return this.dataSetFields(dataSetBind, sort);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFields()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetField()
+	
+	chartBase.dataSetProperty = function(dataSetBind, info)
+	{
+		return this.dataSetField(dataSetBind, info);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetField()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldAlias()
+	
+	chartBase.dataSetPropertyAlias = function(dataSetBind, dataSetField, alias)
+	{
+		return this.dataSetFieldAlias(dataSetBind, dataSetField, alias);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldAlias()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldOrder()
+	
+	chartBase.dataSetPropertyOrder = function(dataSetBind, dataSetField, order)
+	{
+		return this.dataSetFieldOrder(dataSetBind, dataSetField, order);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldOrder()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldSign()
+	
+	chartBase.dataSetPropertySign = function(dataSetBind, dataSetField, dataSign)
+	{
+		return this.dataSetFieldSign(dataSetBind, dataSetField, dataSign);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldSign()
+	
+	
+	// < @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldSigns()
+	
+	chartBase.dataSetPropertySigns = function(dataSetBind, signs, increment)
+	{
+		return this.dataSetFieldSigns(dataSetBind, signs, increment);
+	};
+	
+	// > @deprecated 兼容5.0.0版本的API，将在未来版本移除，请使用chartBase.dataSetFieldSigns()
+	
+	
+	// < @deprecated 兼容4.7.0版本的dg-chart-map功能，将在未来版本移除，请使用chartSupport中的builtinOptionNames.mapName图表选项
+	/**图表地图*/
+	elementAttrConst.MAP = "dg-chart-map";
+	
+	/**
+	 * 初始化图表的地图名。
+	 * 此函数从图表元素的elementAttrConst.MAP属性获取图表地图名。
+	 */
+	chartBase._initMap = function()
+	{
+		var map = this.elementJquery().attr(elementAttrConst.MAP);
+		
+		// < @deprecated 兼容4.7.0版本的chart.map()函数功能，将在未来版本随之一起移除
+		this.map(map);
+		// > @deprecated 兼容4.7.0版本的chart.map()函数功能，将在未来版本随之一起移除
+	};
+	// > @deprecated 兼容4.7.0版本的dg-chart-map功能，将在未来版本移除，请使用chartSupport中的builtinOptionNames.mapName图表选项
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，因为与底层图表组件本身的地图设置选项功能重复，容易引起混淆
+	/**
+	 * 获取/设置图表地图名。
+	 * 此函数用于为地图类图表提供支持，如果不是地图类图表，则不必设置此项。
+	 * 
+	 * 图表初始化时会使用图表元素的"dg-chart-map"属性值执行设置操作。
+	 * 
+	 * 图表渲染器实现相关：
+	 * 图表渲染器应使用此函数获取并应用图表地图。
+	 * 
+	 * @param map 可选，要设置的地图名，没有则执行获取操作
+	 */
+	chartBase.map = function(map)
+	{
+		if(map === undefined)
+			return this._map;
+		else
+			this._map = map;
+	};
+	// > @deprecated 兼容4.7.0版本的API，将在未来版本移除，因为与底层图表组件本身的地图设置选项功能重复，容易引起混淆
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindsMain()
+	/**
+	 * 获取主件数据集绑定对象数组，它们的用途是绘制图表。
+	 * 
+	 * @return []，空数组表示没有主件数据集绑定
+	 */
+	chartBase.chartDataSetsMain = function()
+	{
+		return this.dataSetBindsMain();
+	};
+	// > @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindsMain()
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindsAttachment()
+	/**
+	 * 获取附件数据集绑定对象数组，它们的用途不是绘制图表。
+	 * 
+	 * @return []，空数组表示没有附件数据集绑定
+	 */
+	chartBase.chartDataSetsAttachment = function()
+	{
+		return this.dataSetBindsAttachment();
+	};
+	// > @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindsAttachment()
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindAt()
+	/**
+	 * 获取指定索引的数据集绑定对象，没有则返回undefined。
+	 * 
+	 * @param index
+	 */
+	chartBase.chartDataSetAt = function(index)
+	{
+		return this.dataSetBindAt(index);
+	};
+	// > @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindAt()
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindMain()
+	/**
+	 * 获取第一个主件数据集绑定对象。
+	 * 主件数据集绑定的用途是绘制图表。
+	 * 
+	 * @return 未找到时返回null
+	 * @since 3.0.0
+	 */
+	chartBase.chartDataSetMain = function()
+	{
+		return this.dataSetBindMain();
+	};
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindMain()
+	
+	// < @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindAttachment()
+	/**
+	 * 获取第一个附件数据集绑定对象。
+	 * 附件数据集绑定的用途不是绘制图表。
+	 * 
+	 * @return 未找到时返回null
+	 * @since 3.0.0
+	 */
+	chartBase.chartDataSetAttachment = function()
+	{
+		return this.dataSetBindAttachment();
+	};
+	// > @deprecated 兼容4.7.0版本的API，将在未来版本移除，请使用chartBase.dataSetBindAttachment()
 	
 	// < @deprecated 兼容4.3.1版本的API，将在未来版本移除，请使用chartBase.themeGradualColor()
 	/**
@@ -4065,7 +5526,7 @@
 			factor = undefined;
 		}
 		
-		theme = (theme == null ? this._themeNonNull() : theme);
+		theme = (theme == null ? this.theme() : theme);
 		
 		return chartFactory.themeGradualColor(theme, factor);
 	};
@@ -4117,21 +5578,21 @@
 	
 	// < @deprecated 兼容3.0.1版本的API，将在未来版本移除，请使用chartBase.eventOriginalDataIndex()
 	/**
-	 * 图表事件支持函数：获取/设置图表事件数据（chartBase.eventData(chartEvent)返回值）对应的原始图表数据集索引（chartEvent.originalChartDataSetIndex）。
+	 * 图表事件支持函数：获取/设置图表事件数据（chartBase.eventData(chartEvent)返回值）对应的原始数据集绑定索引（chartEvent.originalChartDataSetIndex）。
 	 * 
 	 * @param chartEvent 图表事件对象，格式应为：{ ... }
-	 * @param originalChartDataSetIndex 可选，要设置的原始图表数据集索引，格式应为：
-	 *                                  当图表事件数据是对象时：图表数据集索引数值、图表数据集索引数值数组
-	 *                                  当图表事件数据是对象数组时：数组，其元素可能为图表数据集索引数值、图表数据集索引数值数组
-	 *                                  其中，图表数据集索引数值允许为null，因为图表事件数据可能并非由图表结果数据构建
-	 * @returns 要获取的原始图表数据集索引，未设置则返回null
+	 * @param originalDataSetBindIndex 可选，要设置的原始数据集绑定索引，格式应为：
+	 *                                  当图表事件数据是对象时：数据集绑定索引数值、数据集绑定索引数值数组
+	 *                                  当图表事件数据是对象数组时：数组，其元素可能为数据集绑定索引数值、数据集绑定索引数值数组
+	 *                                  其中，数据集绑定索引数值允许为null，因为图表事件数据可能并非由图表结果数据构建
+	 * @returns 要获取的原始数据集绑定索引，未设置则返回null
 	 */
-	chartBase.eventOriginalChartDataSetIndex = function(chartEvent, originalChartDataSetIndex)
+	chartBase.eventOriginalChartDataSetIndex = function(chartEvent, originalDataSetBindIndex)
 	{
-		if(originalChartDataSetIndex === undefined)
+		if(originalDataSetBindIndex === undefined)
 			return chartEvent["originalChartDataSetIndex"];
 		else
-			chartEvent["originalChartDataSetIndex"] = originalChartDataSetIndex;
+			chartEvent["originalChartDataSetIndex"] = originalDataSetBindIndex;
 	};
 	
 	/**
@@ -4140,7 +5601,7 @@
 	 * @param chartEvent 图表事件对象，格式应为：{ ... }
 	 * @param originalResultDataIndex 可选，要设置的原始数据集结果数据索引，格式应为：
 	 *                                与chartBase.eventOriginalChartDataSetIndex(chartEvent)返回值格式一致，
-	 *                                只是每一个图表数据集索引数值可能对应一个数据集结果数据索引数值、也可能对应一个数据集结果数据索引数值数组
+	 *                                只是每一个数据集绑定索引数值可能对应一个数据集结果数据索引数值、也可能对应一个数据集结果数据索引数值数组
 	 * @returns 要获取的原始数据集结果数据索引，未设置则返回null
 	 */
 	chartBase.eventOriginalResultDataIndex = function(chartEvent, originalResultDataIndex)
@@ -4152,10 +5613,10 @@
 	};
 	
 	/**
-	 * 图表事件支持函数：设置图表事件对象的原始图表数据集索引、原始数据、原始结果数据索引。
+	 * 图表事件支持函数：设置图表事件对象的原始数据集绑定索引、原始数据、原始结果数据索引。
 	 * 
 	 * @param chartEvent 图表事件对象，格式应为：{ ... }
-	 * @param originalInfo 图表数据对象、数组，或者原始信息对象、数组（格式参考：chartBase.originalInfo函数返回值），或者原始图表数据集索引数值（用于兼容旧版API）
+	 * @param originalInfo 图表数据对象、数组，或者原始信息对象、数组（格式参考：chartBase.originalInfo函数返回值），或者原始数据集绑定索引数值（用于兼容旧版API）
 	 * @param originalResultDataIndex 可选，当originalInfo是索引数值时的原始数据索引，格式可以是：数值、数值数组
 	 */
 	chartBase.eventOriginalInfo = function(chartEvent, originalInfo, originalResultDataIndex)
@@ -4164,7 +5625,7 @@
 		var ordi = null;
 		var odata = null;
 		
-		var updateResults = this.updateResults();
+		var chartResult = this.updateResult();
 		
 		if(originalInfo == null)
 		{
@@ -4174,7 +5635,7 @@
 			ocdsi = originalInfo;
 			ordi = originalResultDataIndex;
 			
-			odata = this.resultDataElement(this.resultAt(updateResults, ocdsi), ordi);
+			odata = this.resultDataRow(this.resultOf(chartResult, ocdsi), ordi);
 		}
 		else
 		{
@@ -4205,11 +5666,11 @@
 					odata[i] = [];
 					
 					for(var j=0; j<myOcdsi.length; j++)
-						odata[i][j] = this.resultDataElement(this.resultAt(updateResults, myOcdsi[j]), (myOrdi ? myOrdi[j] : null));
+						odata[i][j] = this.resultDataRow(this.resultOf(chartResult, myOcdsi[j]), (myOrdi ? myOrdi[j] : null));
 				}
 				else
 				{
-					odata[i] = this.resultDataElement(this.resultAt(updateResults, myOcdsi), myOrdi);
+					odata[i] = this.resultDataRow(this.resultOf(chartResult, myOcdsi), myOrdi);
 				}
 			}
 			
@@ -4229,27 +5690,27 @@
 	
 	// < @deprecated 兼容3.0.1版本的API，将在未来版本移除，请使用chartBase.originalDataIndex()、chartBase.originalDataIndexes()
 	/**
-	 * 获取/设置指定数据对象的原始信息属性值，包括：图表ID、图表数据集索引、结果数据索引。
+	 * 获取/设置指定数据对象的原始信息属性值，包括：图表ID、数据集绑定索引、结果数据索引。
 	 * 图表渲染器在构建用于渲染图表的内部数据对象时，应使用此函数设置其原始信息，以支持在后续的交互、事件处理中获取这些原始信息。
 	 * 
 	 * @param data 数据对象、数据对象数组，格式为：{ ... }、[ { ... }, ... ]，当是数组时，设置操作将为每个元素单独设置原始信息
-	 * @param chartDataSetIndex 要设置的图表数据集索引数值、图表数据集对象（自动取其索引数值），或者它们的数组
+	 * @param dataSetBindIndex 要设置的数据集绑定索引数值、数据集绑定对象（自动取其索引数值），或者它们的数组
 	 * @param resultDataIndex 可选，要设置的结果数据索引，格式为：
-	 *                        当chartDataSetIndex不是数组时：
+	 *                        当dataSetBindIndex不是数组时：
 	 *                        数值、数值数组
-	 *                        当chartDataSetIndex是数组时：
-	 *                        数值，表示chartDataSetIndex数组每个元素的结果数据索引都是此数值
-	 *                        数组（元素可以是数值、数值数组），表示chartDataSetIndex数组每个元素的结果数据索引是此数组对应位置的元素
+	 *                        当dataSetBindIndex是数组时：
+	 *                        数值，表示dataSetBindIndex数组每个元素的结果数据索引都是此数值
+	 *                        数组（元素可以是数值、数值数组），表示dataSetBindIndex数组每个元素的结果数据索引是此数组对应位置的元素
 	 *                        默认值为：0
 	 * @param autoIncrement 可选，当data是数组时：
-	 *                      当chartDataSetIndex不是数组且resultDataIndex是数值时，设置时是否自动递增resultDataIndex；
-	 *                      当chartDataSetIndex是数组且其元素对应位置的结果数据索引是数值时，是否自动递增这个结果数据索引是数值。
+	 *                      当dataSetBindIndex不是数组且resultDataIndex是数值时，设置时是否自动递增resultDataIndex；
+	 *                      当dataSetBindIndex是数组且其元素对应位置的结果数据索引是数值时，是否自动递增这个结果数据索引是数值。
 	 *                      默认值为：true
 	 * @returns 要获取的原始信息属性值(可能为null），格式为：
 	 *									{
 	 *										//图表ID
 	 *										chartId: "...",
-	 *										//图表数据集索引数值、数值数组
+	 *										//数据集绑定索引数值、数值数组
 	 *										chartDataSetIndex: ...,
 	 *										//结果数据索引，格式为：
 	 *                                      //当chartDataSetIndex不是数组时：
@@ -4260,7 +5721,7 @@
 	 *									}
 	 *									当data是数组时，将返回此结构的数组
 	 */
-	chartBase.originalInfo = function(data, chartDataSetIndex, resultDataIndex, autoIncrement)
+	chartBase.originalInfo = function(data, dataSetBindIndex, resultDataIndex, autoIncrement)
 	{
 		var pname = chartFactory._ORIGINAL_DATA_INDEX_PROP_NAME;
 		
@@ -4287,7 +5748,7 @@
 			if(data == null)
 				return;
 			
-			//(data, chartDataSetIndex, true)、(data, chartDataSetIndex, false)
+			//(data, dataSetBindIndex, true)、(data, dataSetBindIndex, false)
 			if(resultDataIndex === true || resultDataIndex === false)
 			{
 				autoIncrement = resultDataIndex;
@@ -4296,25 +5757,25 @@
 			
 			resultDataIndex = (resultDataIndex === undefined ? 0 : resultDataIndex);
 			
-			var isCdsiArray = $.isArray(chartDataSetIndex);
+			var isCdsiArray = $.isArray(dataSetBindIndex);
 			
 			if(isCdsiArray)
 			{
 				var cdsiNew = [];
 				
-				for(var i=0; i<chartDataSetIndex.length; i++)
+				for(var i=0; i<dataSetBindIndex.length; i++)
 				{
-					cdsiNew[i] = (chartDataSetIndex[i] != null && chartDataSetIndex[i].index !== undefined ?
-									chartDataSetIndex[i].index : chartDataSetIndex[i]);
+					cdsiNew[i] = (dataSetBindIndex[i] != null && dataSetBindIndex[i].index !== undefined ?
+									dataSetBindIndex[i].index : dataSetBindIndex[i]);
 				}
 				
-				chartDataSetIndex = cdsiNew;
+				dataSetBindIndex = cdsiNew;
 				
 				if(!$.isArray(resultDataIndex))
 				{
 					var rdiNew = [];
 					
-					for(var i=0; i<chartDataSetIndex.length; i++)
+					for(var i=0; i<dataSetBindIndex.length; i++)
 						rdiNew[i] = resultDataIndex;
 					
 					resultDataIndex = rdiNew;
@@ -4322,8 +5783,8 @@
 			}
 			else
 			{
-				chartDataSetIndex = (chartDataSetIndex != null && chartDataSetIndex.index !== undefined ?
-										chartDataSetIndex.index : chartDataSetIndex);
+				dataSetBindIndex = (dataSetBindIndex != null && dataSetBindIndex.index !== undefined ?
+										dataSetBindIndex.index : dataSetBindIndex);
 			}
 			
 			if(isDataArray)
@@ -4352,7 +5813,7 @@
 					var originalInfo =
 					{
 						"chartId": this.id,
-						"chartDataSetIndex": chartDataSetIndex
+						"chartDataSetIndex": dataSetBindIndex
 					};
 					
 					if(!autoIncrement)
@@ -4389,7 +5850,7 @@
 				var originalInfo =
 				{
 					"chartId": this.id,
-					"chartDataSetIndex": chartDataSetIndex,
+					"chartDataSetIndex": dataSetBindIndex,
 					"resultDataIndex": resultDataIndex
 				};
 				
@@ -4403,19 +5864,19 @@
 	/**
 	 * 返回第一个主件或者附件数据集结果，没有则返回undefined。
 	 * 
-	 * @param results
+	 * @param chartResult 图表结果、数据集结果数组
 	 * @param attachment 可选，true 获取第一个附件图表数据集结果；false 获取第一个主件图表数据集结果。默认值为：false
 	 */
-	chartBase.resultFirst = function(results, attachment)
+	chartBase.resultFirst = function(chartResult, attachment)
 	{
 		attachment = (attachment == null ? false : attachment);
 		
 		var index = undefined;
 		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
+		var dataSetBinds = this.dataSetBinds();
+		for(var i=0; i<dataSetBinds.length; i++)
 		{
-			var isAttachment = chartDataSets[i].attachment;
+			var isAttachment = this.dataSetAttachment(dataSetBinds[i]);
 			
 			if((isAttachment && attachment == true) || (!isAttachment && attachment != true))
 			{
@@ -4424,7 +5885,7 @@
 			}
 		}
 		
-		return (index == null ? undefined : this.resultAt(results, index));
+		return (index == null ? undefined : this.resultOf(chartResult, index));
 	};
 	// > @deprecated 兼容2.13.0版本的API，将在未来版本移除，请使用chartBase.resultOf()
 	
@@ -4433,22 +5894,22 @@
 	 * 获取第一个主件或者附件数据集结果的数据对象数组。
 	 * 如果数据对象是null，返回空数组：[]；如果数据对象是数组，则直接返回；否则，返回：[ 数据对象 ]。
 	 * 
-	 * @param results 数据集结果数组
+	 * @param chartResult 图表结果、数据集结果数组
 	 * @param attachment 可选，true 获取第一个附件图表数据集结果；false 获取第一个主件图表数据集结果。默认值为：false
 	 * @return 不会为null的数组
 	 */
-	chartBase.resultDatasFirst = function(results, attachment)
+	chartBase.resultDatasFirst = function(chartResult, attachment)
 	{
-		var result = this.resultFirst(results, attachment);
-		return this.resultDatas(result);
+		var dataSetResult = this.resultFirst(chartResult, attachment);
+		return this.resultDatas(dataSetResult);
 	};
 	// > @deprecated 兼容2.13.0版本的API，将在未来版本移除，请使用chartBase.resultDatasOf()
 	
-	// < @deprecated 兼容2.13.0版本的API，将在未来版本移除，已被chartBase.chartDataSetMain()、chartDataSetAttachment()取代
+	// < @deprecated 兼容2.13.0版本的API，将在未来版本移除，已被chartBase.dataSetBindMain()、dataSetBindAttachment()取代
 	/**
-	 * 获取第一个主件或者附件图表数据集对象。
+	 * 获取第一个主件或者附件数据集绑定对象。
 	 * 
-	 * @param attachment 可选，true 获取第一个附件图表数据集；false 获取第一个主件图表数据集。默认值为：false
+	 * @param attachment 可选，true 获取第一个附件数据集绑定；false 获取第一个主件数据集绑定。默认值为：false
 	 * @return {...} 或  undefined
 	 */
 	chartBase.chartDataSetFirst = function(attachment)
@@ -4457,21 +5918,21 @@
 		
 		var re = undefined;
 		
-		var chartDataSets = this.chartDataSets;
-		for(var i=0; i<chartDataSets.length; i++)
+		var dataSetBinds = this.dataSetBinds();
+		for(var i=0; i<dataSetBinds.length; i++)
 		{
-			var isAttachment = chartDataSets[i].attachment;
+			var isAttachment = this.dataSetAttachment(dataSetBinds[i]);
 			
 			if((isAttachment && attachment == true) || (!isAttachment && attachment != true))
 			{
-				re = chartDataSets[i];
+				re = dataSetBinds[i];
 				break;
 			}
 		}
 		
 		return re;
 	};
-	// > @deprecated 兼容2.13.0版本的API，将在未来版本移除，已被chartBase.chartDataSetMain()、chartDataSetAttachment()取代
+	// > @deprecated 兼容2.13.0版本的API，将在未来版本移除，已被chartBase.dataSetBindMain()、dataSetBindAttachment()取代
 	
 	// < @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.hasDataSetParam()取代
 	/**
@@ -4483,33 +5944,33 @@
 	};
 	// > @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.hasDataSetParam()取代
 	
-	// < @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetPropertyAlias()取代
+	// < @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetFieldAlias()取代
 	/**
-	 * 获取数据集属性标签，它不会返回null。
-	 *  
-	 * @param dataSetProperty
+	 * 获取数据集字段标签，它不会返回null。
+	 * 
+	 * @param dataSetField
 	 * @returns "..."
 	 */
-	chartBase.dataSetPropertyLabel = function(dataSetProperty)
+	chartBase.dataSetPropertyLabel = function(dataSetField)
 	{
-		if(!dataSetProperty)
+		if(!dataSetField)
 			return "";
 		
-		var label = (dataSetProperty.label ||  dataSetProperty.name);
+		var label = (dataSetField.label ||  dataSetField.name);
 		
 		return (label || "");
 	};
-	// > @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetPropertyAlias()取代
+	// > @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetFieldAlias()取代
 	
 	// < @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetAlias()取代
 	/**
-	 * 获取指定图表数据集对象名称，它不会返回null。
+	 * 获取指定数据集绑定对象名称，它不会返回null。
 	 * 
-	 * @param chartDataSet 图表数据集对象
+	 * @param dataSetBind 数据集绑定对象
 	 */
-	chartBase.chartDataSetName = function(chartDataSet)
+	chartBase.chartDataSetName = function(dataSetBind)
 	{
-		return this.dataSetAlias(chartDataSet);
+		return this.dataSetAlias(dataSetBind);
 	};
 	// > @deprecated 兼容2.9.0版本的API，将在未来版本移除，已被chartBase.dataSetAlias()取代
 	
@@ -4649,15 +6110,15 @@
 	};
 	// > @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.renderer取代
 	
-	// < @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.chartDataSets取代
+	// < @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.dataSetBinds()取代
 	/**
-	 * 获取所有图表数据集对象数组。
+	 * 获取所有数据集绑定对象数组。
 	 */
 	chartBase.chartDataSetsNonNull = function()
 	{
-		return (this.chartDataSets || []);
+		return this.dataSetBinds();
 	};
-	// > @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.chartDataSets取代
+	// > @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.dataSetBinds()取代
 	
 	// < @deprecated 兼容2.3.0版本的API，将在未来版本移除，已被chartBase.name取代
 	/**
@@ -4684,21 +6145,21 @@
 	
 	// < @deprecated 兼容1.8.1版本的API，将在未来版本移除，已被chartBase.dataSetParamValues取代
 	/**
-	 * 获取指定图表数据集参数值对象。
+	 * 获取指定数据集绑定参数值对象。
 	 */
-	chartBase.getDataSetParamValues = function(chartDataSet)
+	chartBase.getDataSetParamValues = function(dataSetBind)
 	{
-		return this.dataSetParamValues(chartDataSet);
+		return this.dataSetParamValues(dataSetBind);
 	};
 	// > @deprecated 兼容1.8.1版本的API，将在未来版本移除，已被chartBase.dataSetParamValues取代
 	
 	// < @deprecated 兼容1.8.1版本的API，将在未来版本移除，已被chartBase.dataSetParamValues取代
 	/**
-	 * 设置指定图表数据集多个参数值。
+	 * 设置指定数据集绑定多个参数值。
 	 */
-	chartBase.setDataSetParamValues = function(chartDataSet, paramValues)
+	chartBase.setDataSetParamValues = function(dataSetBind, paramValues)
 	{
-		this.dataSetParamValues(chartDataSet, paramValues);
+		this.dataSetParamValues(dataSetBind, paramValues);
 	};
 	// > @deprecated 兼容1.8.1版本的API，将在未来版本移除，已被chartBase.dataSetParamValues取代
 	
@@ -4730,25 +6191,25 @@
 		for(var i=0; i<originalDataIndexAry.length; i++)
 		{
 			var odi = originalDataIndexAry[i];
-			var chartDataSetIndex = odi.chartDataSetIndex;
+			var dataSetBindIndex = odi.dataSetBindIndex;
 			var resultDataIndex = odi.resultDataIndex;
-			var results = chart.updateResults();
+			var chartResult = chart.updateResult();
 			var originalDataMy = null;
 			
-			if($.isArray(chartDataSetIndex))
+			if($.isArray(dataSetBindIndex))
 			{
 				originalDataMy = [];
 				
-				for(var j=0; j<chartDataSetIndex.length; j++)
+				for(var j=0; j<dataSetBindIndex.length; j++)
 				{
-					var result = chart.resultAt(results, chartDataSetIndex[j]);
-					originalDataMy[j] = chart.resultDataElement(result, (resultDataIndex != null ? resultDataIndex[j] : null));
+					var result = chart.resultOf(chartResult, dataSetBindIndex[j]);
+					originalDataMy[j] = chart.resultDataRow(result, (resultDataIndex != null ? resultDataIndex[j] : null));
 				}
 			}
 			else
 			{
-				var result = chart.resultAt(results, chartDataSetIndex);
-				originalDataMy = chart.resultDataElement(result, resultDataIndex);
+				var result = chart.resultOf(chartResult, dataSetBindIndex);
+				originalDataMy = chart.resultDataRow(result, resultDataIndex);
 			}
 			
 			originalData[i] = originalDataMy;
@@ -4758,55 +6219,38 @@
 	};
 	
 	/**
-	 * 获取/设置单条图表展示数据的原始数据索引（图表ID、图表数据集索引、结果数据索引）。
+	 * 获取/设置单条图表展示数据的原始数据索引（图表ID、数据集绑定索引、结果数据索引）。
 	 * 
-	 * @param data 展示数据，格式为：{ ... }、[ ... ]，对于设置操作，当展示数据是对象时，将为其添加一个额外属性；
-	 * 			   当展示数据是数组时，如果末尾元素已是索引信息对象，则替换；否则，追加一个元素
-	 * @param chartDataSetIndex 图表数据集索引数值、数值数组
+	 * @param data 展示数据，格式为：{ ... }、[ ... ]
+	 * @param dataSetBindIndex 数据集绑定索引数值、数值数组
 	 * @param resultDataIndex 图表数据集结果数据索引数值、数值数组、数值数组的数组
 	 * @returns 要获取的原始数据索引(可能为null），格式参考chartBase.originalDataIndexes()函数返回值
 	 * @since 3.1.0
 	 */
-	chartFactory.originalDataIndex = function(data, chartId, chartDataSetIndex, resultDataIndex)
+	chartFactory.originalDataIndex = function(data, chartId, dataSetBindIndex, resultDataIndex)
 	{
 		var pname = chartFactory._ORIGINAL_DATA_INDEX_PROP_NAME;
-		var isArray = $.isArray(data);
 		
 		//获取
 		if(arguments.length <= 1)
 		{
-			if(isArray)
-			{
-				var tailEle = (data.length > 0 ? data[data.length - 1] : null);
-				return (tailEle && tailEle["chartId"] !== undefined && tailEle["chartDataSetIndex"] !== undefined 
-							? tailEle : undefined);
-			}
-			else
-				return (data == null ? undefined : data[pname]);
+			return (data == null ? undefined : data[pname]);
 		}
 		else
 		{
 			var originalIdx =
 			{
 				"chartId": chartId,
-				"chartDataSetIndex": chartDataSetIndex,
+				"dataSetBindIndex": dataSetBindIndex,
 				"resultDataIndex": resultDataIndex
 			};
 			
-			if(isArray)
-			{
-				var tailEle = (data.length > 0 ? data[data.length - 1] : null);
-				
-				//替换
-				if(tailEle && tailEle["chartId"] !== undefined && tailEle["chartDataSetIndex"] !== undefined)
-				{
-					data[data.length - 1] = originalIdx;
-				}
-				else
-					data.push(originalIdx);
-			}
-			else
-				data[pname] = originalIdx;
+			// < @deprecated 兼容4.7.0版本的originalIdx.chartDataSetIndex，将在未来版本移除，已被originalIdx.dataSetBindIndex取代
+			originalIdx.chartDataSetIndex = originalIdx.dataSetBindIndex;
+			// > @deprecated 兼容4.7.0版本的originalIdx.chartDataSetIndex，将在未来版本移除，已被originalIdx.dataSetBindIndex取代
+			
+			//无需区分是否数组，因为数组也可以这样设置属性
+			data[pname] = originalIdx;
 		}
 	};
 	
@@ -5192,19 +6636,33 @@
 	};
 	
 	/**
-	 * 将给定URL转换为web上下文路径URL。
+	 * 为指定URL添加系统根路径前缀。
+	 * 只有当URL以"/"开头时才会添加系统根路径前缀，否则，将直接返回原URL。
+	 * 当需要访问系统内其他功能模块的资源时，应为其URL添加系统根路径前缀。
 	 * 
 	 * @param webContext web上下文
-	 * @param url 待转换的URL
+	 * @param url 可选，要处理的URL
+	 * @return 添加后的新URL，如果未设置url参数，将返回系统根路径
 	 */
 	chartFactory.toWebContextPathURL = function(webContext, url)
 	{
 		var contextPath = webContext.contextPath;
 		
-		if(url.indexOf("/") == 0)
-			url = contextPath + url;
-		
-		return url;
+		// (webContext)
+		if(url === undefined)
+		{
+			return contextPath;
+		}
+		// (webContext, url)
+		else
+		{
+			if(url != null && url !== "" && url.charAt(0) == "/")
+			{
+				url = contextPath + url;
+			}
+			
+			return url;
+		}
 	};
 	
 	/**
@@ -5228,6 +6686,31 @@
 	};
 	
 	/**
+	 * 获取HTML元素自身或其子孙元素中带有非空图表部件ID属性（"dg-chart-widget"）的全部元素。
+	 * 
+	 * @param element HTML元素、Jquery对象
+	 * @returns DOM数组
+	 */
+	chartFactory.domsWithWidgetId = function(element)
+	{
+		element = $(element);
+		element = element.add($("["+chartFactory.elementAttrConst.WIDGET+"]", element));
+		
+		var widgetEles = [];
+		
+		//处理元素自身
+		element.each(function()
+		{
+			if(!chartFactory.isNullOrEmpty(chartFactory.elementWidgetId(this)))
+			{
+				widgetEles.push(this);
+			}
+		});
+		
+		return widgetEles;
+	};
+	
+	/**
 	 * 获取当前在指定HTML元素上渲染的图表对象，返回null表示元素上并未渲染图表。
 	 * 
 	 * @param element HTML元素、Jquery选择器、Jquery对象
@@ -5239,6 +6722,30 @@
 	};
 	
 	/**
+	 * 校验设置图表元素ID。
+	 * 图表元素必须有ID，且要与图表中的元素ID同步。
+	 * 
+	 * @param element
+	 * @param chart 可选，要同步的图表
+	 */
+	chartFactory.checkSetChartElementId = function(element, chart)
+	{
+		element = $(element);
+		
+		var elementId = element.attr("id");
+		if(!elementId)
+		{
+			elementId = chartFactory.uid();
+			element.attr("id", elementId);
+		}
+		
+		if(chart)
+			chart.elementId = elementId;
+		
+		return elementId;
+	};
+	
+	/**
 	 * 获取Jquery对象。
 	 * 
 	 * @param element HTML元素、HTML元素数组、Jquery选择器、Jquery对象
@@ -5246,6 +6753,33 @@
 	chartFactory.toJqueryObj = function(element)
 	{
 		return $(element);
+	};
+	
+	/**
+	 * 给URL追加参数。
+	 * 
+	 * @param url
+	 * @param name 参数名
+	 * @param value 参数值
+	 */
+	chartFactory.appendUrlParam = function(url, name, value)
+	{
+		name = encodeURIComponent(name);
+		value = encodeURIComponent(value);
+		
+		var anchor = "";
+		var aidx = url.indexOf('#');
+		if(aidx >= 0)
+		{
+			var tmpUrl = url.substring(0, aidx);
+			anchor = url.substring(aidx);
+			url = tmpUrl;
+		}
+		
+		var qidx = url.indexOf('?');
+		url += (qidx < 0 ? "?" : "&") + name + "=" + value;
+		
+		return url + anchor;
 	};
 	
 	/**
@@ -5268,6 +6802,31 @@
 		}
 		
 		return (re || defaultValue);
+	};
+	
+	/**
+	 * 静默执行函数。
+	 * 
+	 * @param func 函数
+	 * @param exceptionHandler 可选，异常处理函数
+	 */
+	chartFactory.executeSilently = function(func, exceptionHandler)
+	{
+		try
+		{
+			return func();
+		}
+		catch(e)
+		{
+			if(exceptionHandler)
+			{
+				return exceptionHandler(e);
+			}
+			else
+			{
+				chartFactory.logException(e);
+			}
+		}
 	};
 	
 	/**
@@ -5317,6 +6876,9 @@
 		else
 		{
 			var index = parseInt((gcs.length-1) * factor);
+			
+			index = (index < 0 ? 0 : index);
+			index = (index >= gcs.length ? gcs.length - 1 : index);
 			
 			if(index == 0 && factor > 0)
 				index = 1;
@@ -5368,7 +6930,7 @@
 	/**
 	 * 将颜色转换为6位HEX字符串。
 	 * 
-	 * @param color 颜色字符串，格式为："#FFF"、"#FFFFFF"、"rgb(255,255,255)"
+	 * @param color 颜色字符串，格式为："#FFF"、"#FFFFFF"、"#FFFFFF80"、"rgb(255,255,255)"、"rgba(255,255,255, 0.5)"
 	 * @param prefix 可选，是否添加"#"前缀
 	 * @returns 6位HEX字符串，格式示例："FFFFFF"
 	 */
@@ -5386,28 +6948,31 @@
 		var r = new Number(color.r).toString(16);
 		var g = new Number(color.g).toString(16);
 		var b = new Number(color.b).toString(16);
+		var a = (color.a != null ? new Number(parseInt(color.a*255)).toString(16) : undefined);
 		
 		color = (prefix ? "#" : "") + (r.length == 1 ? "0"+r : r)
 					 + (g.length == 1 ? "0"+g : g)
-					  + (b.length == 1 ? "0"+b : b);
+					 + (b.length == 1 ? "0"+b : b)
+					 + (a != null ? (a.length == 1 ? "0"+a : a) : "");
 		
 		return color;
 	};
 	
 	/**
 	 * 解析颜色对象。
-	 * 将颜色字符串解析为{r: number, g: number, b: number}格式的对象。
+	 * 将颜色字符串解析为{r: number, g: number, b: number, a: number}格式的对象。
 	 * 
-	 * @param color 颜色字符串，格式为："#FFF"、"#FFFFFF"、"rgb(255,255,255)"
+	 * @param color 颜色字符串，格式为："#FFF"、"#FFFFFF"、"#FFFFFF80"、"rgb(255,255,255)"、"rgba(255,255,255, 0.5)"
 	 */
 	chartFactory.parseColor = function(color)
 	{
-		var re = {r: 0, g: 0, b: 0};
+		//默认a值应为undefined
+		var re = {r: 0, g: 0, b: 0, a: undefined};
 		
 		if(!color)
 			return re;
 		
-		//是颜色名称，则通过元素css函数转换
+		//是颜色名称（red、green、yellow等），则通过元素css函数转换
 		if((color.charAt(0) != '#') && (color.indexOf("(") < 0))
 		{
 			var elementId = (chartFactory._ELEMENT_ID_FOR_CVT_COLOR == null ?
@@ -5422,7 +6987,7 @@
 			color = $colorEle.css("color");
 		}
 		
-		// #FFF、#FFFFFF
+		// #FFF、#FFFFFF、#FFFFFFFF
 		if(color.charAt(0) == '#')
 		{
 			color = color.substring(1);
@@ -5436,24 +7001,48 @@
 				re.g = parseInt(color.substr(2, 2), 16);
 			if(color.length >= 6)
 				re.b = parseInt(color.substr(4, 2), 16);
+			if(color.length >= 8)
+				re.a = parseInt(color.substr(6, 2), 16)/255;
 		}
-		// rgb()
+		// rgb()、rgba()
 		else
 		{
 			var si = color.indexOf("(");
-			var ei = (si >= 0 ? color.indexOf(")", si+1) : -1);
+			var ei = (si >= 0 ? color.lastIndexOf(")") : -1);
 			
 			if(ei > si)
 			{
-				color = color.substring(si+1, ei).split(",");
+				color = color.substring(si+1, ei);
 				
-				if(color.length >= 1)
-					re.r = parseInt(color[0]);
-				if(color.length >= 2)
-					re.g = parseInt(color[1]);
-				if(color.length >= 3)
-					re.b = parseInt(color[2]);
+				//以逗号分隔
+				if(color.indexOf(",") >= 0)
+				{
+					color = color.split(",");
+				}
+				//以空格分隔
+				else if(color.indexOf(" ") >= 0)
+				{
+					color = color.split(" ");
+					
+					//rbg(r g b / a)
+					if(color.length >= 4 && color[3] == "/")
+					{
+						color[3] = color[4];
+						color[4] = null;
+					}
+				}
 			}
+			else
+				color = [];
+			
+			if(color.length >= 1)
+				re.r = parseInt(color[0]);
+			if(color.length >= 2)
+				re.g = parseInt(color[1]);
+			if(color.length >= 3)
+				re.b = parseInt(color[2]);
+			if(color.length >= 4 && color[3] != null)
+				re.a = parseFloat(color[3]);
 		}
 		
 		return re;
@@ -5461,8 +7050,14 @@
 	
 	/**
 	 * 设置指定ID的样式表css文本。
-	 * 如果样式表不存在，将会自动创建，且会插入<head>中的靠前位置，确保其css效果优先级低于用户定义的css。
-	 *
+	 * 如果样式表不存在，将会自动创建，并插入至<head>中。
+	 * 插入规则：
+	 * 一级优先：插入在最后一个生成样式表之后，确保新生成样式表可以覆盖全部旧生成样式表；
+	 * 二级优先：插入在最后一个看板引入库（dg-lib-name）之后，确保全部生成样式表可以覆盖全部引入库中的样式表；
+	 * 三级优先：插入在第一个用户引入<link>元素之前，确保看板内用户引入的<link>样式表可以覆盖全部生成样式表；
+	 * 四级优先：插入在第一个用户定义<style>元素之前，确保看板内用户定义的<style>样式表可以覆盖全部生成样式表；
+	 * 五级优先：插入在<head>末尾。
+	 * 
 	 * @param styleId 样式表元素ID
 	 * @param cssText css文本内容
 	 */
@@ -5482,33 +7077,37 @@
 		var $head = $("head:first");
 		
 		var $lastGenStyle = $("style[dg-generated-style]:last", $head);
-		
-		//后插入的优先级应高于先插入的
 		if($lastGenStyle.length > 0)
 		{
 			$lastGenStyle.after($style);
 			return;
 		}
 		
-		var $lastImport = $("[dg-import-name]:last", $head);
+		var $lastImport = $("["+chartFactory.LIB_ATTR_NAME+"]:last", $head);
 		
-		//优先级应高于导入的资源
 		if($lastImport.length > 0)
 		{
 			$lastImport.after($style);
 			return;
 		}
 		
-		var $lastLink = $("link:last", $head);
+		var $firstLink = $("link:first", $head);
 		
-		//优先级应高于link的css
-		if($lastLink.length > 0)
+		if($firstLink.length > 0)
 		{
-			$lastLink.after($style);
+			$firstLink.before($style);
 			return;
 		}
 		
-		$head.prepend($style);
+		var $firstStyle = $("style:first", $head);
+		
+		if($firstStyle.length > 0)
+		{
+			$firstStyle.before($style);
+			return;
+		}
+		
+		$head.append($style);
 	};
 	
 	/**
@@ -5539,7 +7138,7 @@
 		var time = (this._uid_time == null ? (this._uid_time = chartFactory.currentDateMs().toString(16)) : this._uid_time);
 		this._uid_seq++;
 		
-		return this._BUILT_IN_NAME_PART + time + seq;
+		return "dgid" + time + seq;
 	};
 	
 	/**
@@ -5609,23 +7208,6 @@
 	};
 	
 	/**
-	 * 元素是否是"position:static"的。
-	 */
-	chartFactory.isStaticPosition = function(ele)
-	{
-		ele = $(ele);
-		
-		var p = ele.css("position");
-		
-		if(!p || p == "static")
-			return true;
-		else if(p == "inherit")
-			return this.isStaticPosition(ele.parent());
-		else
-			return false;
-	};
-	
-	/**
 	 * 将给定值按照HTML规范转义，如果不是字符串，直接返回原值。
 	 */
 	chartFactory.escapeHtml = function(value)
@@ -5684,26 +7266,26 @@
 		{
 			if(console.error)
 				console.error(exception);
-			else if(console.warn)
-				console.warn(exception);
-			else if(console.info)
-				console.info(exception);
+			else
+				chartFactory.logWarn(exception);
 		}
 	};
 	
 	/**
 	 * 记录警告日志。
 	 * 
-	 * @param exception 警告消息字符串
+	 * @param msg 警告消息字符串
 	 */
-	chartFactory.logWarn = function(exception)
+	chartFactory.logWarn = function(msg)
 	{
 		if(typeof(console) != "undefined")
 		{
 			if(console.warn)
-				console.warn(exception);
+				console.warn(msg);
 			else if(console.info)
-				console.info(exception);
+				console.info(msg);
+			else if(console.log)
+				console.log(msg);
 		}
 	};
 	
@@ -5743,7 +7325,129 @@
 	//是否为null、undefined、空字符串、空数组
 	chartFactory.isNullOrEmpty = function(v)
 	{
-		return (v == null || v === "" || v.length == 0);
+		return (v == null || v === "" || (v.length !== undefined && v.length === 0));
+	};
+	
+	/**
+	 * 在数组中查找元素，返回其索引
+	 * 
+	 * @param array
+	 * @param value
+	 * @returns 索引数值，-1 表示没有找到
+	 */
+	chartFactory.indexInArray = function(array, value)
+	{
+		if(array == null)
+			return -1;
+		
+		for(var i=0; i<array.length; i++)
+		{
+			if(array[i] === value)
+			{
+				return i;
+			}
+		}
+		
+		return -1;
+	};
+	
+	/**
+	 * 比较版本号。
+	 * 支持版本号格式示例：
+	 * 1、1-alpha、1.1、1.1-alpha、1.1.1、1.1.1-alpha、1.1.1.1、1.1.1.1-alpha
+	 * 
+	 * 此函数原封不动地拷贝自util.js中的$.compareVersion函数
+	 * 
+	 * @param v1
+	 * @param v2
+	 * @returns -1 v1低于v2；0 v1等于v2；1 v1高于v2
+	 */
+	chartFactory.compareVersion = function(v1, v2)
+	{
+		if(v1 === v2)
+			return 0;
+		
+		var b1 = "";
+		var b2 = "";
+		
+		var bIdx1 = v1.indexOf("-");
+		if(bIdx1 > 0)
+		{
+			b1 = (bIdx1 >= v1.length - 1 ? "" : v1.substring(bIdx1 + 1));
+			v1 = v1.substring(0, bIdx1);
+		}
+		
+		var bIdx2 = v2.indexOf("-");
+		if(bIdx2 > 0)
+		{
+			b2 = (bIdx2 >= v2.length - 1 ? "" : v2.substring(bIdx2 + 1));
+			v2 = v2.substring(0, bIdx2);
+		}
+		
+		var v1ds = v1.split(".");
+		var v2ds = v2.split(".");
+		
+		for(var i= 0, len = Math.max(v1ds.length, v2ds.length); i<len; i++)
+		{
+			var num1 = (v1ds[i] == null ? 0 : parseInt(v1ds[i]));
+			var num2 = (v2ds[i] == null ? 0 : parseInt(v2ds[i]));
+			
+			if(num1 > num2)
+			{
+				return 1;
+			}
+			else if(num1 < num2)
+			{
+				return -1;
+			}
+		}
+		
+		if(b1 > b2)
+			return 1;
+		else if(b1 < b2)
+			return -1;
+		else
+			return 0;
+	};
+	
+	/**
+	 * 获取/设置内置图表选项名的选项值。
+	 * 内置选项名是公用的，可能会出现未知的命名冲突问题，使用此函数获取/设置可以避免此问题，
+	 * 因为此函数支持在图表选项中定义"customOptionNames"选项自定义选项名。
+	 * 
+	 * @param options 获取时可为null，图表选项对象，格式为：{ ... }
+	 * @param name 内置选项名
+	 * @param value 要设置的选项值
+	 * @returns 要获取的选项值
+	 */
+	chartFactory.builtinOptionValue = function(options, name, value)
+	{
+		var customNames = (options == null ? null : options[builtinOptionNames.customOptionNames]);
+		name = (customNames && customNames[name] ? customNames[name] : name);
+		
+		if(value === undefined)
+		{
+			return (options ? options[name] : null);
+		}
+		else
+		{
+			options[name] = value;
+		}
+	};
+	
+	/**
+	 * 获取/设置选项值
+	 */
+	chartFactory.optionValue = function(options, name, value)
+	{
+		if(value === undefined)
+		{
+			return (options ? options[name] : null);
+		}
+		else
+		{
+			options[name] = value;
+		}
 	};
 	
 	/**内置名字标识片段*/
@@ -6028,7 +7732,7 @@
 	{
 		var axisColor = chartFactory.themeGradualColor(chartTheme, 0.7);
 		var axisScaleLineColor = chartFactory.themeGradualColor(chartTheme, 0.35);
-		var areaColor0 = chartFactory.themeGradualColor(chartTheme, 0.15);
+		var areaColor0 = chartFactory.themeGradualColor(chartTheme, 0.1);
 		var areaBorderColor0 = chartFactory.themeGradualColor(chartTheme, 0.3);
 		var areaColor1 = chartFactory.themeGradualColor(chartTheme, 0.25);
 		var areaBorderColor1 = chartFactory.themeGradualColor(chartTheme, 0.5);
@@ -6065,6 +7769,9 @@
 				},
 				"lineStyle" : {
 					"width" : 2
+				},
+				"label": {
+					"color": chartTheme.color
 				},
 				"symbol" : "circle",
 				"symbolSize" : 8,
@@ -6106,8 +7813,7 @@
 					"barBorderWidth" : 0,
 					"barBorderColor" : chartTheme.borderColor
 				},
-				"label":
-				{
+				"label": {
 					"color": chartTheme.color
 				},
 				"emphasis" : {
@@ -6126,8 +7832,7 @@
 					"borderWidth" : 0,
 					"borderColor" : chartTheme.borderColor
 				},
-				"label":
-				{
+				"label": {
 					"color": chartTheme.color
 				},
 				"emphasis" :
@@ -6153,6 +7858,9 @@
 					"borderColor" : chartTheme.borderColor,
 					"shadowBlur" : 3,
 					"shadowColor" : shadowColor
+				},
+				"label": {
+					"color": chartTheme.color
 				},
 				"emphasis" : {
 					"itemStyle" : {
@@ -6448,7 +8156,7 @@
 			"map" : {
 				"roam" : true,
 				"itemStyle" : {
-					"areaColor" : areaColor1,
+					"areaColor" : areaBorderColor0,
 					"borderColor" : areaBorderColor1,
 					"borderWidth" : 0.5
 				},
@@ -6488,7 +8196,7 @@
 			},
 			"geo" : {
 				"itemStyle" : {
-					"areaColor" : areaColor1,
+					"areaColor" : areaBorderColor0,
 					"borderColor" : areaBorderColor1,
 					"borderWidth" : 0.5
 				},
@@ -6820,6 +8528,975 @@
 		
 		return theme;
 	};
+	
+	/**
+	 * 加载库，并在全部加载完成后（无论是否成功）执行回调函数。
+	 * 库对象结构为：
+	 * {
+	 *   //库名称，应尽量使用库本身定义的全局名称
+	 *   name: "..."、[ "...", ... ],
+	 *   //版本号，应符合语义化版本规范："X.Y.Z"、"X.Y.Z-BUILD"
+	 *   version: "...",
+	 *   //库源
+	 *   source:
+	 *   //库源URL
+	 *   "..."、
+	 *   //库源对象
+	 *   {
+	 *     //库源URL，应是可直接加载的URL
+	 *     url: "lib0/b.css",
+	 *     //可选，库源类型，自动识别JS、CSS
+	 *     type: "css"
+	 *   }、
+	 *   //库源URL/对象数组
+	 *   [ "...", { ... }, ... ],
+	 *   //可选，依赖库名称/数组
+	 *   depend: "..."、[ "..."、... ],
+	 *   //可选，检查当前环境是否已经加载了这个名称的库，返回值：true 是；其他 否。
+	 *   //默认值是：如果this.name已在window下已定义，返回true；否则，返回false。
+	 *   loaded: function(){ ... }
+	 * }
+	 * 
+	 * @param lib 库对象、数组
+	 * @param callback 加载完成后回调函数（无论是否成功都将执行），格式为：function(){ ... }
+	 * @param contextCharts 可选，上下文图表数组，对于相同名称的库，将在contextCharts中加载最新版本那个，默认值：[]
+	 */
+	chartFactory.loadLib = function(lib, callback, contextCharts)
+	{
+		contextCharts = (contextCharts == null ? [] : contextCharts);
+		
+		if(!lib)
+		{
+			callback();
+		}
+		
+		if(!$.isArray(lib))
+			lib = [ lib ];
+		
+		var unloadeds = [];
+		chartFactory.inflateUnloadedLibs(contextCharts, lib, unloadeds);
+		
+		if(unloadeds.length == 0)
+		{
+			callback();
+		}
+		else
+		{
+			var stateObjs = [];
+			var deferreds = [];
+			var loadedCallback = function()
+			{
+				chartFactory.loadLibInner(unloadeds, stateObjs);
+			};
+			
+			for(var i=0; i<unloadeds.length; i++)
+			{
+				var stateObj = chartFactory.libState(unloadeds[i], true, chartFactory.LIB_STATE_INIT, false, loadedCallback);
+				stateObjs.push(stateObj);
+				deferreds.push(stateObj.loadedDeferred);
+			}
+			
+			$.when.apply($, deferreds).always(function(){ callback(); });
+			
+			for(var i=0; i<stateObjs.length; i++)
+			{
+				chartFactory.triggerLibStateResolvedIfLoaded(stateObjs[i]);
+			}
+			
+			chartFactory.loadLibInner(unloadeds, stateObjs);
+		}
+	};
+	
+	//填充所有待加载库，填充后，unloadeds中都是最新版本库，且都包含依赖库
+	chartFactory.inflateUnloadedLibs = function(contextCharts, libs, unloadeds)
+	{
+		for(var i=0; i<libs.length; i++)
+		{
+			var lib = libs[i];
+			
+			if(chartFactory.isLibLoadedInEnv(lib))
+			{
+				continue;
+			}
+			
+			var stateObj = chartFactory.libState(lib);
+			if(stateObj && stateObj.state == chartFactory.LIB_STATE_LOADED)
+			{
+				continue;
+			}
+			
+			var latestLib = chartFactory.findLatestLibInCharts(contextCharts, lib);
+			
+			if(latestLib !== lib)
+			{
+				if(chartFactory.isLibLoadedInEnv(latestLib))
+				{
+					//如果最新版已在环境中加载，应将其状态设为loaded，以减少后续加载操作的搜索步骤
+					chartFactory.libState(latestLib, true, chartFactory.LIB_STATE_LOADED, true);
+					continue;
+				}
+				
+				stateObj = chartFactory.libState(latestLib);
+				if(stateObj && stateObj.state == chartFactory.LIB_STATE_LOADED)
+				{
+					continue;
+				}
+			}
+			
+			if(chartFactory.libIndex(unloadeds, latestLib.name) > -1)
+				continue;
+			
+			unloadeds.push(latestLib);
+			
+			//处理依赖
+			if(latestLib.depend)
+			{
+				var depend = latestLib.depend;
+				var dependLibs = [];
+				
+				if(!$.isArray(depend))
+					depend = [ depend ];
+				
+				for(var j=0; j<depend.length; j++)
+				{
+					var dependName = depend[j];
+					
+					if(chartFactory.libIndex(unloadeds, dependName) > -1)
+						continue;
+					
+					if(chartFactory.libIndex(libs, dependName) > -1)
+						continue;
+					
+					if(chartFactory.libIndex(dependLibs, dependName) > -1)
+						continue;
+					
+					var dependLib = chartFactory.findFirstLibInCharts(contextCharts, dependName);
+					
+					if(dependLib != null)
+					{
+						dependLibs.push(dependLib);
+					}
+					else
+					{
+						chartFactory.logException("no lib found for name : '"+dependName+"', load ignored");
+					}
+				}
+				
+				if(dependLibs.length > 0)
+				{
+					chartFactory.inflateUnloadedLibs(contextCharts, dependLibs, unloadeds);
+				}
+			}
+		}
+	};
+	
+	chartFactory.loadLibInner = function(libs, stateObjs)
+	{
+		for(var i=0; i<libs.length; i++)
+		{
+			var lib = libs[i];
+			var stateObj = stateObjs[i];
+			
+			if(stateObj.state === chartFactory.LIB_STATE_INIT && chartFactory.isLibReadyForLoad(lib))
+			{
+				stateObj.state = chartFactory.LIB_STATE_LOADING;
+				
+				var source = stateObj.lib.source;
+				var srcDfds = stateObj.sourceLoadedDeferreds;
+				
+				if(source != null)
+				{
+					if(!$.isArray(source))
+						source = [ source ];
+					
+					for(var j=0; j<source.length; j++)
+					{
+						chartFactory.loadSingleLibSource(lib, source[j], srcDfds[j]);
+					}
+				}
+			}
+		}
+	};
+	
+	chartFactory.isLibReadyForLoad = function(lib)
+	{
+		var depend = lib.depend;
+		
+		if(chartFactory.isNullOrEmpty(depend))
+			return true;
+		
+		if(!$.isArray(depend))
+			depend = [ depend ];
+		
+		var ready = true;
+		
+		for(var i=0; i<depend.length; i++)
+		{
+			var dependName = depend[i];
+			var dependStateObj = chartFactory.libStateByName(dependName);
+			//没有找到依赖库也应认为已ready，因为通过HTML的<script>标签引入的库这里dependStateObj为null
+			ready = (dependStateObj == null || dependStateObj.state == chartFactory.LIB_STATE_LOADED);
+			
+			if(!ready)
+			{
+				break;
+			}
+		}
+		
+		return ready;
+	};
+	
+	chartFactory.loadSingleLibSource = function(lib, source, deferred)
+	{
+		if(deferred.state() !== "pending")
+			return;
+		
+		if(chartFactory.isString(source))
+		{
+			source = { url: source, type: chartFactory.resolveLibSourceType(source) };
+		}
+		
+		if(source.type == "js")
+		{
+			chartFactory.loadSingleJsLibSource(lib, source, deferred);
+		}
+		else if(source.type == "css")
+		{
+			chartFactory.loadSingleCssLibSource(lib, source, deferred);
+		}
+		else
+		{
+			deferred.resolve();
+			chartFactory.logException("Unknown lib source type '"+source.type+"', load ignored");
+		}
+	};
+	
+	chartFactory.loadSingleJsLibSource = function(lib, source, deferred)
+	{
+		var ele = document.createElement("script");
+		
+		ele.src = source.url;
+		ele.type = "text/javascript";
+		ele.onload = function(){ deferred.resolve(); };
+		ele.onerror = function(){ deferred.resolve(); };
+		
+		chartFactory.addLibSourceEleToDoc(lib, ele);
+	};
+	
+	chartFactory.loadSingleCssLibSource = function(lib, source, deferred)
+	{
+		var ele = document.createElement("link");
+		
+		ele.href = source.url;
+		ele.type = "text/css";
+		ele.rel = "stylesheet";
+		ele.onload = function(){ deferred.resolve(); };
+		ele.onerror = function(){ deferred.resolve(); };
+		
+		chartFactory.addLibSourceEleToDoc(lib, ele);
+	};
+	
+	/**
+	 * 在DOM中插入依赖库源。
+	 * 插入规则：
+	 * 一级优先：插入在最后一个看板引入库（dg-lib-name）之后、且为其添加dg-lib-name属性，
+	 * 			确保其可以使用之前依赖库和内置引入库、且可以被全部生成样式表覆盖（参考chartFactory.styleSheetText()函数说明）；
+	 * 二级优先：插入在<head>末尾。
+	 * 
+	 * @param lib 库对象
+	 * @param ele 库对应的DOM对象
+	 */
+	chartFactory.addLibSourceEleToDoc = function(lib, ele)
+	{
+		$(ele).attr(chartFactory.LIB_ATTR_NAME, lib.name);
+		
+		var $head = $("head:first");
+		var headEle = $head[0];
+		var beforeEle = null;
+		
+		var $lastImport = $("["+chartFactory.LIB_ATTR_NAME+"]:last", $head);
+		if($lastImport.length > 0)
+		{
+			var $next = $lastImport.next();
+			if($next.length > 0)
+			{
+				beforeEle = $next[0];
+			}
+		}
+		
+		//这里不能使用$的API，会无法正常执行绑定事件
+		if(beforeEle != null)
+			headEle.insertBefore(ele, beforeEle);
+		else
+			headEle.appendChild(ele);
+	};
+	
+	chartFactory.resolveLibSourceType = function(url)
+	{
+		var qsIdx = url.indexOf("?");
+		if(qsIdx < 0)
+			qsIdx = url.indexOf("#");
+		
+		if(qsIdx > 0)
+			url = url.substring(0, qsIdx);
+		
+		var type = "";
+		
+		if(chartFactory.LIB_JS_SOURCE_REGEX.test(url))
+		{
+			type = "js";
+		}
+		else if(chartFactory.LIB_CSS_SOURCE_REGEX.test(url))
+		{
+			type = "css";
+		}
+		else
+		{
+			var didx = url.lastIndexOf(".");
+			
+			if(didx > -1 && didx < url.length - 1)
+				type = url.substring(didx+1);
+		}
+		
+		return type;
+	};
+	
+	chartFactory.LIB_JS_SOURCE_REGEX = /\.(js)$/i;
+	chartFactory.LIB_CSS_SOURCE_REGEX = /\.(css)$/i;
+	
+	//查找最新版的库
+	chartFactory.findLatestLibInCharts = function(charts, lib)
+	{
+		if(charts == null)
+			return lib;
+		
+		var rendererLatestLib = lib;
+		var pluginLatestLib = lib;
+		var pluginLatestLibChart = null;
+		
+		for(var i=0; i<charts.length; i++)
+		{
+			var chart = charts[i];
+			var renderer = chart.renderer();
+			var rendererLib = chartFactory.rendererLib(renderer);
+			rendererLatestLib = chartFactory.findLatestLibInLibs(rendererLib, rendererLatestLib);
+		}
+		
+		for(var i=0; i<charts.length; i++)
+		{
+			var chart = charts[i];
+			var pluginRenderer = (chart.plugin ? chart.plugin.renderer : null);
+			var rendererLib = chartFactory.rendererLib(pluginRenderer);
+			var myPluginLatestLib = chartFactory.findLatestLibInLibs(rendererLib, pluginLatestLib);
+			
+			if(myPluginLatestLib !== pluginLatestLib)
+			{
+				pluginLatestLib = myPluginLatestLib;
+				pluginLatestLibChart = chart;
+			}
+		}
+		
+		//图表渲染器在看板页面定义，所以其依赖库应该优先使用
+		var latestLib = chartFactory.resolveLatestLibByBase(rendererLatestLib, pluginLatestLib);
+		
+		//如果是插件依赖库，需要转换为可用依赖库
+		if(latestLib !== lib && latestLib === pluginLatestLib && pluginLatestLibChart != null)
+		{
+			latestLib = chartFactory.convertPluginRendererLib(pluginLatestLibChart, latestLib);
+		}
+		
+		return latestLib;
+	};
+	
+	chartFactory.findLatestLibInLibs = function(libs, lib)
+	{
+		if(libs == null)
+			return lib;
+		
+		var latestLib = lib;
+		
+		if($.isArray(libs))
+		{
+			for(var i=0; i<libs.length; i++)
+			{
+				latestLib = chartFactory.resolveLatestLibByBase(latestLib, libs[i]);
+			}
+		}
+		else
+		{
+			latestLib = chartFactory.resolveLatestLibByBase(latestLib, libs);
+		}
+		
+		return latestLib;
+	};
+	
+	//如果compareLib与baseLib同名，且版本更高，返回compareLib；否则，返回baseLib
+	chartFactory.resolveLatestLibByBase = function(baseLib, compareLib)
+	{
+		if(compareLib == null)
+			return baseLib;
+		
+		var latestLib = baseLib;
+		
+		var name = chartFactory.resolveSameLibName(baseLib.name, compareLib.name);
+		
+		if(name != null)
+		{
+			//只有找到更高版本号的才替换，否则应该优先使用传入的lib参数
+			var lower = (chartFactory.compareLibVersion(name, baseLib.version, compareLib.version) < 0);
+			
+			if(lower)
+			{
+				latestLib = compareLib;
+			}
+		}
+		
+		return latestLib;
+	};
+	
+	//查找第一个库
+	chartFactory.findFirstLibInCharts = function(charts, name)
+	{
+		if(charts == null)
+			return null;
+		
+		for(var i=0; i<charts.length; i++)
+		{
+			var chart = charts[i];
+			var renderer = chart.renderer();
+			var rendererLib = chartFactory.rendererLib(renderer);
+			var firstLib = chartFactory.findFirstLibInLibs(rendererLib, name);
+			
+			if(firstLib != null)
+				return firstLib;
+			
+			var pluginRenderer = (chart.plugin ? chart.plugin.renderer : null);
+			rendererLib = chartFactory.rendererLib(pluginRenderer);
+			firstLib = chartFactory.findFirstLibInLibs(rendererLib, name);
+			
+			//插件依赖库需要转换为可用依赖库
+			if(firstLib != null)
+				return chartFactory.convertPluginRendererLib(chart, firstLib);
+		}
+		
+		return null;
+	};
+	
+	//查找第一个库
+	chartFactory.findFirstLibInLibs = function(libs, name)
+	{
+		if(libs == null)
+			return null;
+		
+		if($.isArray(libs))
+		{
+			for(var i=0; i<libs.length; i++)
+			{
+				if(chartFactory.resolveSameLibName(libs[i].name, name))
+					return libs[i];
+			}
+		}
+		else
+		{
+			if(chartFactory.resolveSameLibName(libs.name, name))
+					return libs;
+		}
+		
+		return null;
+	};
+	
+	/**
+	 * 比较库版本号。
+	 * 
+	 * @param name 库名
+	 * @param v1
+	 * @param v2
+	 * @returns -1 v1低于v2；0 v1等于v2；1 v1高于v2
+	 */
+	chartFactory.compareLibVersion = function(name, v1, v2)
+	{
+		return chartFactory.compareVersion(v1, v2);
+	};
+	
+	//查找第一个同名的库索引
+	chartFactory.libIndex = function(libs, name)
+	{
+		for(var i=0; i<libs.length; i++)
+		{
+			if(chartFactory.resolveSameLibName(libs[i].name, name))
+				return i;
+		}
+		
+		return -1;
+	};
+	
+	//当前环境是否已加载了指定库
+	chartFactory.isLibLoadedInEnv = function(lib)
+	{
+		if(lib.loaded != null)
+		{
+			return lib.loaded();
+		}
+		else
+		{
+			if(chartFactory.isString(lib.name))
+			{
+				return (window[lib.name] !== undefined);
+			}
+			else
+			{
+				for(var i=0; i<lib.name.length; i++)
+				{
+					if(window[lib.name[i]] !== undefined)
+					{
+						return true;
+					}
+				}
+			}
+			
+			return false;
+		}
+	};
+	
+	//解析库名称交集第一个，返回null表示无交集
+	chartFactory.resolveSameLibName = function(baseLibName, compareLibName)
+	{
+		if(baseLibName == null || baseLibName.length == 0
+			|| compareLibName == null || compareLibName.length == 0)
+		{
+			return null;
+		}
+		
+		var baseNameArray = (!chartFactory.isString(baseLibName));
+		
+		if(baseLibName === compareLibName)
+		{
+			if(!baseNameArray)
+				return baseLibName;
+			else
+				return baseLibName[0];
+		}
+		
+		var compareNameArray = (!chartFactory.isString(compareLibName));
+		
+		if(!baseNameArray && !compareNameArray)
+		{
+			return null;
+		}
+		else if(!baseNameArray)
+		{
+			var idx = chartFactory.indexInArray(compareLibName, baseLibName);
+			return (idx > -1 ? baseLibName : null);
+		}
+		else if(!compareNameArray)
+		{
+			var idx = chartFactory.indexInArray(baseLibName, compareLibName);
+			return (idx > -1 ? compareLibName : null);
+		}
+		else
+		{
+			for(var i=0; i<baseLibName; i++)
+			{
+				var idx = chartFactory.indexInArray(compareLibName, baseLibName[i]);
+				if(idx > -1)
+				{
+					return baseLibName[i];
+				}
+			}
+			
+			return null;
+		}
+	};
+	
+	/**
+	 * 获取库状态信息。
+	 * 
+	 * @param lib 库对象
+	 * @param nonNull 可选，是否返回非null，默认为：false
+	 * @param createState 可选，当要返回nonNull时，需要创建的状态，默认为：LIB_STATE_INIT
+	 * @param resolvedIfLoaded 可选，当要返回nonNull时，如果库状态为已加载、或者没有需要加载的库，是否触发resolve逻辑
+	 * @param loadedCallback 可选，当要返回nonNull时，加载完成回调函数
+	 */
+	chartFactory.libState = function(lib, nonNull, createState, resolvedIfLoaded, loadedCallback)
+	{
+		if(nonNull !== true)
+		{
+			return chartFactory.libStateByName(lib.name);
+		}
+		else
+		{
+			var stateObj = chartFactory.libState(lib);
+			
+			if(stateObj == null)
+			{
+				var states = chartFactory.LIB_STATES;
+				stateObj = chartFactory.createLibState(lib, createState, resolvedIfLoaded, loadedCallback);
+				
+				if(chartFactory.isString(lib.name))
+				{
+					states[lib.name] = stateObj;
+				}
+				else
+				{
+					for(var i=0; i<lib.name.length; i++)
+					{
+						states[lib.name[i]] = stateObj;
+					}
+				}
+			}
+			
+			return stateObj;
+		}
+	};
+	
+	/**
+	 * 获取指定名称的库状态，没有则返回null
+	 */
+	chartFactory.libStateByName = function(name)
+	{
+		if(name == null)
+			return null;
+		
+		var states = chartFactory.LIB_STATES;
+		
+		if(chartFactory.isString(name))
+		{
+			return states[name];
+		}
+		else
+		{
+			for(var i=0; i<name.length; i++)
+			{
+				if(states[name[i]])
+				{
+					return states[name[i]];
+				}
+			}
+		}
+		
+		return null;
+	};
+	
+	chartFactory.createLibState = function(lib, state, resolvedIfLoaded, loadedCallback)
+	{
+		//应深度复制lib，避免可能的修改导致状态错乱
+		lib = chartFactory.deepCloneLib(lib);
+		state = (state == null ? chartFactory.LIB_STATE_INIT : state);
+		resolvedIfLoaded = (resolvedIfLoaded == null ? false : resolvedIfLoaded);
+		loadedCallback = (loadedCallback == null ? null : loadedCallback);
+		
+		//无论state是何状态，都应设置loadedDeferred、sourceLoadedDeferreds，
+		//确保其在异步调用中结构完整
+		var stateObj =
+		{
+			//库对象
+			lib: lib,
+			//库状态，参考：chartFactory.LIB_STATE_*
+			state: state,
+			//库加载完成后的回调函数
+			loadedDeferred: $.Deferred(),
+			//库中source对应的加载完成后回调函数
+			sourceLoadedDeferreds: []
+		};
+		
+		stateObj.loadedDeferred.always(function()
+		{
+			stateObj.state = chartFactory.LIB_STATE_LOADED;
+			
+			if(loadedCallback != null)
+			{
+				chartFactory.executeSilently(loadedCallback);
+			}
+		});
+		
+		var source = stateObj.lib.source;
+		var sourceLen = (source == null ? 0 : ($.isArray(source) ? source.length : 1));
+		
+		if(sourceLen > 0)
+		{
+			for(var i=0; i<sourceLen; i++)
+			{
+				stateObj.sourceLoadedDeferreds[i] = $.Deferred();
+			}
+			
+			$.when.apply($, stateObj.sourceLoadedDeferreds).always(function(){ stateObj.loadedDeferred.resolve(); });
+		}
+		
+		if(resolvedIfLoaded)
+		{
+			chartFactory.triggerLibStateResolvedIfLoaded(stateObj);
+		}
+		
+		return stateObj;
+	};
+	
+	chartFactory.triggerLibStateResolvedIfLoaded = function(stateObj)
+	{
+		var source = stateObj.lib.source;
+		var sourceLen = (source == null ? 0 : ($.isArray(source) ? source.length : 1));
+		
+		if(sourceLen == 0)
+		{
+			stateObj.state = chartFactory.LIB_STATE_LOADED;
+			stateObj.loadedDeferred.resolve();
+		}
+		
+		if(stateObj.state == chartFactory.LIB_STATE_LOADED)
+		{
+			for(var i=0; i<sourceLen; i++)
+			{
+				stateObj.sourceLoadedDeferreds[i].resolve();
+			}
+		}
+	};
+	
+	chartFactory.deepCloneLib = function(lib)
+	{
+		if(!lib)
+			return lib;
+		
+		if($.isArray(lib))
+		{
+			var newLibs = [];
+			
+			for(var i=0; i<lib.length; i++)
+			{
+				var newLib = $.extend(true, {}, lib[i]);
+				newLibs.push(newLib);
+			}
+			
+			return newLibs;
+		}
+		else
+		{
+			var newLib = $.extend(true, {}, lib);
+			return newLib;
+		}
+	};
+	
+	//库及其状态，键值结构：库名 -> 库信息。
+	chartFactory.LIB_STATES = {};
+	
+	//库状态：初始化
+	chartFactory.LIB_STATE_INIT = "init";
+	//库状态：加载中
+	chartFactory.LIB_STATE_LOADING = "loading";
+	//库状态：加载完成
+	chartFactory.LIB_STATE_LOADED = "loaded";
+	
+	chartFactory.convertPluginRendererLib = function(chart, lib)
+	{
+		if(!lib)
+			return lib;
+		
+		lib = chartFactory.deepCloneLib(lib);
+		
+		if($.isArray(lib))
+		{
+			for(var i=0; i<lib.length; i++)
+			{
+				chartFactory.trimPluginRendererLibSource(chart, lib[i]);
+			}
+		}
+		else
+		{
+			chartFactory.trimPluginRendererLibSource(chart, lib);
+		}
+		
+		return lib;
+	};
+	
+	chartFactory.trimPluginRendererLibSource = function(chart, lib)
+	{
+		if(!lib.source)
+			return;
+		
+		if($.isArray(lib.source))
+		{
+			for(var i=0; i<lib.source.length; i++)
+			{
+				lib.source[i] = chartFactory.trimPluginRendererLibSourceUrl(chart, lib.source[i]);
+			}
+		}
+		else
+		{
+			lib.source = chartFactory.trimPluginRendererLibSourceUrl(chart, lib.source);
+		}
+	};
+	
+	//将图表插件的依赖库url解析为可直接加载的绝对路径
+	chartFactory.trimPluginRendererLibSourceUrl = function(chart, singleSource)
+	{
+		var isStr = chartFactory.isString(singleSource);
+		var url = (isStr ? singleSource : singleSource.url);
+		
+		if(!url)
+			return singleSource;
+		
+		//相对应用根路径
+		if(url.indexOf("/") == 0)
+		{
+			url = chart.contextURL(url);
+		}
+		//绝对路径
+		else if(chartFactory.HTTP_S_PREFIX_REGEX.test(url))
+		{
+			url = url;
+		}
+		//插件内路径
+		else
+		{
+			url = chart.pluginResourceURL(url);
+		}
+		
+		if(isStr)
+			singleSource = url;
+		else
+			singleSource.url = url;
+		
+		return singleSource;
+	};
+	
+	/**
+	 * 获取插件渲染器依赖库：renderer.depend，
+	 * 如果renderer.depend是函数，将返回renderer.depend()的执行结果。
+	 * 
+	 * @returns 返回undefined表示未定义
+	 */
+	chartFactory.rendererLib = function(renderer)
+	{
+		if(!renderer || renderer.depend === undefined)
+		{
+			return undefined;
+		}
+		
+		if(renderer.depend == null)
+		{
+			return null;
+		}
+		else if($.isFunction(renderer.depend))
+		{
+			return renderer.depend();
+		}
+		else
+		{
+			return renderer.depend;
+		}
+	};
+	
+	//以http://或者https://开头的正则表达式
+	chartFactory.HTTP_S_PREFIX_REGEX = /^(http:\/\/|https:\/\/)/i;
+	
+	/**
+	 * 获取/设置指定对象的"query"字段值
+	 */
+	chartFactory.queryOfObject = function(obj, query)
+	{
+		if(query === undefined)
+		{
+			return (obj ? obj.query : null);
+		}
+		else
+		{
+			obj.query = query;
+		}
+	};
+	
+	/**
+	 * 获取/设置图表结果对象的查询信息。
+	 */
+	chartFactory.chartQueryOfChartResult = function(chartResult, chartQuery)
+	{
+		if(chartQuery === undefined)
+		{
+			return chartFactory.queryOfObject(chartResult);
+		}
+		else
+		{
+			if(!chartResult)
+				return;
+			
+			chartFactory.queryOfObject(chartResult, chartQuery);
+			// 这里不必再为每个数据集结果设置数据集查询，增加复杂性，后续看板2.0将直接开放图表结果对象，从中可以获取数据集查询信息
+		}
+	};
+	
+	/**
+	 * 获取/设置图表错误对象的查询信息。
+	 */
+	chartFactory.chartQueryOfChartError = function(chartError, chartQuery)
+	{
+		if(chartQuery === undefined)
+		{
+			return chartFactory.queryOfObject(chartError);
+		}
+		else
+		{
+			if(!chartError)
+				return;
+			
+			chartFactory.queryOfObject(chartError, chartQuery);
+		}
+	};
+	
+	/**
+	 * 尝试将给定值转换为符合数据集参数类型
+	 */
+	chartFactory.convertDataSetParamValue = function(dataSetParam, value)
+	{
+		if(!dataSetParam || value == null)
+			return value;
+		
+		var re = value;
+		
+		if($.isArray(value))
+		{
+			re = [];
+			
+			for(var i=0; i<value.length; i++)
+			{
+				re[i] = chartFactory.convertDataSetParamValue(dataSetParam, value[i]);
+			}
+		}
+		else if(chartFactory.DataSetParamType.STRING == dataSetParam.type)
+		{
+			re = (chartFactory.isString(value) ? value : value.toString());
+		}
+		else if(chartFactory.DataSetParamType.BOOLEAN == dataSetParam.type)
+		{
+			if(value === true || value === false)
+			{
+				re = value;
+			}
+			else if(chartFactory.isString(value))
+			{
+				//与后台DataSetParamValueConverter规则一致
+				re = (value == "true" || value == "1");
+			}
+			else
+				re = (value ? true : false);
+		}
+		else if(chartFactory.DataSetParamType.NUMBER == dataSetParam.type)
+		{
+			if(chartFactory.isNumber(value))
+			{
+				re = value;
+			}
+			else
+			{
+				re = Number(value);
+				
+				//如果由字符串转数值丢失精度，则撤销转换，交由后台处理
+				if(chartFactory.isString(value) && re.toString() != value)
+				{
+					re = value;
+				}
+			}
+		}
+		
+		return re;
+	};
+	
 	
 	//-------------
 	// < 已弃用函数 start

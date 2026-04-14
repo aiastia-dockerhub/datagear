@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -70,6 +70,35 @@ public class Authorization extends AbstractStringIdEntity implements CloneableEn
 
 	/** 权限起始值：删除，这里的权限值都留有间隔，便于各模块扩展自定义权限值 */
 	public static final int PERMISSION_DELETE_START = 60;
+
+	/*------------------------------------------------------*/
+
+	/**
+	 * 读传递权限：读取
+	 * <p>
+	 * 某些模块，对某条记录授予读权限时，不是要授权记录本身，而是要授权记录所表示的子级数据，
+	 * 所以，这里扩展了{@linkplain #PERMISSION_READ_START}权限，用于标识此权限值。
+	 * </p>
+	 */
+	public static final int PERMISSION_READ_TRANSFER_READ = Authorization.PERMISSION_READ_START;
+
+	/**
+	 * 读传递权限：编辑
+	 * <p>
+	 * 某些模块，对某条记录授予编辑权限时，不是要授权记录本身，而是要授权记录所表示的子级数据，
+	 * 所以，这里扩展了{@linkplain #PERMISSION_READ_START}权限，用于标识此权限值。
+	 * </p>
+	 */
+	public static final int PERMISSION_READ_TRANSFER_EDIT = 24;
+
+	/**
+	 * 读传递权限：删除
+	 * <p>
+	 * 某些模块，对某条记录授予删除权限时，不是要授权记录本身，而是要授权记录所表示的子级数据，
+	 * 所以，这里扩展了{@linkplain #PERMISSION_READ_START}权限，用于标识此权限值。
+	 * </p>
+	 */
+	public static final int PERMISSION_READ_TRANSFER_DELETE = 28;
 
 	/*------------------------------------------------------*/
 
@@ -288,6 +317,72 @@ public class Authorization extends AbstractStringIdEntity implements CloneableEn
 	}
 
 	/**
+	 * 是否是读传递权限：读取
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean isReadTransferRead(int permission)
+	{
+		return (permission >= PERMISSION_READ_TRANSFER_READ && permission < PERMISSION_READ_TRANSFER_EDIT);
+	}
+
+	/**
+	 * 是否是读传递权限：编辑
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean isReadTransferEdit(int permission)
+	{
+		return (permission >= PERMISSION_READ_TRANSFER_EDIT && permission < PERMISSION_READ_TRANSFER_DELETE);
+	}
+
+	/**
+	 * 是否是读传递权限：删除
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean isReadTransferDelete(int permission)
+	{
+		return (permission >= PERMISSION_READ_TRANSFER_DELETE && permission < PERMISSION_EDIT_START);
+	}
+
+	/**
+	 * 是否至少有读传递权限：读取
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean canReadTransferRead(int permission)
+	{
+		return permission >= PERMISSION_READ_TRANSFER_READ;
+	}
+
+	/**
+	 * 是否至少有读传递权限：编辑
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean canReadTransferEdit(int permission)
+	{
+		return permission >= PERMISSION_READ_TRANSFER_EDIT;
+	}
+
+	/**
+	 * 是否至少有读传递权限：删除
+	 * 
+	 * @param permission
+	 * @return
+	 */
+	public static boolean canReadTransferDelete(int permission)
+	{
+		return permission >= PERMISSION_READ_TRANSFER_DELETE;
+	}
+
+	/**
 	 * 是否是合法的权限值，即不小于{@linkplain #PERMISSION_MIN}、且不大于{@linkplain #PERMISSION_MAX}。
 	 * 
 	 * @param permission
@@ -308,7 +403,7 @@ public class Authorization extends AbstractStringIdEntity implements CloneableEn
 	 * @param currentUser
 	 * @return
 	 */
-	public static boolean canAuthorize(DataPermissionEntity<?> entity, User currentUser)
+	public static boolean canAuthorize(DataPermissionEntity entity, User currentUser)
 	{
 		if (currentUser.isAdmin())
 			return true;
@@ -319,10 +414,10 @@ public class Authorization extends AbstractStringIdEntity implements CloneableEn
 		if (!Authorization.canDelete(entity.getDataPermission()))
 			return false;
 
-		if (!(entity instanceof CreateUserEntity<?>))
+		if (!(entity instanceof CreateUserEntity))
 			return false;
 
-		CreateUserEntity<?> createUserEntity = (CreateUserEntity<?>) entity;
+		CreateUserEntity createUserEntity = (CreateUserEntity) entity;
 
 		if (createUserEntity.getCreateUser() == null)
 			return false;

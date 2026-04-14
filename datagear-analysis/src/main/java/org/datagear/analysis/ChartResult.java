@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,7 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
@@ -26,8 +27,10 @@ import java.util.List;
  * @author datagear@163.com
  *
  */
-public class ChartResult
+public class ChartResult implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	private List<DataSetResult> dataSetResults = Collections.emptyList();
 
 	public ChartResult()
@@ -44,7 +47,7 @@ public class ChartResult
 	/**
 	 * 获取{@linkplain DataSetResult}列表。
 	 * <p>
-	 * 返回列表的元素与{@linkplain ChartDefinition#getChartDataSets()}元素一一对应。
+	 * 返回列表的元素与{@linkplain ChartDefinition#getDataSetBinds()}元素一一对应。
 	 * </p>
 	 * 
 	 * @return 返回{@code null}或空列表表示无结果

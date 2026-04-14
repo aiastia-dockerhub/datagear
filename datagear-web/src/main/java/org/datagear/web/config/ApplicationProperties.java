@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -19,14 +19,17 @@ package org.datagear.web.config;
 
 import java.io.Serializable;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
+import org.datagear.connection.ConnectionSourceProperties;
+import org.datagear.meta.resolver.DbTableTypeSpec;
 import org.springframework.beans.factory.annotation.Value;
 
 /**
  * 系统配置信息。
  * <p>
- * 对应{@code or./datagear.web.application.properties}中的配置项。
+ * 对应{@code org/datagear/web/application.properties}中的配置项。
  * </p>
  * 
  * @author datagear@163.com
@@ -36,57 +39,53 @@ public abstract class ApplicationProperties implements Serializable
 {
 	private static final long serialVersionUID = 1L;
 
-	/** 工作空间主目录 */
-	@Value("${DataGearWorkspace}")
-	private String dataGearWorkspace;
-
 	/** #重设密码创建校验文件的目录 */
-	@Value("${directory.resetPasswordCheckFile}")
-	private String directoryResetPasswordCheckFile;
+	@Value("${resetPasswordCheckFileDirectory}")
+	private String resetPasswordCheckFileDirectory;
 
 	/** 驱动程序管理主目录 */
-	@Value("${directory.driver}")
-	private String directoryDriver;
+	@Value("${driverRootDirectory}")
+	private String driverRootDirectory;
 
 	/** 系统使用的derby数据库主目录 */
-	@Value("${directory.derby}")
-	private String directoryDerby;
+	@Value("${derbyDirectory}")
+	private String derbyDirectory;
 
 	/** 临时文件目录 */
-	@Value("${directory.temp}")
-	private String directoryTemp;
+	@Value("${tempDirectory}")
+	private String tempDirectory;
 
 	/** 图表插件主目录 */
-	@Value("${directory.chartPlugin}")
-	private String directoryChartPlugin;
+	@Value("${chartPluginRootDirectory}")
+	private String chartPluginRootDirectory;
 
 	/** 看板主目录 */
-	@Value("${directory.dashboard}")
-	private String directoryDashboard;
+	@Value("${dashboardRootDirectory}")
+	private String dashboardRootDirectory;
 
 	/** 看板全局资源主目录 */
-	@Value("${directory.dashboardGlobalRes}")
-	private String directoryDashboardGlobalRes;
+	@Value("${dashboardGlobalResRootDirectory}")
+	private String dashboardGlobalResRootDirectory;
 
 	/** 看板模板内引用全局资源的URL前缀 */
 	@Value("${dashboardGlobalResUrlPrefix}")
 	private String dashboardGlobalResUrlPrefix;
 
 	/** 数据集文件主目录 */
-	@Value("${directory.dataSet}")
-	private String directoryDataSet;
+	@Value("${dataSetRootDirectory}")
+	private String dataSetRootDirectory;
 
-	/** 数据编辑界面自定义URL构建器脚本文件 */
-	@Value("${schemaUrlBuilderScriptFile}")
-	private String schemaUrlBuilderScriptFile;
+	/** 数据源编辑界面自定义URL构建器脚本文件 */
+	@Value("${dtbsSourceUrlBuilderScriptFile}")
+	private String dtbsSourceUrlBuilderScriptFile;
 
-	/** 已载入过的图表插件上次修改时间信息存储文件 */
-	@Value("${builtinChartPluginLastModifiedFile}")
-	private String builtinChartPluginLastModifiedFile;
-
-	/** 是否禁用匿名用户 */
+	/** 是否禁用匿名用户访问系统 */
 	@Value("${disableAnonymous}")
 	private boolean disableAnonymous;
+
+	/** 是否禁用图表/看板展示操作的匿名用户访问 */
+	@Value("${disableShowAnonymous}")
+	private boolean disableShowAnonymous;
 
 	/** 是否禁用注册功能 */
 	@Value("${disableRegister}")
@@ -95,6 +94,18 @@ public abstract class ApplicationProperties implements Serializable
 	/** 是否禁用检测新版本功能 */
 	@Value("${disableDetectNewVersion}")
 	private boolean disableDetectNewVersion;
+
+	/** 是否禁用个人设置修改用户名 */
+	@Value("${disablePersonalSetName}")
+	private boolean disablePersonalSetName;
+
+	/** 用户密码强度JavaScript语法正则表达式 */
+	@Value("${userPasswordStrengthRegex}")
+	private String userPasswordStrengthRegex;
+
+	/** 用户密码强度输入提示信息 */
+	@Value("${userPasswordStrengthTip}")
+	private String userPasswordStrengthTip;
 
 	/** 默认角色：注册用户 */
 	@Value("${defaultRole.register}")
@@ -136,33 +147,37 @@ public abstract class ApplicationProperties implements Serializable
 	@Value("${datasourceDialect}")
 	private String datasourceDialect;
 
-	/** 服务层缓存-是否禁用 */
-	@Value("${cacheService.disabled}")
-	private boolean cacheServiceDisabled;
+	/** 数据源密码加密是否启用 */
+	@Value("${dtbsSourcePsd.crypto.enabled}")
+	private boolean dtbsSourcePsdCryptoEnabled;
 
-	/** 服务层缓存-置项 */
-	@Value("${cacheService.spec}")
-	private String cacheServiceSpec;
+	/** 数据源密码加密密钥 */
+	@Value("${dtbsSourcePsd.crypto.secretKey}")
+	private String dtbsSourcePsdCryptoSecretKey;
 
-	/** 看板分享密码加密是否禁用 */
-	@Value("${dashboardSharePassword.crypto.disabled}")
-	private boolean dashboardSharePasswordCryptoDisabled;
+	/** 数据源密码加密盐值 */
+	@Value("${dtbsSourcePsd.crypto.salt}")
+	private String dtbsSourcePsdCryptoSalt;
+
+	/** 看板分享密码加密是否启用 */
+	@Value("${dashboardSharePsd.crypto.enabled}")
+	private boolean dashboardSharePsdCryptoEnabled;
 
 	/** 看板分享密码加密密钥 */
-	@Value("${dashboardSharePassword.crypto.secretKey}")
-	private String dashboardSharePasswordCryptoSecretKey;
+	@Value("${dashboardSharePsd.crypto.secretKey}")
+	private String dashboardSharePsdCryptoSecretKey;
 
 	/** 看板分享密码加密盐值 */
-	@Value("${dashboardSharePassword.crypto.salt}")
-	private String dashboardSharePasswordCryptoSalt;
+	@Value("${dashboardSharePsd.crypto.salt}")
+	private String dashboardSharePsdCryptoSalt;
 
 	/** 看板访问密码允许填错次数 */
-	@Value("${dashboardSharePassword.authFailThreshold}")
-	private int dashboardSharePasswordAuthFailThreshold;
+	@Value("${dashboardSharePsd.authFailThreshold}")
+	private int dashboardSharePsdAuthFailThreshold;
 
 	/** 看板访问密码允许填错次数的限定分钟数 */
-	@Value("${dashboardSharePassword.authFailPastMinutes}")
-	private int dashboardSharePasswordAuthFailPastMinutes;
+	@Value("${dashboardSharePsd.authFailPastMinutes}")
+	private int dashboardSharePsdAuthFailPastMinutes;
 
 	/** IP登录错误秒数限定 */
 	@Value("${ipLoginLatch.seconds}")
@@ -188,8 +203,25 @@ public abstract class ApplicationProperties implements Serializable
 	@Value("${poi.zipSecureFile.minInflateRatio}")
 	private String poiZipSecureFileMinInflateRatio = "";
 
-	/** SQL数据集的SQL关键字黑名单 */
-	private Map<String, String> sqlDataSetInvalidSqlKeywords = Collections.emptyMap();
+	/** 每条记录权限缓存存储的最多用户权限数 */
+	@Value("${permissionCacheMaxLength}")
+	private int permissionCacheMaxLength;
+
+	/** 数据源缓存表信息最大个数 */
+	@Value("${dtbsSourceTableCacheMaxLength}")
+	private int dtbsSourceTableCacheMaxLength;
+
+	/** 数据集缓存数据的最大条目数 */
+	@Value("${dataSetCacheMaxLength}")
+	private int dataSetCacheMaxLength;
+
+	/** 首页欢迎语 */
+	@Value("${welcomeContent}")
+	private String welcomeContent;
+
+	/** 首页欢迎语文件编码 */
+	@Value("${welcomeContentEncoding}")
+	private String welcomeContentEncoding;
 
 	/** 数据源管理查询操作SQL关键字黑名单 */
 	private Map<String, String> dsmanagerQueryInvalidSqlKeywords = Collections.emptyMap();
@@ -197,98 +229,100 @@ public abstract class ApplicationProperties implements Serializable
 	/** 数据源管理导入SQL操作SQL关键字黑名单 */
 	private Map<String, String> dsmanagerImptsqlInvalidSqlKeywords = Collections.emptyMap();
 
-	/** 数据源管理SQL工作台-读权限用户的SQL关键字黑名单 */
-	private Map<String, String> dsmanagerSqlpadReadInvalidSqlKeywords = Collections.emptyMap();
+	/** 数据源管理-读权限用户的SQL关键字黑名单 */
+	private Map<String, String> dsmanagerReadInvalidSqlKeywords = Collections.emptyMap();
 
-	/** 数据源管理SQL工作台-写权限用户的SQL关键字黑名单 */
-	private Map<String, String> dsmanagerSqlpadEditInvalidSqlKeywords = Collections.emptyMap();
+	/** 数据源管理-写权限用户的SQL关键字黑名单 */
+	private Map<String, String> dsmanagerEditInvalidSqlKeywords = Collections.emptyMap();
 
-	/** 数据源管理SQL工作台-删除权限用户的SQL关键字黑名单 */
-	private Map<String, String> dsmanagerSqlpadDeleteInvalidSqlKeywords = Collections.emptyMap();
+	/** 数据源管理-删除权限用户的SQL关键字黑名单 */
+	private Map<String, String> dsmanagerDeleteInvalidSqlKeywords = Collections.emptyMap();
+
+	/** 跨域请求配置列表 */
+	private List<CrossOriginProperties> crossOriginPropertiess = Collections.emptyList();
+
+	/** 数据库表类型配置列表 */
+	private List<DbTableTypeSpec> dbTableTypeSpecs = Collections.emptyList();
+
+	/** 连接源配置项 */
+	private ConnectionSourceProperties connectionSourceProperties = new ConnectionSourceProperties();
+
+	/** 校验码配置 */
+	private CheckCodeProperties checkCodeProperties = new CheckCodeProperties();
 
 	public ApplicationProperties()
 	{
 		super();
 	}
 
-	public String getDataGearWorkspace()
+	public String getResetPasswordCheckFileDirectory()
 	{
-		return dataGearWorkspace;
+		return resetPasswordCheckFileDirectory;
 	}
 
-	protected void setDataGearWorkspace(String dataGearWorkspace)
+	protected void setResetPasswordCheckFileDirectory(String resetPasswordCheckFileDirectory)
 	{
-		this.dataGearWorkspace = dataGearWorkspace;
+		this.resetPasswordCheckFileDirectory = resetPasswordCheckFileDirectory;
 	}
 
-	public String getDirectoryResetPasswordCheckFile()
+	public String getDriverRootDirectory()
 	{
-		return directoryResetPasswordCheckFile;
+		return driverRootDirectory;
 	}
 
-	protected void setDirectoryResetPasswordCheckFile(String directoryResetPasswordCheckFile)
+	protected void setDriverRootDirectory(String driverRootDirectory)
 	{
-		this.directoryResetPasswordCheckFile = directoryResetPasswordCheckFile;
+		this.driverRootDirectory = driverRootDirectory;
 	}
 
-	public String getDirectoryDriver()
+	public String getDerbyDirectory()
 	{
-		return directoryDriver;
+		return derbyDirectory;
 	}
 
-	protected void setDirectoryDriver(String directoryDriver)
+	protected void setDerbyDirectory(String derbyDirectory)
 	{
-		this.directoryDriver = directoryDriver;
+		this.derbyDirectory = derbyDirectory;
 	}
 
-	public String getDirectoryDerby()
+	public String getTempDirectory()
 	{
-		return directoryDerby;
+		return tempDirectory;
 	}
 
-	protected void setDirectoryDerby(String directoryDerby)
+	protected void setTempDirectory(String tempDirectory)
 	{
-		this.directoryDerby = directoryDerby;
+		this.tempDirectory = tempDirectory;
 	}
 
-	public String getDirectoryTemp()
+	public String getChartPluginRootDirectory()
 	{
-		return directoryTemp;
+		return chartPluginRootDirectory;
 	}
 
-	protected void setDirectoryTemp(String directoryTemp)
+	protected void setChartPluginRootDirectory(String chartPluginRootDirectory)
 	{
-		this.directoryTemp = directoryTemp;
+		this.chartPluginRootDirectory = chartPluginRootDirectory;
 	}
 
-	public String getDirectoryChartPlugin()
+	public String getDashboardRootDirectory()
 	{
-		return directoryChartPlugin;
+		return dashboardRootDirectory;
 	}
 
-	protected void setDirectoryChartPlugin(String directoryChartPlugin)
+	protected void setDashboardRootDirectory(String dashboardRootDirectory)
 	{
-		this.directoryChartPlugin = directoryChartPlugin;
+		this.dashboardRootDirectory = dashboardRootDirectory;
 	}
 
-	public String getDirectoryDashboard()
+	public String getDashboardGlobalResRootDirectory()
 	{
-		return directoryDashboard;
+		return dashboardGlobalResRootDirectory;
 	}
 
-	protected void setDirectoryDashboard(String directoryDashboard)
+	protected void setDashboardGlobalResRootDirectory(String dashboardGlobalResRootDirectory)
 	{
-		this.directoryDashboard = directoryDashboard;
-	}
-
-	public String getDirectoryDashboardGlobalRes()
-	{
-		return directoryDashboardGlobalRes;
-	}
-
-	protected void setDirectoryDashboardGlobalRes(String directoryDashboardGlobalRes)
-	{
-		this.directoryDashboardGlobalRes = directoryDashboardGlobalRes;
+		this.dashboardGlobalResRootDirectory = dashboardGlobalResRootDirectory;
 	}
 
 	public String getDashboardGlobalResUrlPrefixName()
@@ -307,34 +341,24 @@ public abstract class ApplicationProperties implements Serializable
 		this.dashboardGlobalResUrlPrefix = dashboardGlobalResUrlPrefix;
 	}
 
-	public String getDirectoryDataSet()
+	public String getDataSetRootDirectory()
 	{
-		return directoryDataSet;
+		return dataSetRootDirectory;
 	}
 
-	protected void setDirectoryDataSet(String directoryDataSet)
+	protected void setDataSetRootDirectory(String dataSetRootDirectory)
 	{
-		this.directoryDataSet = directoryDataSet;
+		this.dataSetRootDirectory = dataSetRootDirectory;
 	}
 
-	public String getSchemaUrlBuilderScriptFile()
+	public String getDtbsSourceUrlBuilderScriptFile()
 	{
-		return schemaUrlBuilderScriptFile;
+		return dtbsSourceUrlBuilderScriptFile;
 	}
 
-	protected void setSchemaUrlBuilderScriptFile(String schemaUrlBuilderScriptFile)
+	protected void setDtbsSourceUrlBuilderScriptFile(String dtbsSourceUrlBuilderScriptFile)
 	{
-		this.schemaUrlBuilderScriptFile = schemaUrlBuilderScriptFile;
-	}
-
-	public String getBuiltinChartPluginLastModifiedFile()
-	{
-		return builtinChartPluginLastModifiedFile;
-	}
-
-	public void setBuiltinChartPluginLastModifiedFile(String builtinChartPluginLastModifiedFile)
-	{
-		this.builtinChartPluginLastModifiedFile = builtinChartPluginLastModifiedFile;
+		this.dtbsSourceUrlBuilderScriptFile = dtbsSourceUrlBuilderScriptFile;
 	}
 
 	public boolean isDisableAnonymous()
@@ -345,6 +369,16 @@ public abstract class ApplicationProperties implements Serializable
 	protected void setDisableAnonymous(boolean disableAnonymous)
 	{
 		this.disableAnonymous = disableAnonymous;
+	}
+
+	public boolean isDisableShowAnonymous()
+	{
+		return disableShowAnonymous;
+	}
+
+	protected void setDisableShowAnonymous(boolean disableShowAnonymous)
+	{
+		this.disableShowAnonymous = disableShowAnonymous;
 	}
 
 	public boolean isDisableRegister()
@@ -365,6 +399,36 @@ public abstract class ApplicationProperties implements Serializable
 	protected void setDisableDetectNewVersion(boolean disableDetectNewVersion)
 	{
 		this.disableDetectNewVersion = disableDetectNewVersion;
+	}
+
+	public boolean isDisablePersonalSetName()
+	{
+		return disablePersonalSetName;
+	}
+
+	protected void setDisablePersonalSetName(boolean disablePersonalSetName)
+	{
+		this.disablePersonalSetName = disablePersonalSetName;
+	}
+
+	public String getUserPasswordStrengthRegex()
+	{
+		return userPasswordStrengthRegex;
+	}
+
+	protected void setUserPasswordStrengthRegex(String userPasswordStrengthRegex)
+	{
+		this.userPasswordStrengthRegex = userPasswordStrengthRegex;
+	}
+
+	public String getUserPasswordStrengthTip()
+	{
+		return userPasswordStrengthTip;
+	}
+
+	protected void setUserPasswordStrengthTip(String userPasswordStrengthTip)
+	{
+		this.userPasswordStrengthTip = userPasswordStrengthTip;
 	}
 
 	public String getDefaultRoleRegister()
@@ -467,74 +531,84 @@ public abstract class ApplicationProperties implements Serializable
 		this.datasourceDialect = datasourceDialect;
 	}
 
-	public boolean isCacheServiceDisabled()
+	public boolean isDtbsSourcePsdCryptoEnabled()
 	{
-		return cacheServiceDisabled;
+		return dtbsSourcePsdCryptoEnabled;
 	}
 
-	public void setCacheServiceDisabled(boolean cacheServiceDisabled)
+	protected void setDtbsSourcePsdCryptoEnabled(boolean dtbsSourcePsdCryptoEnabled)
 	{
-		this.cacheServiceDisabled = cacheServiceDisabled;
+		this.dtbsSourcePsdCryptoEnabled = dtbsSourcePsdCryptoEnabled;
 	}
 
-	public String getCacheServiceSpec()
+	public String getDtbsSourcePsdCryptoSecretKey()
 	{
-		return cacheServiceSpec;
+		return dtbsSourcePsdCryptoSecretKey;
 	}
 
-	public void setCacheServiceSpec(String cacheServiceSpec)
+	protected void setDtbsSourcePsdCryptoSecretKey(String dtbsSourcePsdCryptoSecretKey)
 	{
-		this.cacheServiceSpec = cacheServiceSpec;
+		this.dtbsSourcePsdCryptoSecretKey = dtbsSourcePsdCryptoSecretKey;
 	}
 
-	public boolean isDashboardSharePasswordCryptoDisabled()
+	public String getDtbsSourcePsdCryptoSalt()
 	{
-		return dashboardSharePasswordCryptoDisabled;
+		return dtbsSourcePsdCryptoSalt;
 	}
 
-	public void setDashboardSharePasswordCryptoDisabled(boolean dashboardSharePasswordCryptoDisabled)
+	protected void setDtbsSourcePsdCryptoSalt(String dtbsSourcePsdCryptoSalt)
 	{
-		this.dashboardSharePasswordCryptoDisabled = dashboardSharePasswordCryptoDisabled;
+		this.dtbsSourcePsdCryptoSalt = dtbsSourcePsdCryptoSalt;
 	}
 
-	public String getDashboardSharePasswordCryptoSecretKey()
+	public boolean isDashboardSharePsdCryptoEnabled()
 	{
-		return dashboardSharePasswordCryptoSecretKey;
+		return dashboardSharePsdCryptoEnabled;
 	}
 
-	public void setDashboardSharePasswordCryptoSecretKey(String dashboardSharePasswordCryptoSecretKey)
+	protected void setDashboardSharePsdCryptoEnabled(boolean dashboardSharePsdCryptoEnabled)
 	{
-		this.dashboardSharePasswordCryptoSecretKey = dashboardSharePasswordCryptoSecretKey;
+		this.dashboardSharePsdCryptoEnabled = dashboardSharePsdCryptoEnabled;
 	}
 
-	public String getDashboardSharePasswordCryptoSalt()
+	public String getDashboardSharePsdCryptoSecretKey()
 	{
-		return dashboardSharePasswordCryptoSalt;
+		return dashboardSharePsdCryptoSecretKey;
 	}
 
-	public void setDashboardSharePasswordCryptoSalt(String dashboardSharePasswordCryptoSalt)
+	protected void setDashboardSharePsdCryptoSecretKey(String dashboardSharePsdCryptoSecretKey)
 	{
-		this.dashboardSharePasswordCryptoSalt = dashboardSharePasswordCryptoSalt;
+		this.dashboardSharePsdCryptoSecretKey = dashboardSharePsdCryptoSecretKey;
 	}
 
-	public int getDashboardSharePasswordAuthFailThreshold()
+	public String getDashboardSharePsdCryptoSalt()
 	{
-		return dashboardSharePasswordAuthFailThreshold;
+		return dashboardSharePsdCryptoSalt;
 	}
 
-	public void setDashboardSharePasswordAuthFailThreshold(int dashboardSharePasswordAuthFailThreshold)
+	protected void setDashboardSharePsdCryptoSalt(String dashboardSharePsdCryptoSalt)
 	{
-		this.dashboardSharePasswordAuthFailThreshold = dashboardSharePasswordAuthFailThreshold;
+		this.dashboardSharePsdCryptoSalt = dashboardSharePsdCryptoSalt;
 	}
 
-	public int getDashboardSharePasswordAuthFailPastMinutes()
+	public int getDashboardSharePsdAuthFailThreshold()
 	{
-		return dashboardSharePasswordAuthFailPastMinutes;
+		return dashboardSharePsdAuthFailThreshold;
 	}
 
-	public void setDashboardSharePasswordAuthFailPastMinutes(int dashboardSharePasswordAuthFailPastMinutes)
+	protected void setDashboardSharePsdAuthFailThreshold(int dashboardSharePsdAuthFailThreshold)
 	{
-		this.dashboardSharePasswordAuthFailPastMinutes = dashboardSharePasswordAuthFailPastMinutes;
+		this.dashboardSharePsdAuthFailThreshold = dashboardSharePsdAuthFailThreshold;
+	}
+
+	public int getDashboardSharePsdAuthFailPastMinutes()
+	{
+		return dashboardSharePsdAuthFailPastMinutes;
+	}
+
+	protected void setDashboardSharePsdAuthFailPastMinutes(int dashboardSharePsdAuthFailPastMinutes)
+	{
+		this.dashboardSharePsdAuthFailPastMinutes = dashboardSharePsdAuthFailPastMinutes;
 	}
 
 	public int getIpLoginLatchSeconds()
@@ -542,7 +616,7 @@ public abstract class ApplicationProperties implements Serializable
 		return ipLoginLatchSeconds;
 	}
 
-	public void setIpLoginLatchSeconds(int ipLoginLatchSeconds)
+	protected void setIpLoginLatchSeconds(int ipLoginLatchSeconds)
 	{
 		this.ipLoginLatchSeconds = ipLoginLatchSeconds;
 	}
@@ -552,7 +626,7 @@ public abstract class ApplicationProperties implements Serializable
 		return ipLoginLatchFrequency;
 	}
 
-	public void setIpLoginLatchFrequency(int ipLoginLatchFrequency)
+	protected void setIpLoginLatchFrequency(int ipLoginLatchFrequency)
 	{
 		this.ipLoginLatchFrequency = ipLoginLatchFrequency;
 	}
@@ -562,7 +636,7 @@ public abstract class ApplicationProperties implements Serializable
 		return usernameLoginLatchSeconds;
 	}
 
-	public void setUsernameLoginLatchSeconds(int usernameLoginLatchSeconds)
+	protected void setUsernameLoginLatchSeconds(int usernameLoginLatchSeconds)
 	{
 		this.usernameLoginLatchSeconds = usernameLoginLatchSeconds;
 	}
@@ -572,7 +646,7 @@ public abstract class ApplicationProperties implements Serializable
 		return usernameLoginLatchFrequency;
 	}
 
-	public void setUsernameLoginLatchFrequency(int usernameLoginLatchFrequency)
+	protected void setUsernameLoginLatchFrequency(int usernameLoginLatchFrequency)
 	{
 		this.usernameLoginLatchFrequency = usernameLoginLatchFrequency;
 	}
@@ -582,7 +656,7 @@ public abstract class ApplicationProperties implements Serializable
 		return disableLoginCheckCode;
 	}
 
-	public void setDisableLoginCheckCode(boolean disableLoginCheckCode)
+	protected void setDisableLoginCheckCode(boolean disableLoginCheckCode)
 	{
 		this.disableLoginCheckCode = disableLoginCheckCode;
 	}
@@ -592,19 +666,59 @@ public abstract class ApplicationProperties implements Serializable
 		return poiZipSecureFileMinInflateRatio;
 	}
 
-	public void setPoiZipSecureFileMinInflateRatio(String poiZipSecureFileMinInflateRatio)
+	protected void setPoiZipSecureFileMinInflateRatio(String poiZipSecureFileMinInflateRatio)
 	{
 		this.poiZipSecureFileMinInflateRatio = poiZipSecureFileMinInflateRatio;
 	}
 
-	public Map<String, String> getSqlDataSetInvalidSqlKeywords()
+	public int getPermissionCacheMaxLength()
 	{
-		return sqlDataSetInvalidSqlKeywords;
+		return permissionCacheMaxLength;
 	}
 
-	public void setSqlDataSetInvalidSqlKeywords(Map<String, String> sqlDataSetInvalidSqlKeywords)
+	public void setPermissionCacheMaxLength(int permissionCacheMaxLength)
 	{
-		this.sqlDataSetInvalidSqlKeywords = sqlDataSetInvalidSqlKeywords;
+		this.permissionCacheMaxLength = permissionCacheMaxLength;
+	}
+
+	public int getDtbsSourceTableCacheMaxLength()
+	{
+		return dtbsSourceTableCacheMaxLength;
+	}
+
+	protected void setDtbsSourceTableCacheMaxLength(int dtbsSourceTableCacheMaxLength)
+	{
+		this.dtbsSourceTableCacheMaxLength = dtbsSourceTableCacheMaxLength;
+	}
+
+	public int getDataSetCacheMaxLength()
+	{
+		return dataSetCacheMaxLength;
+	}
+
+	protected void setDataSetCacheMaxLength(int dataSetCacheMaxLength)
+	{
+		this.dataSetCacheMaxLength = dataSetCacheMaxLength;
+	}
+
+	public String getWelcomeContent()
+	{
+		return welcomeContent;
+	}
+
+	protected void setWelcomeContent(String welcomeContent)
+	{
+		this.welcomeContent = welcomeContent;
+	}
+
+	public String getWelcomeContentEncoding()
+	{
+		return welcomeContentEncoding;
+	}
+
+	protected void setWelcomeContentEncoding(String welcomeContentEncoding)
+	{
+		this.welcomeContentEncoding = welcomeContentEncoding;
 	}
 
 	public Map<String, String> getDsmanagerQueryInvalidSqlKeywords()
@@ -627,33 +741,75 @@ public abstract class ApplicationProperties implements Serializable
 		this.dsmanagerImptsqlInvalidSqlKeywords = dsmanagerImptsqlInvalidSqlKeywords;
 	}
 
-	public Map<String, String> getDsmanagerSqlpadReadInvalidSqlKeywords()
+	public Map<String, String> getDsmanagerReadInvalidSqlKeywords()
 	{
-		return dsmanagerSqlpadReadInvalidSqlKeywords;
+		return dsmanagerReadInvalidSqlKeywords;
 	}
 
-	public void setDsmanagerSqlpadReadInvalidSqlKeywords(Map<String, String> dsmanagerSqlpadReadInvalidSqlKeywords)
+	public void setDsmanagerReadInvalidSqlKeywords(Map<String, String> dsmanagerReadInvalidSqlKeywords)
 	{
-		this.dsmanagerSqlpadReadInvalidSqlKeywords = dsmanagerSqlpadReadInvalidSqlKeywords;
+		this.dsmanagerReadInvalidSqlKeywords = dsmanagerReadInvalidSqlKeywords;
 	}
 
-	public Map<String, String> getDsmanagerSqlpadEditInvalidSqlKeywords()
+	public Map<String, String> getDsmanagerEditInvalidSqlKeywords()
 	{
-		return dsmanagerSqlpadEditInvalidSqlKeywords;
+		return dsmanagerEditInvalidSqlKeywords;
 	}
 
-	public void setDsmanagerSqlpadEditInvalidSqlKeywords(Map<String, String> dsmanagerSqlpadEditInvalidSqlKeywords)
+	public void setDsmanagerEditInvalidSqlKeywords(Map<String, String> dsmanagerEditInvalidSqlKeywords)
 	{
-		this.dsmanagerSqlpadEditInvalidSqlKeywords = dsmanagerSqlpadEditInvalidSqlKeywords;
+		this.dsmanagerEditInvalidSqlKeywords = dsmanagerEditInvalidSqlKeywords;
 	}
 
-	public Map<String, String> getDsmanagerSqlpadDeleteInvalidSqlKeywords()
+	public Map<String, String> getDsmanagerDeleteInvalidSqlKeywords()
 	{
-		return dsmanagerSqlpadDeleteInvalidSqlKeywords;
+		return dsmanagerDeleteInvalidSqlKeywords;
 	}
 
-	public void setDsmanagerSqlpadDeleteInvalidSqlKeywords(Map<String, String> dsmanagerSqlpadDeleteInvalidSqlKeywords)
+	public void setDsmanagerDeleteInvalidSqlKeywords(Map<String, String> dsmanagerDeleteInvalidSqlKeywords)
 	{
-		this.dsmanagerSqlpadDeleteInvalidSqlKeywords = dsmanagerSqlpadDeleteInvalidSqlKeywords;
+		this.dsmanagerDeleteInvalidSqlKeywords = dsmanagerDeleteInvalidSqlKeywords;
+	}
+
+	public List<CrossOriginProperties> getCrossOriginPropertiess()
+	{
+		return crossOriginPropertiess;
+	}
+
+	@SuppressWarnings("unchecked")
+	protected void setCrossOriginPropertiess(List<? extends CrossOriginProperties> crossOriginPropertiess)
+	{
+		this.crossOriginPropertiess = (List<CrossOriginProperties>) crossOriginPropertiess;
+	}
+
+	public List<DbTableTypeSpec> getDbTableTypeSpecs()
+	{
+		return dbTableTypeSpecs;
+	}
+
+	@SuppressWarnings("unchecked")
+	protected void setDbTableTypeSpecs(List<? extends DbTableTypeSpec> dbTableTypeSpecs)
+	{
+		this.dbTableTypeSpecs = (List<DbTableTypeSpec>) dbTableTypeSpecs;
+	}
+
+	public ConnectionSourceProperties getConnectionSourceProperties()
+	{
+		return connectionSourceProperties;
+	}
+
+	protected void setConnectionSourceProperties(ConnectionSourceProperties connectionSourceProperties)
+	{
+		this.connectionSourceProperties = connectionSourceProperties;
+	}
+
+	public CheckCodeProperties getCheckCodeProperties()
+	{
+		return checkCodeProperties;
+	}
+
+	protected void setCheckCodeProperties(CheckCodeProperties checkCodeProperties)
+	{
+		this.checkCodeProperties = checkCodeProperties;
 	}
 }

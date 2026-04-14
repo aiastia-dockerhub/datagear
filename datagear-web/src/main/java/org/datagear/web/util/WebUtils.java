@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -24,16 +24,12 @@ import java.util.Locale;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
-import org.datagear.management.domain.User;
-import org.datagear.util.Global;
 import org.datagear.util.IDUtil;
 import org.datagear.util.IOUtil;
 import org.datagear.util.StringUtil;
-import org.datagear.web.security.AuthUser;
 import org.springframework.context.i18n.LocaleContextHolder;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.servlet.ThemeResolver;
 import org.springframework.web.servlet.support.RequestContextUtils;
 
@@ -47,22 +43,16 @@ public class WebUtils
 {
 	public static final String COOKIE_PAGINATION_SIZE = "PAGINATION_PAGE_SIZE";
 
-	/**
-	 * Servlet规范中参数会话ID名称，当客户端不支持cookie时，则应使用此参数传递会话ID，格式为：/aa/bb;jsessionid=[id]
-	 */
-	public static final String PARAM_JSESSIONID = "jsessionid";
-
 	/** Servlet环境中存储操作消息的关键字 */
 	public static final String KEY_OPERATION_MESSAGE = "operationMessage";
 
 	/** 父页面ID关键字 */
 	public static final String KEY_PARENT_PAGE_ID = "ppid";
 
-	/** 最新版本脚本地址 */
-	public static final String LATEST_VERSION_SCRIPT_LOCATION = Global.WEB_SITE + "/latest-version.js";
-
-	/** Cookie中存储是否已执行过本次的检测新版本的名称 */
-	public static final String COOKIE_DETECT_NEW_VERSION_RESOLVED = "DETECT_NEW_VERSION_RESOLVED";
+	/**
+	 * 首页URL。
+	 */
+	public static final String INDEX_PAGE_URL = "/";
 
 	/**
 	 * 获取应用上下文路径。
@@ -73,6 +63,20 @@ public class WebUtils
 	public static String getContextPath(HttpServletRequest request)
 	{
 		return request.getContextPath();
+	}
+
+	/**
+	 * 获取应用首页路径。
+	 * <p>
+	 * 通常是：{@code "/"}、{@code "context-path/"}
+	 * </p>
+	 * 
+	 * @param request
+	 * @return
+	 */
+	public static String getIndexPath(HttpServletRequest request)
+	{
+		return request.getContextPath() + "/";
 	}
 
 	/**
@@ -112,55 +116,66 @@ public class WebUtils
 	}
 
 	/**
-	 * 获取当前用户（认证用户或者匿名用户）。
-	 * <p>
-	 * 此方法不会返回{@code null}。
-	 * </p>
+	 * 获取请求头的{@code Referer}值。
 	 * 
+	 * @param request
 	 * @return
 	 */
-	public static User getUser()
+	public static String getReferer(HttpServletRequest request)
 	{
-		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-		return getUser(authentication);
+		String ref = request.getHeader("Referer");
+		return (ref == null ? "" : ref);
 	}
 
 	/**
-	 * 获取当前用户（认证用户或者匿名用户）。
-	 * <p>
-	 * 此方法不会返回{@code null}。
-	 * </p>
+	 * 是否是HTTP协议。
 	 * 
-	 * @param authentication
+	 * @param scheme
 	 * @return
 	 */
-	public static User getUser(Authentication authentication)
+	public static boolean isHttpScheme(String scheme)
 	{
-		User user = null;
+		return "http".equalsIgnoreCase(scheme);
+	}
 
-		Object principal = authentication.getPrincipal();
+	/**
+	 * 是否是HTTP协议。
+	 * 
+	 * @param request
+	 * @return
+	 */
+	public static boolean isHttpScheme(HttpServletRequest request)
+	{
+		return isHttpScheme(request.getScheme());
+	}
 
-		if (principal instanceof User)
-		{
-			user = (User) principal;
-		}
-		else if (principal instanceof AuthUser)
-		{
-			AuthUser ou = (AuthUser) principal;
-			user = ou.getUser();
-		}
+	/**
+	 * 是否是HTTPS协议。
+	 * 
+	 * @param scheme
+	 * @return
+	 */
+	public static boolean isSecureHttpScheme(String scheme)
+	{
+		return "https".equalsIgnoreCase(scheme);
+	}
 
-		if (user == null)
-			throw new IllegalStateException();
-
-		return user;
+	/**
+	 * 是否是HTTPS协议。
+	 * 
+	 * @param request
+	 * @return
+	 */
+	public static boolean isSecureHttpScheme(HttpServletRequest request)
+	{
+		return isSecureHttpScheme(request.getScheme());
 	}
 
 	/**
 	 * 获取操作消息。
 	 * 
 	 * @param request
-	 * @return
+	 * @return {@code null}表示没有
 	 */
 	public static OperationMessage getOperationMessage(HttpServletRequest request)
 	{
@@ -177,6 +192,49 @@ public class WebUtils
 	public static void setOperationMessage(HttpServletRequest request, OperationMessage operationMessage)
 	{
 		request.setAttribute(KEY_OPERATION_MESSAGE, operationMessage);
+	}
+
+	/**
+	 * 移除操作消息。
+	 * 
+	 * @param request
+	 */
+	public static void removeOperationMessage(HttpServletRequest request)
+	{
+		request.removeAttribute(KEY_OPERATION_MESSAGE);
+	}
+
+	/**
+	 * 获取操作消息。
+	 * 
+	 * @param session
+	 * @return {@code null}表示没有
+	 */
+	public static OperationMessage getOperationMessage(HttpSession session)
+	{
+		return (OperationMessage) session.getAttribute(KEY_OPERATION_MESSAGE);
+	}
+
+	/**
+	 * 设置异常操作消息。
+	 * 
+	 * @param request
+	 * @param operationMessage
+	 * @return
+	 */
+	public static void setOperationMessage(HttpSession session, OperationMessage operationMessage)
+	{
+		session.setAttribute(KEY_OPERATION_MESSAGE, operationMessage);
+	}
+
+	/**
+	 * 移除操作消息。
+	 * 
+	 * @param session
+	 */
+	public static void removeOperationMessage(HttpSession session)
+	{
+		session.removeAttribute(KEY_OPERATION_MESSAGE);
 	}
 
 	/**
@@ -232,7 +290,7 @@ public class WebUtils
 			int age, String path)
 	{
 		if (StringUtil.isEmpty(path))
-			path = getContextPath(request);
+			path = getContextPath(request) + "/";
 
 		Cookie cookie = new Cookie(name, value);
 		cookie.setPath(path);
@@ -324,7 +382,9 @@ public class WebUtils
 	public static boolean isAjaxRequest(HttpServletRequest request)
 	{
 		// 是否ajax请求，jquery库ajax可以使用此方案判断
-		boolean ajaxRequest = (request.getHeader("x-requested-with") != null);
+		String head = request.getHeader("x-requested-with");
+		boolean ajaxRequest = "XMLHttpRequest".equalsIgnoreCase(head);
+
 		return ajaxRequest;
 	}
 
@@ -418,21 +478,6 @@ public class WebUtils
 	}
 
 	/**
-	 * 为指定URL添加{@linkplain #PARAM_JSESSIONID}参数。
-	 * <p>
-	 * 当要保持会话而客户端不支持cookie时，应使用此方法为URL添加会话ID参数。
-	 * </p>
-	 * 
-	 * @param url
-	 * @param sessionId
-	 * @return
-	 */
-	public static String addJsessionidParam(String url, String sessionId)
-	{
-		return url + ";" + PARAM_JSESSIONID + "=" + sessionId;
-	}
-
-	/**
 	 * 解码URL。
 	 * <p>
 	 * URL中的非ASCII字符会被浏览器编码，应使用此方法解码，可解决中文URL问题。
@@ -487,7 +532,27 @@ public class WebUtils
 	{
 		String remoteAddress = request.getRemoteAddr();
 
-		String headerAddress = request.getHeader("x-forwarded-for");
+		String headerAddress = "";
+
+		if (StringUtil.isEmpty(headerAddress) || "unknown".equalsIgnoreCase(headerAddress))
+		{
+			headerAddress = request.getHeader("x-forwarded-for");
+		}
+
+		if (StringUtil.isEmpty(headerAddress) || "unknown".equalsIgnoreCase(headerAddress))
+		{
+			headerAddress = request.getHeader("X-Real-IP");
+		}
+
+		if (StringUtil.isEmpty(headerAddress) || "unknown".equalsIgnoreCase(headerAddress))
+		{
+			headerAddress = request.getHeader("Remote-Host");
+		}
+
+		if (StringUtil.isEmpty(headerAddress) || "unknown".equalsIgnoreCase(headerAddress))
+		{
+			headerAddress = request.getHeader("Remote_Addr");
+		}
 
 		if (StringUtil.isEmpty(headerAddress) || "unknown".equalsIgnoreCase(headerAddress))
 		{
@@ -511,13 +576,143 @@ public class WebUtils
 				: headerAddress);
 	}
 	
-	public static void setEnableDetectNewVersionRequest(HttpServletRequest request)
+	/**
+	 * 解析请求路径中{@code pathPrefix}之后的路径名。
+	 * 
+	 * @param request
+	 * @param pathPrefix
+	 * @return
+	 * @see {@linkplain #resolvePathAfter(String, String)}
+	 */
+	public static String resolvePathAfter(HttpServletRequest request, String pathPrefix)
 	{
-		request.setAttribute("enableDetectNewVersion", true);
+		return resolvePathAfter(request.getRequestURI(), pathPrefix);
 	}
 	
-	public static boolean isEnableDetectNewVersionRequest(HttpServletRequest request)
+	/**
+	 * 解析URL中{@code pathPrefix}之后的路径名。
+	 * <p>
+	 * 返回的路径名将会移除路径参数、请求参数、锚点参数，比如对于{@code "/a/b;jsessionid=156D0D8332?param=value#anchor"}将只会返回{@code "/a/b"}。
+	 * </p>
+	 * 
+	 * @param url
+	 * @param pathPrefix
+	 *            为空或{@code null}，则返回整个请求路径
+	 * @return 返回{@code null}表明路径不包含{@code pathPrefix}
+	 */
+	public static String resolvePathAfter(String url, String pathPrefix)
 	{
-		return Boolean.TRUE.equals(request.getAttribute("enableDetectNewVersion"));
+		String re;
+
+		if (StringUtil.isEmpty(pathPrefix))
+		{
+			re = url;
+		}
+		else if (url.endsWith(pathPrefix))
+		{
+			re = "";
+		}
+		else
+		{
+			int idx = url.indexOf(pathPrefix);
+
+			if (idx < 0)
+			{
+				re = null;
+			}
+			else
+			{
+				re = url.substring(idx + pathPrefix.length());
+			}
+		}
+
+		// 删除锚点“...#anchor”
+		if (re != null)
+		{
+			int idx = re.indexOf('#');
+
+			if (idx >= 0)
+			{
+				re = re.substring(0, idx);
+			}
+		}
+
+		// 删除请求参数“...?p=v”
+		if (re != null)
+		{
+			int idx = re.indexOf('?');
+
+			if (idx >= 0)
+			{
+				re = re.substring(0, idx);
+			}
+		}
+
+		// 删除路径参数“...;a=1;b=2”
+		if (re != null)
+		{
+			int idx = re.indexOf(';');
+
+			if (idx >= 0)
+			{
+				re = re.substring(0, idx);
+			}
+		}
+
+		return re;
+	}
+
+	/**
+	 * 为URL添加请求参数。
+	 * 
+	 * @param url
+	 * @param name
+	 * @param value
+	 * @return
+	 */
+	public static String addUrlParam(String url, String name, String value)
+	{
+		String paramString = name + "=" + value;
+		return addUrlParam(url, paramString);
+	}
+
+	/**
+	 * 为URL添加请求参数。
+	 * 
+	 * @param url
+	 * @param paramString
+	 *            允许{@code null}、空字符串，参数字符串，格式示例：{@code "param=value"}
+	 * @return
+	 */
+	public static String addUrlParam(String url, String paramString)
+	{
+		if (StringUtil.isEmpty(paramString))
+			return url;
+
+		String re = url;
+
+		// 锚点
+		String anchor = null;
+
+		int aidx = url.indexOf('#');
+		if (aidx >= 0)
+		{
+			re = url.substring(0, aidx);
+			anchor = url.substring(aidx, url.length());
+		}
+
+		int qidx = re.indexOf('?');
+
+		if (qidx < 0)
+			re += "?";
+		else
+			re += "&";
+
+		re += paramString;
+
+		if (anchor != null)
+			re += anchor;
+
+		return re;
 	}
 }

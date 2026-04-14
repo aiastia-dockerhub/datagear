@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,7 @@
  *
 -->
 <#assign HtmlTplDashboardWidgetEntity=statics['org.datagear.management.domain.HtmlTplDashboardWidgetEntity']>
+<#assign AbstractDataAnalysisController=statics['org.datagear.web.controller.AbstractDataAnalysisController']>
 <#include "../include/page_import.ftl">
 <#include "../include/html_doctype.ftl">
 <html>
@@ -28,29 +29,32 @@
 	<#include "../include/html_app_name_suffix.ftl">
 </title>
 </head>
-<body class="p-card no-border">
+<body class="p-card no-border h-screen m-0">
 <#include "../include/page_obj.ftl">
-<div id="${pid}" class="page page-manager page-table page-search-ap-aware">
-	<div class="page-header grid grid-nogutter align-items-center pb-2">
+<div id="${pid}" class="page page-manager page-table page-search-ap-aware h-full flex flex-column overflow-auto">
+	<div class="page-header grid grid-nogutter align-items-center p-1 flex-grow-0">
 		<div class="col-12 mb-1">
 			<#include "../include/page_current_analysis_project.ftl">
 		</div>
 		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
 			<#include "../include/page_search_form_filter.ftl">
 		</div>
-		<div class="h-opts col-12 text-right" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
+		<div class="operations col-12 flex gap-1 flex-wrap md:justify-content-end" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
 			<p-button label="<@spring.message code='confirm' />" @click="onSelect" v-if="pm.isSelectAction"></p-button>
 			
 			<p-splitbutton label="<@spring.message code='add' />" @click="onAdd" :model="pm.addBtnItems" v-if="!pm.isReadonlyAction"></p-splitbutton>
-			<p-splitbutton label="<@spring.message code='edit' />" @click="onEdit" :model="pm.editBtnItems" v-if="!pm.isReadonlyAction"></p-splitbutton>
-			<p-splitbutton label="<@spring.message code='show' />" @click="onShow" :model="pm.showBtnItems" v-if="!pm.isSelectAction"></p-splitbutton>
+			<p-button label="<@spring.message code='edit' />" @click="onEdit" v-if="!pm.isReadonlyAction"></p-button>
+			<p-button label="<@spring.message code='design' />" @click="onDesign" v-if="!pm.isReadonlyAction"></p-button>
+			<div id="${pid}showBtnWrapper" class="inline-block white-space-nowrap flex-tieredmenu-wrapper">
+				<p-splitbutton label="<@spring.message code='show' />" @click="onShow" :model="pm.showBtnItems" append-to="#${pid}showBtnWrapper" v-if="!pm.isSelectAction"></p-splitbutton>
+			</div>
 			<p-splitbutton label="<@spring.message code='share' />" @click="onShare" :model="pm.shareBtnItems" v-if="!pm.isReadonlyAction"></p-splitbutton>
 			<p-button label="<@spring.message code='view' />" @click="onView" :class="{'p-button-secondary': pm.isSelectAction}"></p-button>
-			<p-button label="<@spring.message code='export' />" @click="onExport" v-if="!pm.isSelectAction"></p-button>
+			<p-button label="<@spring.message code='export' />" @click="onExport" v-if="!pm.isReadonlyAction"></p-button>
 			<p-button label="<@spring.message code='delete' />" @click="onDelete" class="p-button-danger" v-if="!pm.isReadonlyAction"></p-button>
 		</div>
 	</div>
-	<div class="page-content">
+	<div class="page-content flex-grow-1 overflow-auto">
 		<p-datatable :value="pm.items" :scrollable="true" scroll-height="flex"
 			:paginator="pm.paginator" :paginator-template="pm.paginatorTemplate" :first="pm.pageRecordIndex"
 			:rows="pm.rowsPerPage" :current-page-report-template="pm.pageReportTemplate"
@@ -58,16 +62,17 @@
 			:lazy="true" :total-records="pm.totalRecords" @page="onPaginator($event)"
 			sort-mode="multiple" :multi-sort-meta="pm.multiSortMeta" @sort="onSort($event)"
 			:resizable-columns="true" column-resize-mode="expand"
-			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" dataKey="id" striped-rows>
+			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" data-key="id" striped-rows>
 			<p-column :selection-mode="pm.selectionMode" :frozen="true" class="col-check"></p-column>
 			<p-column field="id" header="<@spring.message code='id' />" class="col-id"></p-column>
 			<p-column field="name" header="<@spring.message code='name' />" :sortable="true" class="col-name"></p-column>
+			<!--<p-column field="version" header="<@spring.message code='version' />" :sortable="true" class="col-version"></p-column>-->
 			<p-column field="analysisProject.name" header="<@spring.message code='ownerProject' />" :sortable="true" class="col-name"></p-column>
 			<p-column field="createUser.realName" header="<@spring.message code='createUser' />" :sortable="true" class="col-user"></p-column>
 			<p-column field="createTime" header="<@spring.message code='createTime' />" :sortable="true" class="col-datetime col-last"></p-column>
 		</p-datatable>
+		<#include "../include/page_copy_to_clipboard.ftl">
 	</div>
-	<#include "../include/page_copy_to_clipboard.ftl">
 	<#include "../include/page_foot.ftl">
 </div>
 <#include "../include/page_manager.ftl">
@@ -79,7 +84,14 @@
 	
 	po.buildShowURL = function(id)
 	{
-		return po.concatContextPath("/dashboard/show/"+encodeURIComponent(id)+"/");
+		return po.concatContextPath("/dv/"+encodeURIComponent(id)+"/");
+	};
+
+	po.buildIframeNestCode = function(url)
+	{
+		url = $.addParam(url, "${AbstractDataAnalysisController.DASHBOARD_SHOW_PARAM_SAFE_SESSION}",
+								"${AbstractDataAnalysisController.DASHBOARD_SHOW_PARAM_SAFE_SESSION_VALUE_1}");
+		return "<iframe src=\""+ url +"\" style=\"width:100%;height:100%;border:0;\"></iframe>";
 	};
 	
 	po.setupAjaxTable("/dashboard/pagingQueryData",
@@ -92,24 +104,10 @@
 		addBtnItems:
 		[
 			{
-				label: "<@spring.message code='addInNewWindow' />",
-				command: function()
-				{
-					po.open(po.addCurrentAnalysisProjectIdParam("/dashboard/add"), {target: "_blank"});
-				}
-			},
-			{
 				label: "<@spring.message code='copy' />",
 				command: function()
 				{
-					po.handleOpenOfAction("/dashboard/copy", {width: "90vw"});
-				}
-			},
-			{
-				label: "<@spring.message code='copyInNewWindow' />",
-				command: function()
-				{
-					po.handleOpenOfAction("/dashboard/copy", {target: "_blank"});
+					po.handleOpenOfAction("/dashboard/copy");
 				}
 			},
 			{
@@ -117,16 +115,6 @@
 				command: function()
 				{
 					po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dashboard/import"));
-				}
-			}
-		],
-		editBtnItems:
-		[
-			{
-				label: "<@spring.message code='editInNewWindow' />",
-				command: function()
-				{
-					po.handleOpenOfAction("/dashboard/edit", {target: "_blank"});
 				}
 			}
 		],
@@ -151,6 +139,18 @@
 						po.copyToClipboard(po.serverURL + po.buildShowURL(entity.id));
 	 				});
 				}
+			},
+			{
+				label: "<@spring.message code='generateIframeNestCode' />",
+				command: function()
+				{
+					po.executeOnSelect(function(entity)
+					{
+						var url = po.serverURL + po.buildShowURL(entity.id);
+						var iframeCode = po.buildIframeNestCode(url);
+						po.copyToClipboard(iframeCode);
+					});
+				}
 			}
 		]
 	});
@@ -159,12 +159,20 @@
 	{
 		onAdd: function()
 		{
-			po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dashboard/add"), {width: "90vw"});
+			po.handleAddAction(po.addCurrentAnalysisProjectIdParam("/dashboard/add"));
 		},
 		
 		onEdit: function()
 		{
-			po.handleOpenOfAction("/dashboard/edit", {width: "90vw"});
+			po.handleOpenOfAction("/dashboard/edit");
+		},
+		
+		onDesign: function()
+		{
+			po.executeOnSelect(function(entity)
+			{
+				window.open(po.concatContextPath("/dashboard/design/"+encodeURIComponent(entity.id)));
+			});
 		},
 		
 		onView: function()
@@ -176,7 +184,7 @@
 		{
 			po.executeOnSelect(function(entity)
 			{
-				po.openTableDialog("/authorization/${HtmlTplDashboardWidgetEntity.AUTHORIZATION_RESOURCE_TYPE}/"+encodeURIComponent(entity.id)+"/query");
+				po.openTableDialog("/authorization/${HtmlTplDashboardWidgetEntity.AUTHORIZATION_RESOURCE_TYPE}/"+encodeURIComponent(entity.id)+"/manage");
 			});
 		},
 		
@@ -203,10 +211,9 @@
 			po.handleOpenOfAction("/dashboard/export", { target: "_blank" });
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

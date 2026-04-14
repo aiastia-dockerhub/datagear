@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,20 +17,17 @@
 
 package org.datagear.web.controller;
 
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
-import org.datagear.management.domain.Role;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.UserService;
+import org.datagear.management.util.RoleSpec;
 import org.datagear.util.IDUtil;
-import org.datagear.util.StringUtil;
 import org.datagear.web.config.ApplicationProperties;
 import org.datagear.web.util.CheckCodeManager;
+import org.datagear.web.util.DetectNewVersionScriptResolver;
 import org.datagear.web.util.OperationMessage;
 import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +61,12 @@ public class RegisterController extends AbstractController
 	@Autowired
 	private CheckCodeManager checkCodeManager;
 
+	@Autowired
+	private RoleSpec roleSpec;
+
+	@Autowired
+	private DetectNewVersionScriptResolver detectNewVersionScriptResolver;
+
 	public RegisterController()
 	{
 		super();
@@ -89,6 +92,36 @@ public class RegisterController extends AbstractController
 		this.userService = userService;
 	}
 
+	public CheckCodeManager getCheckCodeManager()
+	{
+		return checkCodeManager;
+	}
+
+	public void setCheckCodeManager(CheckCodeManager checkCodeManager)
+	{
+		this.checkCodeManager = checkCodeManager;
+	}
+
+	public RoleSpec getRoleSpec()
+	{
+		return roleSpec;
+	}
+
+	public void setRoleSpec(RoleSpec roleSpec)
+	{
+		this.roleSpec = roleSpec;
+	}
+
+	public DetectNewVersionScriptResolver getDetectNewVersionScriptResolver()
+	{
+		return detectNewVersionScriptResolver;
+	}
+
+	public void setDetectNewVersionScriptResolver(DetectNewVersionScriptResolver detectNewVersionScriptResolver)
+	{
+		this.detectNewVersionScriptResolver = detectNewVersionScriptResolver;
+	}
+
 	@RequestMapping
 	public String register(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
 	{
@@ -99,9 +132,12 @@ public class RegisterController extends AbstractController
 			return ERROR_PAGE_URL;
 		}
 
-		User user = new User();
-		setFormModel(model, user, "register", "doRegister");
-		WebUtils.setEnableDetectNewVersionRequest(request);
+		setFormAction(model, "register", "doRegister");
+
+		User entity = new User();
+		setFormModel(model, entity);
+		this.detectNewVersionScriptResolver.enableIf(request);
+		setUserPasswordStrengthInfo(model);
 		
 		return "/register";
 	}
@@ -111,11 +147,16 @@ public class RegisterController extends AbstractController
 	public ResponseEntity<OperationMessage> doRegister(HttpServletRequest request, HttpServletResponse response,
 			@RequestBody RegisterForm form)
 	{
+		HttpSession session = request.getSession();
+
 		if (this.applicationProperties.isDisableRegister())
 			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "registerDisabled");
 		
-		if(!this.checkCodeManager.isCheckCode(request.getSession(), CHECK_CODE_MODULE_REGISTER, form.getCheckCode()))
+		if (!this.checkCodeManager.isCheckCode(session, CHECK_CODE_MODULE_REGISTER, form.getCheckCode()))
+		{
+			this.checkCodeManager.removeCheckCode(session, CHECK_CODE_MODULE_REGISTER);
 			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "checkCodeError");
+		}
 
 		User user = form.getUser();
 
@@ -125,20 +166,25 @@ public class RegisterController extends AbstractController
 		user.setId(IDUtil.randomIdOnTime20());
 		user.setAdmin(false);
 		user.setAnonymous(false);
-		user.setCreateTime(new Date());
+		inflateCreateTime(user);
 
 		if (this.userService.getByNameNoPassword(user.getName()) != null)
 			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists",
 					user.getName());
 
-		user.setRoles(buildUserRolesForSave(this.applicationProperties.getDefaultRoleRegister()));
+		user.setRoles(this.roleSpec.buildRolesByIds(this.applicationProperties.getDefaultRoleRegister(), true));
 
-		this.userService.add(user);
+		addRegisterUser(user);
 
-		this.checkCodeManager.removeCheckCode(request.getSession(), CHECK_CODE_MODULE_REGISTER);
-		request.getSession().setAttribute(SESSION_KEY_REGISTER_USER_NAME, user.getName());
+		this.checkCodeManager.removeCheckCode(session, CHECK_CODE_MODULE_REGISTER);
+		session.setAttribute(SESSION_KEY_REGISTER_USER_NAME, user.getName());
 
 		return optSuccessResponseEntity(request);
+	}
+
+	protected void addRegisterUser(User user)
+	{
+		this.userService.add(user);
 	}
 
 	@RequestMapping("/success")
@@ -152,21 +198,12 @@ public class RegisterController extends AbstractController
 			return "/register_success";
 	}
 
-	public static Set<Role> buildUserRolesForSave(String roleIdsStr)
+	protected void setUserPasswordStrengthInfo(org.springframework.ui.Model model)
 	{
-		Set<Role> roles = new HashSet<>();
+		ApplicationProperties properties = getApplicationProperties();
 
-		if (!StringUtil.isBlank(roleIdsStr))
-		{
-			String[] roleIds = StringUtil.split(roleIdsStr, ",", true);
-
-			for (String roleId : roleIds)
-				roles.add(new Role(roleId, roleId));
-		}
-
-		roles.add(new Role(Role.ROLE_REGISTRY, Role.ROLE_REGISTRY));
-
-		return roles;
+		model.addAttribute("userPasswordStrengthRegex", properties.getUserPasswordStrengthRegex());
+		model.addAttribute("userPasswordStrengthTip", properties.getUserPasswordStrengthTip());
 	}
 
 	public static class RegisterForm implements ControllerForm

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,7 +31,7 @@ public final class Global
 	}
 
 	/** 当前版本号 */
-	public static final String VERSION = "4.5.1";
+	public static final String VERSION = "5.5.0";
 
 	/** 中文产品名称 */
 	public static final String PRODUCT_NAME_ZH = "数据齿轮";
@@ -47,4 +47,10 @@ public final class Global
 
 	/** 官网 */
 	public static final String WEB_SITE = "http://www.datagear.tech";
+
+	/** 官网-https */
+	public static final String WEB_SITE_HTTPS = "https://www.datagear.tech";
+	
+	/** 带下划线的大写名称缩写 */
+	public static final String NAME_SHORT_UCUS = "DG_";
 }

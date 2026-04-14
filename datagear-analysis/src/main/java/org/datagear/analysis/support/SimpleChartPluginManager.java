@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -39,9 +39,9 @@ public class SimpleChartPluginManager extends AbstractChartPluginManager
 	}
 
 	@Override
-	public void register(ChartPlugin chartPlugin)
+	public boolean register(ChartPlugin chartPlugin)
 	{
-		registerChartPlugin(chartPlugin);
+		return registerChartPlugin(chartPlugin);
 	}
 
 	@Override

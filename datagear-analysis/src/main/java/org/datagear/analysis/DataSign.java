@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.datagear.util.i18n.AbstractLabeled;
 import org.datagear.util.i18n.LabelUtil;
@@ -29,30 +30,78 @@ import org.datagear.util.i18n.Labeled;
 /**
  * 数据标记。
  * <p>
- * {@linkplain ChartPlugin}使用此类标记{@linkplain DataSet}产生的数据，并依此进行图表绘制。
+ * 在{@linkplain Chart}中通过{@linkplain Chart#setDataSetBinds(DataSetBind[])}关联绑定数据集时，
+ * 使用{@linkplain ChartPlugin}提供的{@linkplain ChartPlugin#getDataSigns()}标记，
+ * 使用此类标记{@linkplain DataSet}、{@linkplain DataSetField}，{@linkplain ChartPlugin}则依据它们构建图表数据，进行图表绘制。
+ * </p>
+ * <p>
+ * 数据标记分为两类：数据集标记、字段标记，通过{@linkplain #getTarget()}区分。
  * </p>
  * 
  * @author datagear@163.com
  *
  */
-public class DataSign extends AbstractLabeled implements Serializable
+public class DataSign extends AbstractLabeled implements AdditionsAware, Serializable
 {
 	private static final long serialVersionUID = 1L;
 	
 	public static final String PROPERTY_NAME = "name";
+	public static final String PROPERTY_TARGETS = "targets";
 	public static final String PROPERTY_REQUIRED = "required";
 	public static final String PROPERTY_MULTIPLE = "multiple";
+	public static final String PROPERTY_CHILDREN = "children";
 	public static final String PROPERTY_NAME_LABEL = Labeled.PROPERTY_NAME_LABEL;
 	public static final String PROPERTY_DESC_LABEL = Labeled.PROPERTY_DESC_LABEL;
+	public static final String PROPERTY_ADDITIONS = AdditionsAware.PROPERTY_ADDITIONS;
+
+	/**
+	 * 标记目标：字段
+	 */
+	public static final String TARGET_FIELD = "FIELD";
+
+	/**
+	 * 标记目标：数据集
+	 */
+	public static final String TARGET_DATASET = "DATASET";
+
+	/**
+	 * 标记目标数组：字段。
+	 */
+	public static final String[] TARGETS_FIELDS = new String[] { TARGET_FIELD };
 
 	/** 名称 */
 	private String name;
+
+	/**
+	 * 标记目标。
+	 * <p>
+	 * 一个{@linkplain DataSign}可定义多个标记目标。
+	 * </p>
+	 * <p>
+	 * 如果包含{@linkplain #TARGET_DATASET}，表明可应用于{@linkplain DataSetBind#getDataSetSigns()}；
+	 * 如果包含{@linkplain #TARGET_FIELD}，表明可应用于{@linkplain DataSetBind#getFieldSigns()}。
+	 * </p>
+	 * <p>
+	 * 注意：标记目标功能是在{@code 5.4.0}版本支持的，在之前版本中{@linkplain DataSign}只能应用于{@linkplain DataSetBind#getFieldSigns()}，
+	 * 因此，默认值应仅设为{@linkplain #TARGETS_FIELDS}，以兼容旧版逻辑。
+	 * </p>
+	 */
+	private String[] targets = TARGETS_FIELDS;
 
 	/** 数据集是否必须有此标记 */
 	private boolean required;
 
 	/** 数据集是否可有多个此标记 */
 	private boolean multiple;
+
+	/**
+	 * 当{@linkplain #target}是{@linkplain #TARGET_DATASET}时的子{@linkplain DataSign}（可选），
+	 * 它们应只标记于已经标记过此{@linkplain DataSign}的{@linkplain DataSetBind#getDataSet()}所包含的{@linkplain DataSetField}。
+	 */
+	private List<DataSign> children = null;
+
+	/** 附加属性 */
+	private Map<String, ?> additions = null;
 
 	public DataSign()
 	{
@@ -61,8 +110,14 @@ public class DataSign extends AbstractLabeled implements Serializable
 
 	public DataSign(String name, boolean required, boolean multiple)
 	{
+		this(name, TARGETS_FIELDS, required, multiple);
+	}
+
+	public DataSign(String name, String[] targets, boolean required, boolean multiple)
+	{
 		super();
 		this.name = name;
+		this.targets = targets;
 		this.required = required;
 		this.multiple = multiple;
 	}
@@ -75,6 +130,16 @@ public class DataSign extends AbstractLabeled implements Serializable
 	public void setName(String name)
 	{
 		this.name = name;
+	}
+
+	public String[] getTargets()
+	{
+		return targets;
+	}
+
+	public void setTargets(String[] targets)
+	{
+		this.targets = targets;
 	}
 
 	public boolean isRequired()
@@ -97,6 +162,27 @@ public class DataSign extends AbstractLabeled implements Serializable
 		this.multiple = multiple;
 	}
 
+	public List<DataSign> getChildren()
+	{
+		return children;
+	}
+
+	public void setChildren(List<DataSign> children)
+	{
+		this.children = children;
+	}
+
+	@Override
+	public Map<String, ?> getAdditions()
+	{
+		return additions;
+	}
+
+	public void setAdditions(Map<String, ?> additions)
+	{
+		this.additions = additions;
+	}
+
 	/**
 	 * 复制为指定{@linkplain Locale}的对象。
 	 * 
@@ -105,17 +191,31 @@ public class DataSign extends AbstractLabeled implements Serializable
 	 */
 	public DataSign clone(Locale locale)
 	{
-		DataSign target = new DataSign(this.name, this.required, this.multiple);
-		LabelUtil.concrete(this, target, locale);
+		DataSign re = new DataSign(this.name, this.targets, this.required, this.multiple);
+		re.setAdditions(this.additions);
+		LabelUtil.concrete(this, re, locale);
 
-		return target;
+		if (this.children != null)
+		{
+			List<DataSign> reChildren = new ArrayList<>(this.children.size());
+
+			for (DataSign dataSign : this.children)
+			{
+				reChildren.add(dataSign.clone(locale));
+			}
+
+			re.setChildren(reChildren);
+		}
+
+		return re;
 	}
 
 	@Override
 	public String toString()
 	{
-		return getClass().getSimpleName() + " [name=" + name + ", required=" + required + ", multiple="
-				+ multiple + ", nameLabel=" + getNameLabel() + ", descLabel=" + getDescLabel() + "]";
+		return getClass().getSimpleName() + " [name=" + name + ", targets=" + targets + ", required=" + required
+				+ ", multiple=" + multiple + ", nameLabel=" + getNameLabel() + ", descLabel=" + getDescLabel()
+				+ ", additions=" + additions + "]";
 	}
 
 	/**

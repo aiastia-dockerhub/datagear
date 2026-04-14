@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -72,7 +72,7 @@ public class FileInfo implements Serializable, Comparable<FileInfo>
 		this.directory = directory;
 		this.bytes = bytes;
 		this.displayName = name;
-		this.size = toPrettySize(bytes);
+		this.size = (directory ? "" : toPrettySize(bytes));
 	}
 
 	public String getName()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -15,6 +15,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
+:root{
+	--danger-color: #ef9a9a; /*同p-error样式*/
+}
+
 .logo{
 	background-image: url(image/logo.png);
 }
@@ -26,3 +30,9 @@
 
 /*代码编辑器*/
 .cm-s-custom span.cm-attribute { color: var(--blue-600); }
+
+/*企业版菜单项*/
+.p-menuitem.enterprise-menuitem .p-menuitem-link span{
+	background-color: #FFE082;
+    color: #121212;
+}

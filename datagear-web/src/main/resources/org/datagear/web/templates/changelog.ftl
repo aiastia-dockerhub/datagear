@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -59,10 +59,10 @@
 				</div>
 			</#list>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<#if !(allListed??) || allListed == false>
 			<div class="text-primary">
-				<a href="${contextPath}/changelogs" target="_blank" class="link">
+				<a href="${contextPath}/changelogs" target="_blank" class="link text-primary">
 					<@spring.message code='viewAll' />
 				</a>
 			</div>
@@ -71,12 +71,6 @@
 	</form>
 </div>
 <#include "include/page_form.ftl">
-<script>
-(function(po)
-{
-	po.vueMount();
-})
-(${pid});
-</script>
+<#include "include/page_vue_mount.ftl">
 </body>
 </html>

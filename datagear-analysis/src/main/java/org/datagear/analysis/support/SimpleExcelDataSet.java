@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,7 +21,7 @@ import java.io.File;
 import java.util.List;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 
 /**
@@ -35,6 +35,8 @@ import org.datagear.analysis.DataSetQuery;
  */
 public class SimpleExcelDataSet extends AbstractExcelFileDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	/** Excel文件 */
 	private File file;
 
@@ -49,15 +51,15 @@ public class SimpleExcelDataSet extends AbstractExcelFileDataSet
 		this.file = file;
 	}
 
-	public SimpleExcelDataSet(String id, String name, List<DataSetProperty> properties, File file)
+	public SimpleExcelDataSet(String id, String name, List<DataSetField> fields, File file)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.file = file;
 	}
 
 	@Override
-	protected File getExcelFile(DataSetQuery query) throws DataSetException
+	protected FileResolvedInfo getExcelFile(DataSetQuery query) throws DataSetException
 	{
-		return this.file;
+		return new FileResolvedInfo(this.file);
 	}
 }

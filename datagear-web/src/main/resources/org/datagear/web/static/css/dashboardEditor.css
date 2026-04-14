@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -22,8 +22,13 @@
 .dg-show-ve{}
 .dg-show-ve .dg-show-ve-selected{
 	/*避免元素本身设置了透明度导致选中效果不明显*/
-	opacity: 10 !important;
+	opacity: 1 !important;
 	filter: Alpha(Opacity=100) !important;
 }
 .dg-show-ve .dg-show-ve-new-insert{}
+.dg-show-ve .dg-show-ve-new-insert:empty{
+	/*设置最小尺寸，避免无法点击选中*/
+	min-width: 2rem;
+	min-height: 2rem;
+}
 .dg-show-ve.dg-show-ve-boundary{}

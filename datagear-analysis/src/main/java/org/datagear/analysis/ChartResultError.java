@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,14 +17,18 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
+
 /**
  * 图表结果错误信息。
  * 
  * @author datagear@163.com
  *
  */
-public class ChartResultError
+public class ChartResultError implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	private Throwable throwable;
 
 	public ChartResultError()

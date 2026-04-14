@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -39,6 +39,7 @@
 	i18n.canEditOnlyTextElement = "仅可编辑纯文本元素";
 	i18n.selectedElementRequired = "请选择要操作的元素";
 	i18n.selectedNotChartElement = "选定元素不是图表元素";
+	i18n.selectedNotHasChartElement = "选定元素不是图表元素，也未包含任何图表元素";
 	i18n.noSelectableNextElement="没有可选择的下一个元素";
 	i18n.noSelectablePrevElement="没有可选择的上一个元素";
 	i18n.noSelectableChildElement="没有可选择的子元素";
@@ -46,15 +47,17 @@
 	i18n.imgEleRequired = "不是图片元素";
 	i18n.hyperlinkEleRequired = "不是超链接元素";
 	i18n.videoEleRequired = "不是视频元素";
+	i18n.iframeEleRequired = "不是内嵌框体元素";
 	i18n.labelEleRequired = "不是文本标签元素";
 	i18n.chartPluginNoAttrDefined = "此类型图表插件没有定义可编辑属性";
+	i18n.bindChartElementMustBeDiv = "绑定图表的元素必须是<div>元素";
 	
-	//参考org.datagear.web.controller.DashboardController.DASHBOARD_BUILTIN_RENDER_CONTEXT_ATTR_EDIT_HTML_INFO
+	//参考org.datagear.web.controller.DashboardVisualController.DASHBOARD_BUILTIN_RENDER_CONTEXT_ATTR_EDIT_HTML_INFO
 	var DASHBOARD_BUILTIN_RENDER_CONTEXT_ATTR_EDIT_HTML_INFO = (editor.DASHBOARD_BUILTIN_RENDER_CONTEXT_ATTR_EDIT_HTML_INFO = "DG_EDIT_HTML_INFO");
 	
 	var BODY_CLASS_VISUAL_EDITOR = (editor.BODY_CLASS_VISUAL_EDITOR = "dg-show-ve");
 	
-	//参考org.datagear.web.controller.DashboardController.DashboardShowForEdit.ELEMENT_ATTR_VISUAL_EDIT_ID
+	//参考org.datagear.web.controller.DashboardVisualController.DashboardShowForEdit.ELEMENT_ATTR_VISUAL_EDIT_ID
 	var ELEMENT_ATTR_VISUAL_EDIT_ID = (editor.ELEMENT_ATTR_VISUAL_EDIT_ID = "dg-visual-edit-id");
 	
 	var ELEMENT_CLASS_SELECTED = (editor.ELEMENT_CLASS_SELECTED = "dg-show-ve-selected");
@@ -63,10 +66,28 @@
 	
 	var BODY_CLASS_ELEMENT_BOUNDARY = (editor.BODY_CLASS_ELEMENT_BOUNDARY = "dg-show-ve-boundary");
 	
-	var INSERT_ELE_FORMAT_FLAG = (editor.INSERT_ELE_FORMAT_FLAG = "<!--dg-format-flag-->");
+	var SHOW_BODY_CLASS_FLAG = (editor.SHOW_BODY_CLASS_FLAG = "dg-show-html-body");
+	var EDIT_BODY_CLASS_FLAG = (editor.EDIT_BODY_CLASS_FLAG = "dg-edit-html-body");
 	
-	//参考org.datagear.web.controller.DashboardController.LOAD_CHART_FOR_EDITOR_PARAM
+	var INSERT_ELE_FORMAT_START = (editor.INSERT_ELE_FORMAT_START = "<!--dgInsertFmtStart-->");
+	var INSERT_ELE_FORMAT_END = (editor.INSERT_ELE_FORMAT_END = "<!--dgInsertFmtEnd-->");
+	var DELETE_ELE_FORMAT_FLAG = (editor.DELETE_ELE_FORMAT_FLAG = "<!--dgDeleteFmtFlag-->");
+	
+	//参考org.datagear.web.controller.DashboardVisualController.LOAD_CHART_FOR_EDITOR_PARAM
 	var LOAD_CHART_FOR_EDITOR_PARAM = (editor.LOAD_CHART_FOR_EDITOR_PARAM = "loadChartForEditor");
+	
+	var INSERT_TYPE_APPEND = (editor.INSERT_TYPE_APPEND = "append");
+	var INSERT_TYPE_PREPEND = (editor.INSERT_TYPE_PREPEND = "prepend");
+	var INSERT_TYPE_AFTER = (editor.INSERT_TYPE_AFTER = "after");
+	var INSERT_TYPE_BEFORE = (editor.INSERT_TYPE_BEFORE = "before");
+	
+	//HTML规范注释节点类型
+	var HTML_NODE_TYPE_COMMENT = (editor.HTML_NODE_TYPE_COMMENT = 8);
+	
+	//响应式布局断点
+	var RESPONSIVE_BREAKPOINTS = (editor.RESPONSIVE_BREAKPOINTS = [ "xs", "sm", "md", "lg", "xl", "2xl" ]);
+	//响应式布局名称，详细参考analysis.css中的【.dg-rsp-布局名称[-断点]-布局值】样式类定义
+	var RESPONSIVE_LAYOUT_NAMES = (editor.RESPONSIVE_LAYOUT_NAMES = [ "col", "h", "d" ]);
 	
 	dashboardFactory._initSuperByDashboardEditor = dashboardFactory.init;
 	dashboardFactory.init = function(dashboard)
@@ -104,45 +125,45 @@
 	//初始化交互控制
 	editor._initInteraction = function()
 	{
+		var thisEditor = this;
+		
 		$(function()
 		{
-			$(document.body).addClass(BODY_CLASS_VISUAL_EDITOR);
+			$(document.body).addClass(BODY_CLASS_VISUAL_EDITOR).addClass(SHOW_BODY_CLASS_FLAG);
 			
 			$(document.body).on("click", function(event)
 			{
-				editor._removeElementClassNewInsert();
-				
 				var target = $(event.target);
 				var veEle = (target.attr(ELEMENT_ATTR_VISUAL_EDIT_ID) ? target :
 									target.closest("["+ELEMENT_ATTR_VISUAL_EDIT_ID+"]"));
 				
 				if(veEle.length == 0)
 				{
-					editor.deselectElement();
+					thisEditor.deselectElement();
 				}
 				else
 				{
-					if(!editor._isSelectableElement(veEle))
+					if(!thisEditor._isSelectableElement(veEle))
 					{
-						editor.deselectElement();
+						thisEditor.deselectElement();
 					}
-					else if(editor._isSelectedElement(veEle))
+					else if(thisEditor._isSelectedElement(veEle))
 					{
 						//再次点击选中元素，不取消选择
 					}
 					else
 					{
-						editor.selectElement(veEle);
+						thisEditor.selectElement(veEle);
 					}
 				}
 				
-				if(editor.clickCallback)
-					editor.clickCallback(event);
+				if(thisEditor.clickCallback)
+					thisEditor.clickCallback(event);
 			});
 			
 			$(window).on("beforeunload", function()
 			{
-				editor.beforeunloadCallback();
+				thisEditor.beforeunloadCallback();
 			});
 		});
 	};
@@ -169,13 +190,21 @@
 		var eidRegex1 = /\s?dg\-visual\-edit\-id\=["'][^"']*["']/gi;
 		editBodyHtml = editBodyHtml.replace(eidRegex1, "");
 		
-		//删除插入元素后又删除元素遗留的多余格式符
-		var insertFormatRegex0 = /\n\<\!\-\-dg\-format\-flag\-\-\>\n\s*(\n\<\!\-\-dg\-format\-flag\-\-\>\n)+/gi;
-		editBodyHtml = editBodyHtml.replace(insertFormatRegex0, "\n");
+		//处理插入元素后又删除元素遗留的格式符：INSERT_ELE_FORMAT_START...INSERT_ELE_FORMAT_END...DELETE_ELE_FORMAT_FLAG
+		var insertFormatRegex0 = /\<\!\-\-dgInsertFmtStart\-\-\>\s*\<\!\-\-dgInsertFmtEnd\-\-\>\s*<\!\-\-dgDeleteFmtFlag\-\-\>/gi;
+		editBodyHtml = editBodyHtml.replace(insertFormatRegex0, "");
 		
-		//删除插入元素时的格式符
-		var insertFormatRegex1 = /\n\<\!\-\-dg\-format\-flag\-\-\>\n/gi;
-		editBodyHtml = editBodyHtml.replace(insertFormatRegex1, "\n");
+		//处理插入元素时的格式符：INSERT_ELE_FORMAT_START
+		var insertFormatRegex1 = /\<\!\-\-dgInsertFmtStart\-\-\>/gi;
+		editBodyHtml = editBodyHtml.replace(insertFormatRegex1, "");
+		
+		//处理插入元素时的格式符：INSERT_ELE_FORMAT_END
+		var insertFormatRegex2 = /\<\!\-\-dgInsertFmtEnd\-\-\>/gi;
+		editBodyHtml = editBodyHtml.replace(insertFormatRegex2, "");
+		
+		//处理删除元素时的格式符：DELETE_ELE_FORMAT_FLAG
+		var deleteFormatRegex0 = /\s*\<\!\-\-dgDeleteFmtFlag\-\-\>/gi;
+		editBodyHtml = editBodyHtml.replace(deleteFormatRegex0, "");
 		
 		var editedHtml = editHtmlInfo.beforeBodyHtml + editBodyHtml + editHtmlInfo.afterBodyHtml;
 		return this._unescapeEditHtml(editedHtml);
@@ -222,36 +251,24 @@
 	};
 	
 	//页面点击回调函数，格式为：function(event){}
-	editor.clickCallback = function(event)
-	{
-		
-	};
+	editor.clickCallback = function(event){};
 	
 	/**
 	 * 选择元素回调函数。
 	 * 
 	 * @param ele JQ元素
 	 */
-	editor.selectElementCallback = function(ele)
-	{
-		
-	};
+	editor.selectElementCallback = function(ele){};
 	
 	/**
 	 * 取消选择元素回调函数。
 	 * 
 	 * @param ele JQ元素
 	 */
-	editor.deselectElementCallback = function(ele)
-	{
-		
-	};
+	editor.deselectElementCallback = function(ele){};
 	
 	//页面卸载前回调函数，比如：保存编辑HTML
-	editor.beforeunloadCallback = function()
-	{
-		
-	};
+	editor.beforeunloadCallback = function(){};
 	
 	/**
 	 * 获取/设置元素边界线启用禁用/状态。
@@ -263,7 +280,7 @@
 	{
 		var body = $(document.body);
 		
-		if(arguments.length == 0)
+		if(enable === undefined)
 			return body.hasClass(BODY_CLASS_ELEMENT_BOUNDARY);
 		
 		if(enable)
@@ -304,13 +321,14 @@
 		
 		if(chartFactory.isString(ele))
 			ele = $("["+ELEMENT_ATTR_VISUAL_EDIT_ID+"='"+ele+"']");
-		
-		this._removeElementClassNewInsert();
+		else
+			ele = $(ele);
 		
 		this.deselectElement();
 		
-		if(ele && ele.length > 0)
+		if(!this._isEmptyElement(ele))
 		{
+			this._removeElementClassNewInsert(ele);
 			this._selectElement(ele);
 			
 			if(this.selectElementCallback)
@@ -326,14 +344,14 @@
 	 * 取消选中元素。
 	 * 
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * @param force 可选，是否强制执行，默认为：false
 	 */
-	editor.deselectElement = function(ele)
+	editor.deselectElement = function(ele, force)
 	{
 		ele = this._currentElement(ele, true);
+		force = (force == null ? false : force);
 		
-		this._removeElementClassNewInsert();
-		
-		if(ele.length > 0)
+		if(!this._isEmptyElement(ele) || force)
 		{
 			this._deselectElement(ele);
 			
@@ -353,16 +371,13 @@
 	editor.selectNextElement = function(ele, tip)
 	{
 		//(true)、(false)
-		if(arguments.length == 1 && (ele === true || ele === false))
+		if(tip === undefined && (ele === true || ele === false))
 		{
 			tip = ele;
 			ele = undefined;
 		}
 		
 		tip = (tip == null ? true : tip);
-		
-		this._removeElementClassNewInsert();
-		
 		ele = this._currentElement(ele);
 		
 		if(ele.is("body"))
@@ -371,13 +386,13 @@
 		var target = ele;
 		while((target = target.next()))
 		{
-			if(target.length == 0 || this._isSelectableElement(target))
+			if(this._isEmptyElement(target) || this._isSelectableElement(target))
 			{
 				break;
 			}
 		}
 		
-		if(target.length == 0)
+		if(this._isEmptyElement(target))
 		{
 			if(tip)
 				this.tipInfo(i18n.noSelectableNextElement);
@@ -399,16 +414,13 @@
 	editor.selectPrevElement = function(ele, tip)
 	{
 		//(true)、(false)
-		if(arguments.length == 1 && (ele === true || ele === false))
+		if(tip === undefined && (ele === true || ele === false))
 		{
 			tip = ele;
 			ele = undefined;
 		}
 		
 		tip = (tip == null ? true : tip);
-		
-		this._removeElementClassNewInsert();
-		
 		ele = this._currentElement(ele);
 		
 		if(ele.is("body"))
@@ -417,16 +429,17 @@
 		var target = ele;
 		while((target = target.prev()))
 		{
-			if(target.length == 0 || this._isSelectableElement(target))
+			if(this._isEmptyElement(target) || this._isSelectableElement(target))
 			{
 				break;
 			}
 		}
 		
-		if(target.length == 0)
+		if(this._isEmptyElement(target))
 		{
 			if(tip)
 				this.tipInfo(i18n.noSelectablePrevElement);
+			
 			return false;
 		}
 		
@@ -443,23 +456,20 @@
 	editor.selectFirstChildElement = function(ele, tip)
 	{
 		//(true)、(false)
-		if(arguments.length == 1 && (ele === true || ele === false))
+		if(tip === undefined && (ele === true || ele === false))
 		{
 			tip = ele;
 			ele = undefined;
 		}
 		
 		tip = (tip == null ? true : tip);
-		
-		this._removeElementClassNewInsert();
-		
 		ele = this._currentElement(ele);
 		var firstChild = $("> *:first", ele);
 		
 		var target = firstChild;
 		while(true)
 		{
-			if(target.length == 0 || this._isSelectableElement(target))
+			if(this._isEmptyElement(target) || this._isSelectableElement(target))
 			{
 				break;
 			}
@@ -467,10 +477,11 @@
 			target = target.next();
 		}
 		
-		if(target.length == 0)
+		if(this._isEmptyElement(target))
 		{
 			if(tip)
 				this.tipInfo(i18n.noSelectableChildElement);
+			
 			return false;
 		}
 		
@@ -487,39 +498,38 @@
 	editor.selectParentElement = function(ele, tip)
 	{
 		//(true)、(false)
-		if(arguments.length == 1 && (ele === true || ele === false))
+		if(tip === undefined && (ele === true || ele === false))
 		{
 			tip = ele;
 			ele = undefined;
 		}
 		
 		tip = (tip == null ? true : tip);
-		
-		this._removeElementClassNewInsert();
-		
 		ele = this._currentElement(ele);
 		
 		if(ele.is("body"))
 		{
 			if(tip)
 				this.tipInfo(i18n.noSelectableParentElement);
+			
 			return false;
 		}
 		
 		var target = ele;
 		while((target = target.parent()))
 		{
-			if(target.length == 0 || target.is("body") || this._isSelectableElement(target))
+			if(this._isEmptyElement(target) || target.is("body") || this._isSelectableElement(target))
 			{
 				break;
 			}
 		}
 		
-		if(target.is("body") || target.length == 0)
+		if(target.is("body") || this._isEmptyElement(target))
 		{
 			if(tip)
 				this.tipInfo(i18n.noSelectableParentElement);
-			return;
+			
+			return false;
 		}
 		
 		return this.selectElement(target);
@@ -530,7 +540,7 @@
 		if(!$ele.attr(ELEMENT_ATTR_VISUAL_EDIT_ID))
 			return false;
 		
-		var tagName = ($ele[0].tagName || "").toLowerCase();
+		var tagName = this._tagNameOfEleLowerCase($ele);
 		
 		if(chartFactory.isNullOrEmpty(tagName))
 			return false;
@@ -538,16 +548,126 @@
 		if(tagName == "body")
 			return false;
 		
-		if(tagName == "script" || tagName == "style" || tagName == "template")
+		if(!this._isVisualEleTag(tagName))
 			return false;
 		
 		if($ele.is(":hidden"))
 			return false;
 		
-		//没有尺寸的也忽略
+		//没有尺寸的不再忽略，因为插入元素没填内容时，元素本身可能没有尺寸，
+		//这样会导致无法选中元素后编辑
+		/*
 		var w = $ele.outerWidth(), h = $ele.outerHeight();
 		if(w == null || w <= 0 || h == null || h <= 0)
 			return false;
+		*/
+		
+		return true;
+	};
+	
+	editor._tagNameOfEleLowerCase = function($ele)
+	{
+		return ($ele[0] && $ele[0].tagName ? $ele[0].tagName : "").toLowerCase();
+	};
+	
+	editor._isVisualEleTag = function(tagNameLowerCase)
+	{
+		if(tagNameLowerCase == "script" || tagNameLowerCase == "style" || tagNameLowerCase == "template")
+		{
+			return false;
+		}
+		else
+		{
+			return true;
+		}
+	};
+	
+	/**
+	 * 校验是否有选中元素。
+	 */
+	editor.checkSelectedElement = function()
+	{
+		ele = this._currentElement(null, true);
+		
+		if(this._isEmptyElement(ele))
+		{
+			this.tipInfo(i18n.selectedElementRequired);
+			return false;
+		}
+		
+		return true;
+	};
+	
+	/**
+	 * 校验元素本身或其子元素是否有图表元素。
+	 * 
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 */
+	editor.checkHasChartElement = function(ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this._checkNotEmptyElement(ele))
+			return false;
+		
+		var chartEles = this._getChartElements(ele);
+		
+		if(this._isEmptyElement(chartEles))
+		{
+			this.tipInfo(i18n.selectedNotHasChartElement);
+			return false;
+		}
+		
+		return true;
+	};
+	
+	/**
+	 * 校验是否图表元素。
+	 * 
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 */
+	editor.checkChartElement = function(ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this._checkNotEmptyElement(ele))
+			return false;
+		
+		var chart = this.dashboard.renderedChart(ele);
+		if(!chart)
+		{
+			this.tipInfo(i18n.selectedNotChartElement);
+			return false;
+		}
+		
+		return true;
+	};
+	
+	/**
+	 * 校验是否定义了图表插件属性的图表元素。
+	 * 
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 */
+	editor.checkAttrChartElement = function(ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this._checkNotEmptyElement(ele))
+			return false;
+		
+		var chart = this.dashboard.renderedChart(ele);
+		if(!chart)
+		{
+			this.tipInfo(i18n.selectedNotChartElement);
+			return false;
+		}
+		
+		var cpas = chart.pluginAttributes();
+		if(cpas == null || cpas.length == 0)
+		{
+			this.tipInfo(i18n.chartPluginNoAttrDefined);
+			return false;
+		}
 		
 		return true;
 	};
@@ -572,9 +692,8 @@
 	{
 		ele = this._currentElement(ele, true);
 		var parent = ele.parent();
-		var display = (parent.css("display") || "");
 		
-		return /^(grid|inline-grid)$/i.test(display);
+		return this._isDisplayGrid(parent);
 	};
 	
 	/**
@@ -586,29 +705,75 @@
 	{
 		ele = this._currentElement(ele, true);
 		var parent = ele.parent();
-		var display = (parent.css("display") || "");
 		
-		return /^(flex|inline-flex)$/i.test(display);
+		return this._isDisplayFlex(parent);
 	};
 	
 	/**
-	 * 校验网格布局元素。
-	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * 获取元素节点路径信息。
 	 */
-	editor.checkInsertGridLayout = function(insertType, refEle)
+	editor.getElementPath = function(ele)
 	{
-		return true;
+		ele = $(ele);
+		
+		var paths = [];
+		
+		while(true)
+		{
+			if(this._isEmptyElement(ele))
+				break;
+			
+			var isBody =  ele.is("body");
+			
+			if(!this._isSelectableElement(ele) && !isBody)
+			{
+				ele = ele.parent();
+				continue;
+			}
+			
+			var editEle = this._editElement(ele);
+			var pathInfo =
+			{
+				tagName: (ele[0].tagName || "").toLowerCase(),
+				selected: this._isSelectedElement(ele),
+				id: editEle.attr("id"),
+				className: editEle.attr("class"),
+				cssDisplay: ele.css("display"),
+				visualEditId: editEle.attr(ELEMENT_ATTR_VISUAL_EDIT_ID)
+			};
+			
+			var displayName = pathInfo.tagName;
+			
+			if(this._isDisplayGrid(pathInfo.cssDisplay))
+				displayName += "(grid)";
+			else if(this._isDisplayFlex(pathInfo.cssDisplay))
+				displayName += "(flex)";
+			
+			if(pathInfo.id)
+				displayName += "#"+pathInfo.id;
+			else if(pathInfo.className)
+				displayName += "."+pathInfo.className;
+			
+			pathInfo.displayName = displayName;
+			
+			paths.push(pathInfo);
+			
+			if(isBody)
+				break;
+			else
+				ele = ele.parent();
+		}
+		
+		return paths.reverse();
 	};
 	
 	/**
-	 * 是否可以插入填满父元素的网格布局元素。
+	 * 是否在空白<body>元素内插入元素。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
-	editor.canInsertFillParentGridLayout = function(insertType, refEle)
+	editor.isInsertToEmptyBody = function(insertType, refEle)
 	{
 		refEle = this._currentElement(refEle);
 		insertType = this._trimInsertType(refEle, insertType);
@@ -618,11 +783,12 @@
 			return false;
 		
 		var canInsert = true;
+		var thisEditor = this;
 		
 		//只有还未插入任何可选择元素时，才可以插入填满父容器元素
 		insertParentEle.children().each(function()
 		{
-			if(editor._isSelectableElement($(this)))
+			if(thisEditor._isSelectableElement($(this)))
 				canInsert = false;
 		});
 		
@@ -630,11 +796,35 @@
 	};
 	
 	/**
+	 * 校验网格布局元素。
+	 * 
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.checkInsertGridLayout = function(insertType, refEle)
+	{
+		return true;
+	};
+	
+	/**
 	 * 插入网格布局元素。
 	 * 
-	 * @param gridAttr 网格设置，格式为：{ rows: 数值或数值字符串, columns: 数值或数值字符串, fillParent: 布尔值或布尔值字符串 }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param gridAttr 网格设置，格式为：
+	 * 					{
+	 * 						rows: 数值或数值字符串,
+	 * 						columns: 数值或数值字符串,
+	 * 						fillParent: 布尔值或布尔值字符串,
+	 * 						rowHeightDivide: "avg"、"custom",
+	 * 						rowHeights: [ "", ... ],
+	 * 						colWidthDivide: "avg"、"custom",
+	 * 						colWidths: [ "", ... ],
+	 * 						rowGap: "...",
+	 * 						columnGap: "..."
+	 * 					}
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertGridLayout = function(gridAttr, insertType, refEle)
 	{
@@ -647,37 +837,59 @@
 		//不能使用"<div />"，生成的源码格式不对
 		var div = $("<div></div>");
 		
-		var styleStr = "display:grid;";
+		var styleStr = "";
 		var insertParentEle = this._getInsertParentElement(refEle, insertType);
-		
-		if(gridAttr.fillParent === "true" || gridAttr.fillParent === true)
-			styleStr += "position:absolute;left:0;top:0;right:0;bottom:0;";
-		else if(insertParentEle.is("body"))
-			styleStr += "width:100%;height:300px;";
-		else
-			styleStr += "width:100%;height:100%;";
+		styleStr += this._evalInsertLayoutHeightStyle(gridAttr.fillParent, insertParentEle);
+		styleStr += "display:grid;";
 		
 		if(rows > 0)
-			styleStr += "grid-template-rows:repeat("+rows+", 1fr);";
+		{
+			if(gridAttr.rowHeightDivide == "custom" && gridAttr.rowHeights && gridAttr.rowHeights.length > 0)
+			{
+				styleStr += "grid-template-rows:"+gridAttr.rowHeights.join(" ")+";";
+			}
+			else
+			{
+				styleStr += "grid-template-rows:repeat("+rows+", 1fr);";
+			}
+		}
+		
 		if(columns > 0)
-			styleStr += "grid-template-columns:repeat("+columns+", 1fr);";
+		{
+			if(gridAttr.colWidthDivide == "custom" && gridAttr.colWidths && gridAttr.colWidths.length > 0)
+			{
+				styleStr += "grid-template-columns:"+gridAttr.colWidths.join(" ")+";";
+			}
+			else
+			{
+				styleStr += "grid-template-columns:repeat("+columns+", 1fr);";
+			}
+		}
+		
+		if(!chartFactory.isNullOrEmpty(gridAttr.rowGap))
+			styleStr += "row-gap:"+gridAttr.rowGap+";";
+		
+		if(!chartFactory.isNullOrEmpty(gridAttr.columnGap))
+			styleStr += "column-gap:"+gridAttr.columnGap+";";
 		
 		div.attr("style", styleStr);
 		
 		for(var i=0; i<rows; i++)
 		{
 			for(var j=0; j<columns; j++)
-				this._insertElement(div, $("<div></div>"), "append");
+				this._insertElementFormat(div, $("<div></div>"), INSERT_TYPE_APPEND);
 		}
 		
-		this.insertElement(div, insertType, refEle);
+		this._insertElement(div, insertType, refEle, true);
+		
+		return div;
 	};
 	
 	/**
 	 * 校验插入弹性布局元素。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertFlexLayout = function(insertType, refEle)
 	{
@@ -685,22 +897,13 @@
 	};
 	
 	/**
-	 * 是否可以插入填满父元素的弹性布局元素。
-	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
-	 */
-	editor.canInsertFillParentFlexLayout = function(insertType, refEle)
-	{
-		return this.canInsertFillParentGridLayout(insertType, refEle);
-	};
-	
-	/**
 	 * 插入弹性布局元素。
 	 * 
-	 * @param gridAttr 网格设置，格式为：{ items: 数值或数值字符串, direction: "...", fillParent: 布尔值或布尔值字符串 }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param flexAttr 网格设置，格式为：{ items: 数值或数值字符串, direction: "...", fillParent: 布尔值或布尔值字符串 }
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertFlexLayout = function(flexAttr, insertType, refEle)
 	{
@@ -712,34 +915,298 @@
 		//不能使用"<div />"，生成的源码格式不对
 		var div = $("<div></div>");
 		
-		var styleStr = "display:flex;"+(flexAttr.direction ? "flex-direction:"+flexAttr.direction+";" : "")
-						+"justify-content:space-between;align-items:stretch;";
+		var styleStr = "";
 		var insertParentEle = this._getInsertParentElement(refEle, insertType);
-		
-		if(flexAttr.fillParent === "true" || flexAttr.fillParent === true)
-			styleStr += "position:absolute;left:0;top:0;right:0;bottom:0;";
-		else if(insertParentEle.is("body"))
-			styleStr += "width:100%;height:300px;";
-		else
-			styleStr += "width:100%;height:100%;";
+		styleStr += this._evalInsertLayoutHeightStyle(flexAttr.fillParent, insertParentEle);
+		styleStr += "display:flex;"+(flexAttr.direction ? "flex-direction:"+flexAttr.direction+";" : "")
+						+"justify-content:space-around;align-items:center;align-content:space-around;";
 		
 		div.attr("style", styleStr);
 		
 		for(var i=0; i<items; i++)
 		{
 			var itemDiv = $("<div></div>");
-			itemDiv.attr("style", "flex-grow:1;");
-			this._insertElement(div, itemDiv, "append");
+			this._insertElementFormat(div, itemDiv, INSERT_TYPE_APPEND);
 		}
 		
-		this.insertElement(div, insertType, refEle);
+		this._insertElement(div, insertType, refEle, true);
+		
+		return div;
+	};
+	
+	/**
+	 * 校验插入响应式弹性布局元素。
+	 * 
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.checkInsertResponsiveFlex = function(insertType, refEle)
+	{
+		return true;
+	};
+	
+	/**
+	 * 插入响应式弹性布局元素。
+	 * 
+	 * @param model 布局模型，格式为：{ itemCount: 条目数, layout: { xs: { ... }, ... }, itemLayouts: [ { xs: { "布局名称": ..., ...}, sm: {...}, ... }, ... ] }
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
+	 */
+	editor.insertResponsiveFlex = function(model, insertType, refEle)
+	{
+		refEle = this._currentElement(refEle);
+		insertType = this._trimInsertType(refEle, insertType);
+		
+		var itemCount = (!chartFactory.isNumber(model.itemCount) ? parseInt(model.itemCount) : model.itemCount);
+		
+		//不能使用"<div />"，生成的源码格式不对
+		var div = $("<div></div>");
+		
+		var styleClass = this._evalResponsiveFlexLayoutClass(model.layout);
+		styleClass = (styleClass ? "dg-rsp-row " + styleClass : "dg-rsp-row");
+		div.attr("class", styleClass);
+		
+		for(var i=0; i<itemCount; i++)
+		{
+			var itemDiv = $("<div></div>");
+			var itemStyleClass = this._evalResponsiveFlexLayoutClass(model.itemLayouts[i]);
+			itemDiv.attr("class", itemStyleClass);
+			
+			this._insertElementFormat(div, itemDiv, INSERT_TYPE_APPEND);
+		}
+		
+		this._insertElement(div, insertType, refEle, true);
+		
+		return div;
+	};
+	
+	editor._evalResponsiveFlexLayoutClass = function(layout)
+	{
+		layout = (layout == null ? {} : layout);
+		
+		var re = "";
+		
+		for(var i=0; i<RESPONSIVE_BREAKPOINTS.length; i++)
+		{
+			var breakpoint = RESPONSIVE_BREAKPOINTS[i];
+			var myLayout = (layout[breakpoint] || {});
+			var myRe = this._evalResponsiveFlexBreakpointClass(breakpoint, myLayout);
+			
+			if(myRe)
+				re += (re == "" ? "" : " ") + myRe;
+		}
+		
+		return re;
+	};
+	
+	editor._evalResponsiveFlexBreakpointClass = function(breakpoint, layout)
+	{
+		var re = "";
+
+		var infix = (breakpoint == "xs" ? "" : "-"+breakpoint);
+		for(var i=0; i<RESPONSIVE_LAYOUT_NAMES.length; i++)
+		{
+			var name = RESPONSIVE_LAYOUT_NAMES[i];
+			var value = layout[name];
+			
+			if(!chartFactory.isNullOrEmpty(value))
+			{
+				re += (re == "" ? "" : " ") + "dg-rsp-"+name + infix +"-" + value;
+			}
+		}
+		
+		return re;
+	};
+	
+	editor._evalResponsiveFlexCssLengthUnit = function(unit)
+	{
+		return (unit == "%" ? "pct" : unit);
+	};
+	
+	/**
+	 * 获取指定元素的响应式弹性布局设置。
+	 * 
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.getResponsiveFlex = function(ele)
+	{
+		ele = this._editElement(this._currentElement(ele, true));
+		
+		var re = { itemCount: 0, layout: {}, itemLayouts: [] };
+		
+		re.layout = this._evalResponsiveFlexLayout(ele.attr("class"), [ "dg-rsp-row" ]);
+		
+		var thisEditor = this;
+		ele.children().each(function()
+		{
+			var child = $(this);
+			var editId = thisEditor._layoutAffectEleEditId(child);
+			
+			if(chartFactory.isNullOrEmpty(editId))
+				return;
+			
+			var layout = thisEditor._evalResponsiveFlexLayout(child.attr("class"));
+			layout.visualEditId = editId;
+			
+			re.itemCount++;
+			re.itemLayouts.push(layout);
+		});
+		
+		return re;
+	};
+	
+	editor._layoutAffectEleEditId = function($ele)
+	{
+		var editId = $ele.attr(ELEMENT_ATTR_VISUAL_EDIT_ID);
+		
+		if(chartFactory.isNullOrEmpty(editId))
+			return null;
+		
+		var tagName = this._tagNameOfEleLowerCase($ele);
+		
+		if(chartFactory.isNullOrEmpty(tagName))
+			return null;
+		
+		if(!this._isVisualEleTag(tagName))
+			return null;
+		
+		var position = $ele.css("position");
+		if(position == "absolute" || position == "fixed")
+			return null;
+		
+		return editId;
+	};
+	
+	editor._evalResponsiveFlexLayout = function(classStr, ignoreClasses)
+	{
+		var classNames = (chartFactory.isNullOrEmpty(classStr) ? [] : classStr.split(" "));
+		
+		var re = {};
+		
+		//从"dg-rsp-名称[-breakpoint]-值"中解析布局信息
+		for(var i=0; i<classNames.length; i++)
+		{
+			var className = classNames[i];
+			
+			if(chartFactory.isNullOrEmpty(className) || !className.indexOf("dg-rsp-") == 0)
+				continue;
+			
+			if(ignoreClasses != null && $.inArray(className, ignoreClasses) > -1)
+				continue;
+			
+			var partStr = className.substr("dg-rsp-".length);
+			var splitIdx = partStr.indexOf("-");
+			
+			if(splitIdx <= 0)
+				continue;
+			
+			var breakpoint = "xs";
+			var name = partStr.substring(0, splitIdx);
+			var value = (splitIdx == partStr.length-1 ? "" : partStr.substring(splitIdx + 1));
+			
+			if(chartFactory.isNullOrEmpty(value))
+				continue;
+			
+			splitIdx = value.indexOf("-");
+			if(splitIdx >= 0)
+			{
+				var part0 = value.substring(0, splitIdx);
+				var isBreakpoint = ($.inArray(part0, RESPONSIVE_BREAKPOINTS) > -1);
+				
+				if(isBreakpoint)
+				{
+					breakpoint = part0;
+					value = (splitIdx == value.length-1 ? "" : value.substring(splitIdx + 1));
+				}
+			}
+			
+			if(chartFactory.isNullOrEmpty(value))
+				continue;
+			
+			re[breakpoint] = (re[breakpoint] || {});
+			this._inflateResponsiveFlexBreakpoint(re[breakpoint], name, value);
+		}
+		
+		return re;
+	};
+	
+	editor._inflateResponsiveFlexBreakpoint = function(breakpointObj, name, value)
+	{
+		breakpointObj[name] = value;
+	};
+	
+	/**
+	 * 校验设置元素响应式弹性布局。
+	 * 
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.checkSetResponsiveFlex = function(ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this._checkNotEmptyElement(ele))
+			return false;
+		
+		return true;
+	};
+	
+	/**
+	 * 设置元素响应式弹性布局。
+	 * 
+	 * @param model 布局模型，格式为：{ itemCount: 条目数, itemLayouts: [ { xs: { "布局名称": ..., ...}, sm: {...}, ... }, ... ] }
+	 * @param ele 可选
+	 * 
+	 * @returns 元素
+	 */
+	editor.setResponsiveFlex = function(model, ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this.checkSetResponsiveFlex(ele))
+			return false;
+		
+		var editEle = this._editElement(ele);
+		
+		var styleClass = this._evalResponsiveFlexLayoutClass(model.layout);
+		styleClass = (styleClass ? "dg-rsp-row " + styleClass : "dg-rsp-row");
+		var newClassName = this._removeClassName(editEle.attr("class"), this._isResponsiveClassName);
+		newClassName = styleClass + (newClassName == "" ? "" : " " + newClassName);
+		
+		this._setElementClass(ele, newClassName);
+		
+		var itemLayouts = (model.itemLayouts || []);
+		for(var i=0; i<itemLayouts.length; i++)
+		{
+			var itemLayout = itemLayouts[i];
+			
+			if(!itemLayout.visualEditId)
+				continue;
+			
+			var child = this._getEleByVisualEditId(itemLayout.visualEditId);
+			var editChild = this._editElement(child);
+			
+			var layoutClass = this._evalResponsiveFlexLayoutClass(itemLayout);
+			var newChildClassName = this._removeClassName(editChild.attr("class"), this._isResponsiveClassName);
+			newChildClassName = layoutClass + (newChildClassName == "" ? "" : " " + newChildClassName);
+			
+			this._setElementClass(child, newChildClassName);
+		}
+		
+		return ele;
+	};
+	
+	editor._isResponsiveClassName = function(className)
+	{
+		return (className.indexOf("dg-rsp-") == 0);
 	};
 	
 	/**
 	 * 校验insertDiv操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertDiv = function(insertType, refEle)
 	{
@@ -749,8 +1216,10 @@
 	/**
 	 * 插入div元素。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertDiv = function(insertType, refEle)
 	{
@@ -764,20 +1233,27 @@
 		var insertParentEle = this._getInsertParentElement(refEle, insertType);
 		
 		if(insertParentEle.is("body"))
-			styleStr = "width:100%;height:100px;";
+			styleStr = "height:300px;";
+		else if(this._isDisplayGrid(insertParentEle))
+			styleStr = "";
+		else if(this._isDisplayFlex(insertParentEle))
+			styleStr = "";
 		else
-			styleStr = "width:100px;height:100px;";
+			styleStr = "";
 		
-		div.attr("style", styleStr);
+		if(styleStr)
+			div.attr("style", styleStr);
 		
-		this.insertElement(div, insertType, refEle);
+		this._insertElement(div, insertType, refEle, true);
+		
+		return div;
 	};
 	
 	/**
 	 * 校验insertImage操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertImage = function(insertType, refEle)
 	{
@@ -787,9 +1263,11 @@
 	/**
 	 * 插入图片元素。
 	 * 
-	 * @param imgAttr 图片设置，格式为：{ src: "", width: ..., height: ... }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param imgAttr 参考_setImageAttr()函数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertImage = function(imgAttr, insertType, refEle)
 	{
@@ -798,14 +1276,16 @@
 		
 		var img = $("<img>");
 		
-		this.insertElement(img, insertType, refEle);
-		this.setImageAttr(imgAttr, img);
+		this._insertElement(img, insertType, refEle);
+		this._setImageAttr(imgAttr, img);
+		
+		return img;
 	};
 	
 	/**
 	 * 元素是否是图片。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.isImage = function(ele)
 	{
@@ -816,7 +1296,7 @@
 	/**
 	 * 获取图片元素属性。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.getImageAttr = function(ele)
 	{
@@ -841,30 +1321,44 @@
 	/**
 	 * 设置图片元素属性。
 	 * 
-	 * @param imgAttr 图片设置，格式为：{ src: "", width: ..., height: ... }
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @returns 元素、false
 	 */
 	editor.setImageAttr = function(imgAttr, ele)
+	{
+		return this._setImageAttr(imgAttr, ele);
+	};
+	
+	/**
+	 * 设置图片元素属性。
+	 * 
+	 * @param imgAttr 图片设置，格式为：{ src: "", width: ..., height: ... }
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素、false
+	 */
+	editor._setImageAttr = function(imgAttr, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.isImage(ele))
 		{
 			this.tipInfo(i18n.imgEleRequired);
-			return;
+			return false;
 		}
 		
 		var eleStyle = { width: imgAttr.width, height: imgAttr.height };
 		
 		this._setElementAttr(ele, "src", (imgAttr.src || ""));
-		this._setElementStyle(ele, eleStyle);
+		this._setElementStyleAppend(ele, eleStyle);
+		
+		return ele;
 	};
 	
 	/**
 	 * 校验insertHyperlink操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertHyperlink = function(insertType, refEle)
 	{
@@ -874,9 +1368,11 @@
 	/**
 	 * 插入超链接元素。
 	 * 
-	 * @param hyperlinkAttr 超链接设置，格式为：{ content: "...", href: "...", target: "..." }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param hyperlinkAttr 参考_setHyperlinkAttr()函数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertHyperlink = function(hyperlinkAttr, insertType, refEle)
 	{
@@ -885,14 +1381,16 @@
 		
 		var a = $("<a></a>");
 		
-		this.insertElement(a, insertType, refEle);
-		this.setHyperlinkAttr(hyperlinkAttr, a);
+		this._insertElement(a, insertType, refEle);
+		this._setHyperlinkAttr(hyperlinkAttr, a);
+		
+		return a;
 	};
 	
 	/**
 	 * 元素是否是超链接。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.isHyperlink = function(ele)
 	{
@@ -903,7 +1401,7 @@
 	/**
 	 * 获取超链接元素属性。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.getHyperlinkAttr = function(ele)
 	{
@@ -926,17 +1424,29 @@
 	/**
 	 * 设置超链接元素属性。
 	 * 
-	 * @param hyperlinkAttr 超链接设置，格式为：{ content: "...", href: "...", target: "..." }
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @returns 元素、false
 	 */
 	editor.setHyperlinkAttr = function(hyperlinkAttr, ele)
+	{
+		return this._setHyperlinkAttr(hyperlinkAttr, ele);
+	};
+	
+	/**
+	 * 设置超链接元素属性。
+	 * 
+	 * @param hyperlinkAttr 超链接设置，格式为：{ content: "...", href: "...", target: "..." }
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素、false
+	 */
+	editor._setHyperlinkAttr = function(hyperlinkAttr, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.isHyperlink(ele))
 		{
 			this.tipInfo(i18n.hyperlinkEleRequired);
-			return;
+			return false;
 		}
 		
 		this._setElementText(ele, (hyperlinkAttr.content || hyperlinkAttr.href || ""));
@@ -944,14 +1454,16 @@
 		if(hyperlinkAttr.target)
 			this._setElementAttr(ele, "target", hyperlinkAttr.target);
 		else
-			this._removeElementAttr(ele, "target");
+			this._setElementAttr(ele, "target", null);
+			
+		return ele;
 	};
 	
 	/**
 	 * 校验insertVideo操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertVideo = function(insertType, refEle)
 	{
@@ -961,9 +1473,11 @@
 	/**
 	 * 插入视频元素。
 	 * 
-	 * @param videoAttr 视频设置，格式为：{ src: "", width: ..., height: ... }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param videoAttr 参考_setVideoAttr()函数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertVideo = function(videoAttr, insertType, refEle)
 	{
@@ -972,14 +1486,16 @@
 		
 		var ele = $("<video controls=\"controls\"></video>");
 		
-		this.insertElement(ele, insertType, refEle);
-		this.setVideoAttr(videoAttr, ele);
+		this._insertElement(ele, insertType, refEle);
+		this._setVideoAttr(videoAttr, ele);
+		
+		return ele;
 	};
 	
 	/**
 	 * 是否是视频元素。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.isVideo = function(ele)
 	{
@@ -990,7 +1506,7 @@
 	/**
 	 * 获取视频元素属性。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.getVideoAttr = function(ele)
 	{
@@ -1015,30 +1531,149 @@
 	/**
 	 * 设置视频元素属性。
 	 * 
-	 * @param videoAttr 视频设置，格式为：{ src: "", width: ..., height: ... }
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @returns 元素、false
 	 */
 	editor.setVideoAttr = function(videoAttr, ele)
+	{
+		return this._setVideoAttr(videoAttr, ele);
+	};
+	
+	/**
+	 * 设置视频元素属性。
+	 * 
+	 * @param videoAttr 视频设置，格式为：{ src: "", width: ..., height: ... }
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素、false
+	 */
+	editor._setVideoAttr = function(videoAttr, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.isVideo(ele))
 		{
 			this.tipInfo(i18n.videoEleRequired);
-			return;
+			return false;
 		}
 		
 		var eleStyle = { width: videoAttr.width, height: videoAttr.height };
 		
 		this._setElementAttr(ele, "src", (videoAttr.src || ""));
-		this._setElementStyle(ele, eleStyle);
+		this._setElementStyleAppend(ele, eleStyle);
+		
+		return ele;
+	};
+	
+	/**
+	 * 校验insertIframe操作。
+	 * 
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.checkInsertIframe = function(insertType, refEle)
+	{
+		return true;
+	};
+	
+	/**
+	 * 插入iframe元素。
+	 * 
+	 * @param iframeAttr 参考_setIframeAttr()函数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
+	 */
+	editor.insertIframe = function(iframeAttr, insertType, refEle)
+	{
+		refEle = this._currentElement(refEle);
+		insertType = this._trimInsertType(refEle, insertType);
+		
+		var ele = $("<iframe></iframe>");
+		
+		this._insertElement(ele, insertType, refEle);
+		this._setIframeAttr(iframeAttr, ele);
+		
+		return ele;
+	};
+	
+	/**
+	 * 是否是iframe元素。
+	 * 
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.isIframe = function(ele)
+	{
+		ele = this._currentElement(ele);
+		return ele.is("iframe");
+	};
+	
+	/**
+	 * 获取iframe元素属性。
+	 * 
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 */
+	editor.getIframeAttr = function(ele)
+	{
+		ele = this._currentElement(ele);
+		
+		var attrObj = {};
+		
+		if(!this.isIframe(ele))
+			return attrObj;
+		
+		ele = this._editElement(ele);
+		
+		var eleStyle = this.getElementStyle(ele);
+		
+		attrObj.src = (ele.attr("src") || "");
+		attrObj.width = eleStyle.width;
+		attrObj.height = eleStyle.height;
+		
+		return attrObj;
+	};
+	
+	/**
+	 * 设置iframe元素属性。
+	 * 
+	 * @returns 元素、false
+	 */
+	editor.setIframeAttr = function(iframeAttr, ele)
+	{
+		return this._setIframeAttr(iframeAttr, ele);
+	};
+	
+	/**
+	 * 设置iframe元素属性。
+	 * 
+	 * @param iframeAttr 视频设置，格式为：{ src: "", width: ..., height: ... }
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素、false
+	 */
+	editor._setIframeAttr = function(iframeAttr, ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this.isIframe(ele))
+		{
+			this.tipInfo(i18n.iframeEleRequired);
+			return false;
+		}
+		
+		var eleStyle = { width: iframeAttr.width, height: iframeAttr.height };
+		
+		this._setElementAttr(ele, "src", (iframeAttr.src || ""));
+		this._setElementStyleAppend(ele, eleStyle);
+		
+		return ele;
 	};
 	
 	/**
 	 * 校验insertHxtitle操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertHxtitle = function(insertType, refEle)
 	{
@@ -1049,8 +1684,10 @@
 	 * 插入h1-h6元素。
 	 * 
 	 * @param model 标题模型，格式为：{ type: "h1到h6", content: "", textAlign: "" }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertHxtitle = function(model, insertType, refEle)
 	{
@@ -1065,14 +1702,16 @@
 		
 		ele.html(model.content || "");
 		
-		this.insertElement(ele, insertType, refEle);
+		this._insertElement(ele, insertType, refEle);
+		
+		return ele;
 	};
 	
 	/**
 	 * 校验insertLabel操作。
 	 * 
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.checkInsertLabel = function(insertType, refEle)
 	{
@@ -1083,8 +1722,10 @@
 	 * 插入标签元素。
 	 * 
 	 * @param labelAttr 标签设置，格式为：{ content: "" }
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素
 	 */
 	editor.insertLabel = function(labelAttr, insertType, refEle)
 	{
@@ -1094,13 +1735,15 @@
 		var ele = $("<label></label>");
 		ele.html(labelAttr.content || "");
 		
-		this.insertElement(ele, insertType, refEle);
+		this._insertElement(ele, insertType, refEle);
+		
+		return ele;
 	};
 	
 	/**
 	 * 是否是标签元素。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.isLabel = function(ele)
 	{
@@ -1111,7 +1754,7 @@
 	/**
 	 * 获取标签元素属性。
 	 * 
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
 	 */
 	editor.getLabelAttr = function(ele)
 	{
@@ -1133,7 +1776,9 @@
 	 * 设置标签元素属性。
 	 * 
 	 * @param labelAttr 标签设置，格式为：{ content: "..." }
-	 * @param ele 可选，参考insertElement函数的refEle参数
+	 * @param ele 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.setLabelAttr = function(labelAttr, ele)
 	{
@@ -1142,10 +1787,12 @@
 		if(!this.isLabel(ele))
 		{
 			this.tipInfo(i18n.labelEleRequired);
-			return;
+			return false;
 		}
 		
 		this._setElementText(ele, (labelAttr.content || ""));
+		
+		return ele;
 	};
 	
 	/**
@@ -1160,7 +1807,7 @@
 		insertType = this._trimInsertType(refEle, insertType);
 		
 		//图表元素内部不允许再插入图表元素
-		if(this.isChartElement(refEle) && (insertType == "append" || insertType == "prepend"))
+		if(this.isChartElement(refEle) && (insertType == INSERT_TYPE_APPEND || insertType == INSERT_TYPE_PREPEND))
 		{
 			this.tipInfo(i18n.insertInsideChartOnChartEleDenied);
 			return false;
@@ -1176,8 +1823,10 @@
 	 * 插入图表。
 	 * 
 	 * @param chartWidgets 要插入的图表部件对象、数组
-	 * @param insertType 可选，参考insertElement函数的insertType参数
-	 * @param refEle 可选，参考insertElement函数的refEle参数
+	 * @param insertType 可选，参考_insertElement()函数的insertType参数
+	 * @param refEle 可选，参考_insertElement()函数的refEle参数
+	 * 
+	 * @returns 元素数组、false
 	 */
 	editor.insertChart = function(chartWidgets, insertType, refEle)
 	{
@@ -1191,7 +1840,9 @@
 		
 		//图表元素内部不允许再插入图表元素
 		if(!this.checkInsertChart(insertType, refEle))
-			return;
+			return false;
+		
+		var eles = [];
 		
 		var styleStr = "";
 		var insertParentEle = this._getInsertParentElement(refEle, insertType);
@@ -1214,24 +1865,15 @@
 			chartDiv.attr(chartFactory.elementAttrConst.WIDGET, chartWidget.id)
 						.html("<!--"+chartWidget.name+"-->");
 			
-			this.insertElement(chartDiv, insertType, refEle);
+			this._insertElement(chartDiv, insertType, refEle);
+			
+			eles.push(chartDiv);
 		}
 		
-		this.dashboard.loadUnsolvedCharts(this._buildLoadChartAjaxOptions());
-	};
-	
-	editor._getInsertParentElement = function(refEle, insertType)
-	{
-		var insertParentEle = null;
+		var loadChartsEle = (insertType == INSERT_TYPE_APPEND || insertType == INSERT_TYPE_PREPEND ? refEle : refEle.parent());
+		this._loadUnsolvedChartsInElement(loadChartsEle);
 		
-		if(refEle.is("body"))
-			insertParentEle = refEle;
-		else if("after" == insertType || "before" == insertType)
-			insertParentEle = refEle.parent();
-		else
-			insertParentEle = refEle;
-		
-		return insertParentEle;
+		return eles;
 	};
 	
 	/**
@@ -1246,6 +1888,15 @@
 		if(!this._checkNotEmptyElement(ele))
 			return false;
 		
+		var editEle = this._editElement(ele);
+		
+		//绑定图表的元素需要是div
+		if(this._isEmptyElement(editEle) || !editEle.is("div"))
+		{
+			this.tipInfo(i18n.bindChartElementMustBeDiv);
+			return false;
+		}
+		
 		return true;
 	};
 	
@@ -1254,24 +1905,28 @@
 	 * 
 	 * @param chartWidget 要绑定的新图表部件对象
 	 * @param ele 可选，要绑定的图表元素，默认为：当前选中图表元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.bindChart = function(chartWidget, ele)
 	{
 		if(!chartWidget)
-			return;
+			return false;
 		
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkBindChart(ele))
-			return;
+			return false;
 		
 		if(this.isChartElement(ele))
 		{
-			this.dashboard.removeChart(ele);
+			this._removeAndDestroyChart(ele);
 		}
 		
 		this._setElementAttr(ele, chartFactory.elementAttrConst.WIDGET, chartWidget.id);
 		this.dashboard.loadChart(ele, this._buildLoadChartAjaxOptions());
+		
+		return ele;
 	};
 	
 	/**
@@ -1299,52 +1954,20 @@
 	 * 解绑图表。
 	 * 
 	 * @param ele 可选，要解绑的图表元素，默认为：当前选中图表元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.unbindChart = function(ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkUnbindChart(ele))
-			return;
+			return false;
 		
-		this.dashboard.removeChart(ele);
-		this._removeElementAttr(ele, chartFactory.elementAttrConst.WIDGET);
-	};
-	
-	/**
-	 * 插入元素。
-	 * 
-	 * @param insertEle 要插入的jq元素、HTML文本，不要使用"<div />"的格式，可能导致编辑HTML代码格式不对
-	 * @param insertType 可选，插入类型："after"、"before"、"append"、"prepend"，默认为："after"
-	 * @param refEle 插入参照元素，默认为：当前选中元素，或者<body>
-	 * @param sync 可选，是否将插入操作同步至编辑iframe中，默认为：true
-	 */
-	editor.insertElement = function(insertEle, insertType, refEle, sync)
-	{
-		refEle = this._currentElement(refEle);
-		insertType = this._trimInsertType(refEle, insertType);
-		sync = (sync == null ? true : sync);
+		this._removeAndDestroyChart(ele);
+		this._setElementAttr(ele, chartFactory.elementAttrConst.WIDGET, null);
 		
-		if(chartFactory.isString(insertEle))
-			insertEle = $(insertEle);
-		
-		this._addVisualEditIdAttr(insertEle);
-		
-		this._insertElement(refEle, insertEle, insertType);
-		
-		if(sync)
-		{
-			var editEle = this._editElement(refEle);
-			var insertEleClone = insertEle.clone();
-			this._insertElement(editEle, insertEleClone, insertType);
-		}
-		
-		insertEle.addClass(ELEMENT_CLASS_NEW_INSERT);
-		$("*", insertEle).addClass(ELEMENT_CLASS_NEW_INSERT);
-		
-		this._hasElementClassNewInsert = true;
-		
-		this.changeFlag(true);
+		return ele;
 	};
 	
 	/**
@@ -1372,7 +1995,7 @@
 		
 		var firstChild = $("> *:first-child", ele);
 		
-		if(firstChild.length > 0)
+		if(!this._isEmptyElement(firstChild))
 		{
 			this.tipInfo(i18n.canEditOnlyTextElement);
 			return false;
@@ -1386,15 +2009,134 @@
 	 * 
 	 * @param text 要设置的文本内容
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.setElementText = function(text, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkSetElementText(ele))
-			return;
+			return false;
 		
 		this._setElementText(ele, text);
+		
+		return ele;
+	};
+	
+	/**
+	 * 获取<body>元素属性
+	 * 
+	 * @param name 属性名
+	 */
+	editor.getGlobalAttr = function(name)
+	{
+		var ele = this._editElement($(document.body));
+		return ele.attr(name);
+	};
+	
+	/**
+	 * 设置<body>元素属性
+	 * 
+	 * @param name 属性名
+	 * @param value 属性值
+	 * 
+	 * @returns 元素
+	 */
+	editor.setGlobalAttr = function(name, value)
+	{
+		var body = $(document.body);
+		
+		if(chartFactory.isNullOrEmpty(value))
+		{
+			this._setElementAttr(body, name, null);
+		}
+		else
+		{
+			this._setElementAttr(body, name, value);
+		}
+		
+		return body;
+	};
+	
+	/**
+	 * 获取元素属性。
+	 * 
+	 * @param name 属性名
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 */
+	editor.getElementAttr = function(name, ele)
+	{
+		ele = this._editElement(this._currentElement(ele, true));
+		return ele.attr(name);
+	};
+	
+	/**
+	 * 校验setElementAttr操作。
+	 * 
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 */
+	editor.checkSetElementAttr = function(ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this._checkNotEmptyElement(ele))
+			return false;
+		
+		return true;
+	};
+	
+	/**
+	 * 设置元素属性
+	 * 
+	 * @param name 属性名
+	 * @param value 属性值
+	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素
+	 */
+	editor.setElementAttr = function(name, value, ele)
+	{
+		ele = this._currentElement(ele, true);
+		
+		if(!this.checkSetElementAttr(ele))
+			return false;
+		
+		if(chartFactory.isNullOrEmpty(value))
+		{
+			this._setElementAttr(ele, name, null);
+		}
+		else
+		{
+			this._setElementAttr(ele, name, value);
+		}
+		
+		this._checkSetElementIdAttrForChart(ele, name);
+		
+		return ele;
+	};
+	
+	//校验设置图表元素ID，图表元素必须有ID，且设置后必须更新图表的elementId属性
+	editor._checkSetElementIdAttrForChart = function(ele, name, reRender)
+	{
+		reRender = (reRender == null ? true : reRender);
+		
+		var isIdAttr = /^\s*id\s*$/i.test(name);
+		
+		if(!isIdAttr)
+			return false;
+		
+		var chart = this.dashboard.renderedChart(ele);
+		
+		if(!chart)
+			return false;
+		
+		var id = chartFactory.checkSetChartElementId(ele, chart);
+		
+		if(reRender)
+			this._reRenderChart(chart);
+		
+		return id;
 	};
 	
 	/**
@@ -1416,30 +2158,38 @@
 	 * 删除元素。
 	 * 
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素
 	 */
 	editor.deleteElement = function(ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkDeleteElement(ele))
-			return;
+			return false;
 		
-		var iframeEle = this._editElement(ele);
+		this._preDeleteElement(ele);
+		this._deleteElement(ele);
 		
-		//应先删除元素包含的所有图表
-		var chartEles = this._getChartElements(ele);
-		chartEles.each(function()
-		{
-			editor.dashboard.removeChart(this);
-		});
+		return ele;
+	};
+	
+	editor._preDeleteElement = function(ele)
+	{
+		//应删除元素包含的所有图表
+		this._removeChartsInElement(ele);
 		
 		var selEle = (this._isSelectedElement(ele) ? ele : this._selectedElement(ele));
 		this.deselectElement(selEle);
 		
-		ele.remove();
-		iframeEle.remove();
-		
-		this.changeFlag(true);
+		//删除后默认选中临近元素
+		if(!this.selectNextElement(ele, false))
+		{
+			if(!this.selectPrevElement(ele, false))
+			{
+				this.selectParentElement(ele, false);
+			}
+		}
 	};
 	
 	/**
@@ -1462,13 +2212,15 @@
 	 * 
 	 * @param styleObj 要设置的样式对象，格式为：{ 'color': '...', 'background-color': '...' }
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素
 	 */
 	editor.setElementStyle = function(styleObj, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkSetElementStyle(ele))
-			return;
+			return false;
 		
 		var so = this._spitStyleAndOption(styleObj);
 		
@@ -1476,32 +2228,24 @@
 		this._setElementClass(ele, so.option.className);
 		
 		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
 		chartEles.each(function()
 		{
 			if(so.option.syncChartTheme)
 			{
 				var thisEle = $(this);
-				var chartTheme = editor._evalElementChartThemeByStyleObj(thisEle, ele, so.style);
-				editor.setElementChartTheme(chartTheme, thisEle);
+				var chartTheme = thisEditor._evalElementChartThemeByStyleObj(thisEle, ele, so.style);
+				thisEditor._setElementChartTheme(thisEle, chartTheme);
+				thisEditor._reRenderChartsInElement(thisEle);
 			}
 			else
 			{
-				var renderedChart = editor.dashboard.renderedChart(this);
-				editor._resizeChart(renderedChart);
+				thisEditor._resizeChartsInElement(this);
 			}
 		});
-	};
-	
-	editor._resizeChart = function(chart)
-	{
-		if(!chart)
-			return;
 		
-		try
-		{
-			chart.resize();
-		}
-		catch(e){}
+		return ele;
 	};
 	
 	/**
@@ -1519,6 +2263,8 @@
 	 * 设置全局样式（body）。
 	 * 
 	 * @param styleObj 要设置的样式对象，格式为：{ 'color': '...', 'background-color': '...' }
+	 * 
+	 * @returns 元素
 	 */
 	editor.setGlobalStyle = function(styleObj)
 	{
@@ -1528,19 +2274,18 @@
 		this._setElementStyle(body, so.style);
 		this._setElementClass(body, so.option.className);
 		
-		if(so.style.color)
+		this._setPageStyle(
 		{
-			this._setPageStyle(
-			{
-				selectedBorderColor: so.style.color
-			});
-		}
+			selectedBorderColor: (so.style.color ? so.style.color : undefined)
+		});
 		
 		if(so.option.syncChartTheme)
 		{
 			var chartTheme = this._evalElementChartThemeByStyleObj($(document.body), $(document.body), so.style);
-			this.setGlobalChartTheme(chartTheme);
+			this._setGlobalChartTheme(chartTheme);
 		}
+		
+		return body;
 	};
 	
 	/**
@@ -1552,69 +2297,6 @@
 		return this._getElementStyleObj(ele);
 	};
 	
-	editor._spitStyleAndOption = function(styleObj)
-	{
-		var optionObj =
-		{
-			syncChartTheme: (styleObj.syncChartTheme == true || styleObj.syncChartTheme == "true"),
-			className: styleObj.className
-		};
-		
-		var plainStyleObj = $.extend({}, styleObj);
-		plainStyleObj.syncChartTheme = undefined;
-		plainStyleObj.className = undefined;
-		
-		var re =
-		{
-			style: plainStyleObj,
-			option: optionObj
-		};
-		
-		return re;
-	};
-	
-	editor._evalElementChartThemeByStyleObj = function(chartEle, styleEle, styleObj)
-	{
-		var nowTheme = this._getElementChartTheme(chartEle);
-		var styleTheme = {};
-		
-		var color = styleObj.color;
-		var bgColor = styleObj['background-color'];
-		var fontSize = styleObj['font-size'];
-		
-		if(color || bgColor || fontSize != null)
-		{
-			if(color)
-				styleTheme.color = color;
-			
-			//只有之前设置了图表背景色且不是透明的才需要同步
-			if(bgColor && nowTheme && nowTheme.backgroundColor
-					&& nowTheme.backgroundColor != "transparent")
-				styleTheme.backgroundColor = bgColor;
-			
-			if(bgColor && bgColor != "transparent")
-				styleTheme.actualBackgroundColor = bgColor;
-			
-			//从元素的css中取才能获取字体尺寸像素数
-			if(fontSize != null && fontSize != "")
-				styleTheme.fontSize = styleEle.css("font-size");
-		}
-		
-		if(!nowTheme)
-		{
-			return styleTheme;
-		}
-		else
-		{
-			nowTheme.color = (styleTheme.color ? styleTheme.color : undefined);
-			nowTheme.backgroundColor = (styleTheme.backgroundColor ? styleTheme.backgroundColor : undefined);
-			nowTheme.actualBackgroundColor = (styleTheme.actualBackgroundColor ? styleTheme.actualBackgroundColor : undefined);
-			nowTheme.fontSize = (styleTheme.fontSize != null ? styleTheme.fontSize : undefined);
-			
-			return nowTheme;
-		}
-	};
-	
 	/**
 	 * 校验setElementChartTheme操作。
 	 * 
@@ -1622,12 +2304,7 @@
 	 */
 	editor.checkSetElementChartTheme = function(ele)
 	{
-		ele = this._currentElement(ele, true);
-		
-		if(!this._checkNotEmptyElement(ele))
-			return false;
-		
-		return true;
+		return this.checkHasChartElement(ele);
 	};
 	
 	/**
@@ -1635,23 +2312,27 @@
 	 * 
 	 * @param chartTheme 要设置的图表主题对象，格式为：{ 'color': '...', 'backgroundColor': '...', ... }
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.setElementChartTheme = function(chartTheme, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkSetElementChartTheme(ele))
-			return;
+			return false;
 		
 		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
 		chartEles.each(function()
 		{
 			var thisEle = $(this);
-			
-			editor._setElementChartTheme(thisEle, chartTheme);
-			var chart = editor.dashboard.renderedChart(thisEle);
-			editor._reRenderChart(chart);
+			thisEditor._setElementChartTheme(thisEle, chartTheme);
+			thisEditor._reRenderChartsInElement(thisEle);
 		});
+		
+		return ele;
 	};
 	
 	/**
@@ -1669,11 +2350,22 @@
 	 * 设置全局图表主题。
 	 * 
 	 * @param chartTheme 要设置的图表主题对象，格式为：{ 'color': '...', 'backgroundColor': '...', ... }
+	 * 
+	 * @returns 元素
 	 */
 	editor.setGlobalChartTheme = function(chartTheme)
 	{
-		this._setElementChartTheme($(document.body), chartTheme);
+		return this._setGlobalChartTheme(chartTheme);
+	};
+	
+	editor._setGlobalChartTheme = function(chartTheme)
+	{
+		var ele = $(document.body);
+		
+		this._setElementChartTheme(ele, chartTheme);
 		this._reRenderDashboard();
+		
+		return ele;
 	};
 	
 	/**
@@ -1698,10 +2390,13 @@
 			return null;
 		
 		var chart = this.dashboard.renderedChart(ele);
-		if(!chart)
-			return null;
+		var attrValues = (chart ? chart.attrValues() : null);
 		
-		return chart.attrValues();
+		//应复制一份，避免被不可预料的修改
+		if(attrValues != null)
+			attrValues = $.extend(true, {}, attrValues);
+		
+		return attrValues;
 	};
 	
 	/**
@@ -1736,21 +2431,46 @@
 	};
 	
 	/**
-	 * 获取看板地图名称。
-	 * 
-	 * @returns { mapUrls: ["...", ...], builtins: ["...", ...] }
+	 * 获取看板图表插件属性内置地图选项集。
 	 */
-	editor.getDashboardMapNames = function()
+	editor.getChartPluginAttributeInputOptionsForMap = function(asTree)
 	{
-		var re = { mapUrls: [], builtins: [] };
+		var re = [];
 		
-		$.each(dashboardFactory.builtinChartMaps, function(i, cms)
+		//树
+		if(asTree)
 		{
-			if(cms && cms.names && cms.names.length > 0)
+			var listener =
 			{
-				re.builtins.push(cms.names[0]);
-			}
-		});
+				added: function(node, parent, rootArray)
+				{
+					//转换为UI组件所需的结构
+					node.key = node.mapName;
+					node.label = node.mapLabel;
+					if(parent && !parent.children)
+						parent.children = parent.mapChildren;
+				}
+			};
+			
+			re = dashboardFactory.getStdBuiltinChartMapTree(listener);
+		}
+		//数组
+		else
+		{
+			var listener =
+			{
+				added: function(node, rootArray)
+				{
+					//转换为UI组件所需的结构
+					node.value = node.mapName;
+					node.name = node.mapLabel;
+				}
+			};
+			
+			re = dashboardFactory.getStdBuiltinChartMapArray(listener);
+		}
+		
+		var mapURLs = [];
 		
 		var mapURLsBody = $(document.body).attr(chartFactory.elementAttrConst.MAP_URLS);
 		mapURLsBody = (mapURLsBody ? chartFactory.evalSilently(mapURLsBody, {}) : {});
@@ -1759,9 +2479,15 @@
 		{
 			if(p && chartFactory.isString(v))
 			{
-				re.mapUrls.push(p);
+				if(asTree)
+					mapURLs.push({ key: p, label: p });
+				else
+					mapURLs.push({ name: p, value: p });
 			}
 		});
+		
+		if(mapURLs.length > 0)
+			re = mapURLs.concat(re);
 		
 		return re;
 	};
@@ -1773,26 +2499,7 @@
 	 */
 	editor.checkSetElementChartAttrValues = function(ele)
 	{
-		ele = this._currentElement(ele, true);
-		
-		if(!this._checkNotEmptyElement(ele))
-			return false;
-		
-		var chart = this.dashboard.renderedChart(ele);
-		if(!chart)
-		{
-			this.tipInfo(i18n.selectedNotChartElement);
-			return false;
-		}
-		
-		var cpas = chart.pluginAttributes();
-		if(cpas == null || cpas.length == 0)
-		{
-			this.tipInfo(i18n.chartPluginNoAttrDefined);
-			return false;
-		}
-		
-		return true;
+		return this.checkAttrChartElement(ele);
 	};
 	
 	/**
@@ -1800,6 +2507,8 @@
 	 * 
 	 * @param attrValues 要设置的图表主题对象，格式为：{ ... }
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.setElementChartAttrValues = function(attrValues, ele)
 	{
@@ -1807,7 +2516,7 @@
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkSetElementChartAttrValues(ele))
-			return;
+			return false;
 		
 		var chart = this.dashboard.renderedChart(ele);
 		var attrValuesOrigin = (chart.attrValuesOrigin() || {});
@@ -1822,12 +2531,14 @@
 		
 		var eleAttrValue = this._serializeForAttrValue(attrValuesMerge);
 		
-		if(eleAttrValue == "{}")
-			this._removeElementAttr(ele, chartFactory.elementAttrConst.ATTR_VALUES, true);
+		if(this._isEmptyJsonObjStr(eleAttrValue))
+			this._setElementAttr(ele, chartFactory.elementAttrConst.ATTR_VALUES, null);
 		else
-			this._setElementAttr(ele, chartFactory.elementAttrConst.ATTR_VALUES, eleAttrValue, true);
+			this._setElementAttr(ele, chartFactory.elementAttrConst.ATTR_VALUES, eleAttrValue);
 		
 		this._reRenderChart(chart);
+		
+		return ele;
 	};
 	
 	/**
@@ -1856,12 +2567,7 @@
 	 */
 	editor.checkSetElementChartOptions = function(ele)
 	{
-		ele = this._currentElement(ele, true);
-		
-		if(!this._checkNotEmptyElement(ele))
-			return false;
-		
-		return true;
+		return this.checkHasChartElement(ele);
 	};
 	
 	/**
@@ -1869,23 +2575,27 @@
 	 * 
 	 * @param chartOptionsStr 要设置的图表选项字符串
 	 * @param ele 可选，元素，默认为：当前选中元素
+	 * 
+	 * @returns 元素、false
 	 */
 	editor.setElementChartOptions = function(chartOptionsStr, ele)
 	{
 		ele = this._currentElement(ele, true);
 		
 		if(!this.checkSetElementChartOptions(ele))
-			return;
+			return false;
 		
 		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
 		chartEles.each(function()
 		{
 			var thisEle = $(this);
-			
-			editor._setElementChartOptions(thisEle, chartOptionsStr);
-			var chart = editor.dashboard.renderedChart(thisEle);
-			editor._reRenderChart(chart);
+			thisEditor._setElementChartOptions(thisEle, chartOptionsStr);
+			thisEditor._reRenderChartsInElement(thisEle);
 		});
+		
+		return ele;
 	};
 	
 	/**
@@ -1925,11 +2635,17 @@
 	 * 设置全局图表选项。
 	 * 
 	 * @param chartOptionsStr 要设置的全局图表选项字符串
+	 * 
+	 * @returns 元素
 	 */
 	editor.setGlobalChartOptions = function(chartOptionsStr)
 	{
-		this._setElementChartOptions($(document.body), chartOptionsStr);
+		var ele = $(document.body);
+		
+		this._setElementChartOptions(ele, chartOptionsStr);
 		this._reRenderDashboard();
+		
+		return ele;
 	};
 	
 	/**
@@ -1945,55 +2661,120 @@
 		return this._getElementChartOptions(ele);
 	};
 	
-	editor._reRenderDashboard = function(chart)
+	editor._reRenderDashboard = function()
 	{
-		this.dashboard.destroy();
-		this.dashboard.init();
-		this.dashboard.render();
+		var dashboard = this.dashboard;
+		chartFactory.executeSilently(function()
+		{
+			dashboard.destroy();
+			dashboard.init();
+			dashboard.render();
+		});
+	};
+	
+	editor._renderChart = function(chart)
+	{
+		if(!chart)
+			return;
+		
+		chartFactory.executeSilently(function()
+		{
+			chart.render();
+		});
 	};
 	
 	editor._reRenderChart = function(chart)
 	{
-		if(chart)
+		if(!chart)
+			return;
+		
+		chartFactory.executeSilently(function()
 		{
 			chart.destroy();
 			chart.init();
 			chart.render();
-		}
+		});
 	};
 	
-	editor._setElementChartOptions = function(ele, chartOptionsStr, sync)
+	editor._resizeChart = function(chart)
+	{
+		if(!chart)
+			return;
+		
+		chartFactory.executeSilently(function()
+		{
+			chart.resize();
+		});
+	};
+	
+	editor._removeAndDestroyChart = function(chartInfo)
+	{
+		if(!chartInfo)
+			return;
+		
+		var dashboard = this.dashboard;
+		chartFactory.executeSilently(function()
+		{
+			dashboard.removeChart(chartInfo, true);
+		});
+	};
+	
+	editor._reRenderChartsInElement = function(ele)
+	{
+		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
+		chartEles.each(function()
+		{
+			var chart = thisEditor.dashboard.renderedChart(this);
+			thisEditor._reRenderChart(chart);
+		});
+	};
+	
+	editor._resizeChartsInElement = function(ele)
+	{
+		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
+		chartEles.each(function()
+		{
+			var chart = thisEditor.dashboard.renderedChart(this);
+			thisEditor._resizeChart(chart);
+		});
+	};
+	
+	editor._removeChartsInElement = function(ele)
+	{
+		var chartEles = this._getChartElements(ele);
+		var thisEditor = this;
+		
+		chartEles.each(function()
+		{
+			thisEditor._removeAndDestroyChart(this);
+		});
+	};
+	
+	editor._loadUnsolvedChartsInElement = function(ele)
+	{
+		this.dashboard.loadUnsolvedCharts(ele, this._buildLoadChartAjaxOptions());
+	};
+	
+	editor._setElementChartOptions = function(ele, chartOptionsStr)
 	{
 		if(!chartOptionsStr)
 		{
-			this._removeElementAttr(ele, chartFactory.elementAttrConst.OPTIONS, sync);
+			this._setElementAttr(ele, chartFactory.elementAttrConst.OPTIONS, null);
 			return;
 		}
 		
 		var attrValue = (chartOptionsStr ? chartOptionsStr : "{}");
-		this._setElementAttr(ele, chartFactory.elementAttrConst.OPTIONS, attrValue, sync);
+		this._setElementAttr(ele, chartFactory.elementAttrConst.OPTIONS, attrValue);
 	};
 	
 	editor._getElementChartOptions = function(ele)
 	{
 		var optionsStr = ele.attr(chartFactory.elementAttrConst.OPTIONS);
 		return optionsStr;
-	};
-	
-	/**
-	 * 校验元素不为空。
-	 *
-	 * @param ele
-	 */
-	editor._checkNotEmptyElement = function(ele)
-	{
-		if(this._isEmptyElement(ele))
-		{
-			this.tipInfo(i18n.selectedElementRequired);
-			return false;
-		}
-		
-		return true;
 	};
 	
 	editor._getElementChartTheme = function(ele)
@@ -2006,12 +2787,13 @@
 		return chartFactory.evalSilently(themeStr, {});
 	};
 	
-	editor._setElementChartTheme = function(ele, chartTheme, sync)
+	editor._setElementChartTheme = function(ele, chartTheme)
 	{
 		chartTheme = $.extend(true, {}, chartTheme); 
 		
 		if(chartFactory.isString(chartTheme.graphColors))
 			chartTheme.graphColors = this._spitIgnoreEmpty(chartTheme.graphColors);
+		
 		if(chartFactory.isString(chartTheme.graphRangeColors))
 			chartTheme.graphRangeColors = this._spitIgnoreEmpty(chartTheme.graphRangeColors);
 		
@@ -2043,78 +2825,107 @@
 		{
 			var v = mergedChartTheme[p];
 			
-			if(v == null)
-				;
-			else if(chartFactory.isString(v))
-			{
-				if(v != "")
-					trim[p] = v;
-			}
-			else if($.isArray(v))
-			{
-				if(v.length > 0)
-					trim[p] = v;
-			}
-			else
+			if(!chartFactory.isNullOrEmpty(v))
 				trim[p] = v;
 		}
 		
 		var attrValue = this._serializeForAttrValue(trim);
 		
-		if(attrValue == "{}")
-			this._removeElementAttr(ele, chartFactory.elementAttrConst.THEME, sync);
+		if(this._isEmptyJsonObjStr(attrValue))
+			this._setElementAttr(ele, chartFactory.elementAttrConst.THEME, null);
 		else
-			this._setElementAttr(ele, chartFactory.elementAttrConst.THEME, attrValue, sync);
+			this._setElementAttr(ele, chartFactory.elementAttrConst.THEME, attrValue);
 	};
 	
-	editor._setElementStyle = function(ele, styleObj, sync)
+	/**
+	 * 插入元素，同时同步至编辑HTML中。
+	 * 
+	 * @param insertEle 要插入的jq元素、HTML文本，不要使用"<div />"的格式，可能导致编辑HTML代码格式不对
+	 * @param insertType 可选，插入类型：INSERT_TYPE_*
+	 * @param refEle 插入参照元素，默认为：当前选中元素，或者<body>
+	 * @param highlight 可选，是否为元素添加高亮样式，默认为：false
+	 */
+	editor._insertElement = function(insertEle, insertType, refEle, highlight)
 	{
-		styleObj = (styleObj || {});
-		sync = (sync == null ? true : sync);
+		refEle = this._currentElement(refEle);
+		insertType = this._trimInsertType(refEle, insertType);
+		highlight = (highlight == null ? false : highlight);
 		
-		this._setElementStyleNoSync(ele, styleObj);
+		if(chartFactory.isString(insertEle))
+			insertEle = $(insertEle);
 		
-		if(sync)
+		this._addVisualEditIdAttr(insertEle);
+		this._insertElementFormat(refEle, insertEle, insertType);
+		
+		//同步至编辑HTML中
+		var editEle = this._editElement(refEle);
+		var insertEleClone = insertEle.clone();
+		this._insertElementFormat(editEle, insertEleClone, insertType, true);
+		
+		if(highlight)
 		{
-			var editEle = this._editElement(ele);
-			this._setElementStyleNoSync(editEle, styleObj);
+			insertEle.addClass(ELEMENT_CLASS_NEW_INSERT);
+			$("*", insertEle).addClass(ELEMENT_CLASS_NEW_INSERT);
 		}
 		
 		this.changeFlag(true);
 	};
 	
-	editor._setElementClass = function(ele, className, sync)
+	/**
+	 * 删除元素，同时同步至编辑HTML中。
+	 */
+	editor._deleteElement = function(ele)
 	{
-		className = (className || "");
-		sync = (sync == null ? true : sync);
-		
 		var editEle = this._editElement(ele);
-		var removeClassName = editEle.attr("class");
 		
-		if(removeClassName)
-			ele.removeClass(removeClassName);
-		if(sync)
-		{
-			if(!className)
-				editEle.removeAttr("class");
-			else
-				editEle.removeClass(removeClassName);
-		}
+		this._deleteElementFormat(editEle);
+		this._deleteElementFormat(ele);
 		
-		if(className)
-		{
-			ele.addClass(className);
-			if(sync)
-				editEle.addClass(className);
-		}
+		this.changeFlag(true);
 	};
 	
-	editor._setElementStyleNoSync = function(ele, styleObj)
+	/**
+	 * 追加设置元素style属性，同时同步至编辑HTML中。
+	 */
+	editor._setElementStyleAppend = function(ele, styleObj)
+	{
+		this._setElementStyle(ele, styleObj, false);
+	};
+	
+	/**
+	 * 设置元素style属性，同时同步至编辑HTML中。
+	 */
+	editor._setElementStyle = function(ele, styleObj, strictSet)
+	{
+		styleObj = (styleObj || {});
+		
+		this._setElementStyleIfStrict(ele, styleObj, strictSet);
+		
+		//同步至编辑HTML中
+		var editEle = this._editElement(ele);
+		this._setElementStyleIfStrict(editEle, styleObj, strictSet);
+		
+		this._reSelectElementIf(ele);
+		this.changeFlag(true);
+	};
+	
+	editor._setElementStyleIfStrict = function(ele, styleObj, strictSet)
 	{
 		//这里不能采用整体设置"style"属性的方式，因为"style"属性可能有很多不支持编辑的、或者动态生成的css属性，
 		//它们应该被保留，且不能同步至对应的编辑元素上
 		
+		//默认严格设置模式，这样才能支持删除styleObj中未出现的样式
+		strictSet = (strictSet == null ? true : strictSet);
+		
 		var nowStyleObj = chartFactory.styleStringToObj(chartFactory.elementStyle(ele) || "");
+		
+		if(strictSet)
+		{
+			for(var editableName in this._editableElementStyles)
+			{
+				delete nowStyleObj[editableName];
+			}
+		}
 		
 		for(var name in styleObj)
 		{
@@ -2124,133 +2935,246 @@
 				delete nowStyleObj[name];
 			else
 			{
-				if(name == "background-image")
-				{
-					//不是"url(...)"格式
-					if(/^url\(/i.test(value) != true)
-						value = "url(" + value +")"
-				}
-				
 				nowStyleObj[name] = value;
 			}
 		}
 		
 		if($.isEmptyObject(nowStyleObj))
-			ele.removeAttr("style");
+			this._setElementAttrNoSync(ele, "style", null);
 		else
-			chartFactory.elementStyle(ele, nowStyleObj);
+		{
+			var cssText = chartFactory.styleString(nowStyleObj);
+			this._setElementAttrNoSync(ele, "style", cssText);
+		}
 	};
 	
-	editor._getElementStyleObj = function(ele)
+	/**
+	 * 设置元素class属性，同时同步至编辑HTML中。
+	 */
+	editor._setElementClass = function(ele, className)
 	{
-		var newStyleObj = {};
+		className = (className || "");
 		
-		var styleObj = chartFactory.styleStringToObj(chartFactory.elementStyle(ele));
+		var editEle = this._editElement(ele);
+		var removeClassName = editEle.attr("class");
 		
-		//先处理复合css，因为它们应是低优先级
-		for(var p in styleObj)
+		if(removeClassName)
+			this._removeElementClassNoSync(ele, removeClassName);
+		
+		//同步至编辑HTML中
+		if(!className)
+			this._setElementAttrNoSync(editEle, "class", null);
+		else
+			this._removeElementClassNoSync(editEle, removeClassName);
+		
+		if(className)
 		{
-			if(p == "inset")
-			{
-				this._resolveSetStyleInset(newStyleObj, styleObj[p]);
-			}
-			else if(p == "background")
-			{
-				this._resolveSetStyleBackground(newStyleObj, styleObj[p]);
-			}
+			this._addElementClassNoSync(ele, className);
+			//同步至编辑HTML中
+			this._addElementClassNoSync(editEle, className);
 		}
 		
-		for(var p in styleObj)
-		{
-			if(this._editableElementStyles[p] && styleObj[p])
-				newStyleObj[p] = styleObj[p];
-		}
-		
-		newStyleObj.className = (ele.attr("class") || "");
-		
-		return newStyleObj;
+		this._reSelectElementIf(ele);
+		this.changeFlag(true);
 	};
 	
-	//将css的background属性转换为background-color、background-image等属性
-	editor._resolveSetStyleBackground = function(styleObj, background)
+	editor._removeClassName = function(classStr, predicate)
 	{
-		if(!background)
-			return;
+		var re = "";
 		
-		var ary = background.split(" ");
-		var beforePositionSizeSplitter = true;
-		var bgPositionCount = 0, bgSizeCount = 0;
+		var classNames = (chartFactory.isNullOrEmpty(classStr) ? [] : classStr.split(" "));
 		
-		for(var i=0; i<ary.length; i++)
+		for(var i=0; i<classNames.length; i++)
 		{
-			var v = ary[i];
+			var className = classNames[i];
 			
-			// "background-position / background-size"
-			if("/" == v)
+			if(predicate(className))
+				continue;
+			
+			re += (re == "" ? "" : " ") + className;
+		}
+		
+		return re;
+	};
+	
+	/**
+	 * 设置元素文本内容，同时同步至编辑HTML中。
+	 */
+	editor._setElementText = function(ele, text)
+	{
+		text = (text || "");
+		
+		this._setElementTextNoSync(ele, text);
+		
+		//同步至编辑HTML中
+		var editEle = this._editElement(ele);
+		this._setElementTextNoSync(editEle, text);
+		
+		this._reSelectElementIf(ele);
+		this.changeFlag(true);
+	};
+	
+	/**
+	 * 设置元素属性，同时同步至编辑HTML中，值为null时将移除属性。
+	 */
+	editor._setElementAttr = function(ele, name, value)
+	{
+		this._setElementAttrNoSync(ele, name, value);
+		
+		//同步至编辑HTML中
+		var editEle = this._editElement(ele);
+		this._setElementAttrNoSync(editEle, name, value);
+		
+		this._reSelectElementIf(ele);
+		this.changeFlag(true);
+	};
+	
+	editor._insertElementFormat = function(refEle, insertEle, insertType, formatInner)
+	{
+		formatInner = (formatInner == null ? false : formatInner);
+		
+		var refEleLevel = this._evalElementLevel(refEle);
+		
+		if(insertType == INSERT_TYPE_AFTER)
+		{
+			this._insertElementAfterNoSync(refEle, insertEle);
+			refEle.after(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel) + INSERT_ELE_FORMAT_END);
+		}
+		else if(insertType == INSERT_TYPE_BEFORE)
+		{
+			this._insertElementBeforeNoSync(refEle, insertEle);
+			refEle.before(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel) + INSERT_ELE_FORMAT_END);
+		}
+		else if(insertType == INSERT_TYPE_APPEND)
+		{
+			var children = refEle.children();
+			
+			if(this._isEmptyElement(children))
 			{
-				beforePositionSizeSplitter = false;
+				var innerHtml = this._getInnerHTML(refEle);
+				if(this._isOnlyEmptyOrFormat(innerHtml))
+				{
+					this._setInnerHTMLNoSync(refEle, "");
+				}
+				
+				refEle.append(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel+1) + INSERT_ELE_FORMAT_END);
+				this._insertElementAppendNoSync(refEle, insertEle);
+				refEle.append(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel) + INSERT_ELE_FORMAT_END);
 			}
-			else if(/^url\(/i.test(v))
+			else
 			{
-				styleObj["background-image"] = v;
+				this._insertElementFormat($(children[children.length-1]), insertEle, INSERT_TYPE_AFTER, formatInner);
+				return;
 			}
-			else if(/^(\#|rgb)/.test(v))
+		}
+		else if(insertType == INSERT_TYPE_PREPEND)
+		{
+			var insertTailFormat = false;
+			
+			var children = refEle.children();
+			if(this._isEmptyElement(children))
 			{
-				styleObj["background-color"] = v;
+				var innerHtml = this._getInnerHTML(refEle);
+				if(this._isOnlyEmptyOrFormat(innerHtml))
+				{
+					insertTailFormat = true;
+					this._setInnerHTMLNoSync(refEle, "");
+				}
 			}
-			else if(/^(no\-repeat|repeat|repeat\-x|repeat\-y)$/i.test(v))
-			{
-				styleObj["background-repeat"] = v;
-			}
-			else if(beforePositionSizeSplitter && bgPositionCount < 2 && (/^(left|right|top|bottom|center)$/i.test(v) || /^\d/.test(v)))
-			{
-				styleObj["background-position"] = (bgPositionCount == 0 ? v : styleObj["background-position"]+" "+v);
-				bgPositionCount++;
-			}
-			else if(!beforePositionSizeSplitter && bgSizeCount < 2 && (/^(auto|cover|contain)$/i.test(v) || /^\d/.test(v)))
-			{
-				styleObj["background-size"] = (bgSizeCount == 0 ? v : styleObj["background-size"]+" "+v);
-				bgSizeCount++;
-			}
-			// 颜色单词
-			else if(i == 0 && !styleObj["background-color"] && /^[a-zA-Z]/.test(v))
-			{
-				styleObj["background-color"] = v;
-			}
+			
+			this._insertElementPrependNoSync(refEle, insertEle);
+			refEle.prepend(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel+1) + INSERT_ELE_FORMAT_END);
+			
+			if(insertTailFormat)
+				refEle.append(INSERT_ELE_FORMAT_START + "\n" + this._genFormatTabs(refEleLevel) + INSERT_ELE_FORMAT_END);
+		}
+		else
+			throw new Error("Unsupported insert type : " + insertType);
+		
+		//为所有内部元素补齐格式
+		if(formatInner)
+		{
+			var tabsText = this._genFormatTabs(this._evalElementLevel(insertEle)-1);
+			this._appendElementSubFormat(insertEle, tabsText);
 		}
 	};
 	
-	//将css的inset属性转换为top、left、right、bottom属性
-	editor._resolveSetStyleInset = function(styleObj, inset)
+	editor._appendElementSubFormat = function(ele, tabsText)
 	{
-		if(!inset)
-			return;
+		//在每一个<!--dgInsertFmtEnd-->注释节点前插入格式文本
+		//注意：这里不应该使用替换HTML内容文本后再设置的方式，因为会新建DOM对象而导致旧DOM引用失效
+		ele.contents()
+			.filter(function()
+			{
+				return (this.nodeType == HTML_NODE_TYPE_COMMENT && this.nodeValue == "dgInsertFmtEnd");
+			})
+			.before(tabsText);
 		
-		var ary = inset.split(" ");
-		
-		if(ary.length == 0)
-			return;
-		
-		if(ary.length == 1)
+		var thisEditor = this;
+		ele.children().each(function()
 		{
-			ary[1] = ary[0];
-			ary[2] = ary[0];
-			ary[3] = ary[0];
-		}
-		else if(ary.length == 2)
-		{
-			ary[2] = ary[0];
-			ary[3] = ary[1];
-		}
-		else if(ary.length == 3)
-		{
-			ary[3] = ary[1];
-		}
-		
-		styleObj["top"] = ary[0];
-		styleObj["right"] = ary[1];
-		styleObj["bottom"] = ary[2];
-		styleObj["left"] = ary[3];
+			thisEditor._appendElementSubFormat($(this), tabsText);
+		});
+	};
+	
+	editor._deleteElementFormat = function(ele)
+	{
+		ele.before(DELETE_ELE_FORMAT_FLAG);
+		this._deleteElementNoSync(ele);
+	};
+	
+	editor._addElementClassNoSync = function(ele, className)
+	{
+		ele.addClass(className);
+	};
+	
+	editor._removeElementClassNoSync = function(ele, className)
+	{
+		ele.removeClass(className);
+	};
+	
+	editor._setElementTextNoSync = function(ele, text)
+	{
+		ele.text(text);
+	};
+	
+	editor._setElementAttrNoSync = function(ele, name, value)
+	{
+		// value是""时不应移除
+		if(value == null)
+			ele.removeAttr(name);
+		else
+			ele.attr(name, value);
+	};
+	
+	editor._insertElementAppendNoSync = function(refEle, insertEle)
+	{
+		refEle.append(insertEle);
+	};
+	
+	editor._insertElementPrependNoSync = function(refEle, insertEle)
+	{
+		refEle.prepend(insertEle);
+	};
+	
+	editor._insertElementAfterNoSync = function(refEle, insertEle)
+	{
+		refEle.after(insertEle);
+	};
+	
+	editor._insertElementBeforeNoSync = function(refEle, insertEle)
+	{
+		refEle.before(insertEle);
+	};
+	
+	editor._deleteElementNoSync = function(ele)
+	{
+		ele.remove();
+	};
+	
+	editor._setInnerHTMLNoSync = function(ele, html)
+	{
+		ele.prop("innerHTML", html);
 	};
 	
 	editor._editableElementStyles =
@@ -2258,9 +3182,9 @@
 		"color": true,
 		"background-color": true,
 		"background-image": true,
-		"background-position": true,
 		"background-size": true,
 		"background-repeat": true,
+		"background-position": true,
 		"border-width": true,
 		"border-color": true,
 		"border-style": true,
@@ -2269,8 +3193,13 @@
 		"display": true,
 		"width": true,
 		"height": true,
+		"min-width": true,
+		"min-height": true,
+		"max-width": true,
+		"max-height": true,
 		"padding": true,
 		"margin": true,
+		"overflow": true,
 		"box-sizing": true,
 		"position": true,
 		"left": true,
@@ -2278,84 +3207,135 @@
 		"right": true,
 		"bottom": true,
 		"z-index": true,
+		"grid-template-rows": true,
+		"grid-template-columns": true,
+		"row-gap": true,
+		"column-gap": true,
+		"grid-template-areas": true,
+		"grid-auto-flow": true,
+		"justify-items": true,
+		"align-items": true,
+		"justify-content": true,
+		"align-content": true,
+		"grid-auto-rows": true,
+		"grid-auto-columns": true,
+		"grid-row-start": true,
+		"grid-row-end": true,
+		"grid-column-start": true,
+		"grid-column-end": true,
+		"grid-area": true,
+		"justify-self": true,
+		"align-self": true,
 		"flex-direction": true,
 		"flex-wrap": true,
-		"justify-content": true,
-		"align-items": true,
 		"order": true,
 		"flex-grow": true,
 		"flex-shrink": true,
 		"flex-basis": true,
-		"align-self": true,
-		"align-content": true,
-		"grid-template-columns": true,
-		"grid-template-rows": true,
-		"grid-column-gap": true,
-		"grid-row-gap": true,
-		"grid-template-areas": true,
-		"grid-auto-flow": true,
-		"justify-items": true,
-		"grid-auto-columns": true,
-		"grid-auto-rows": true,
-		"grid-column-start": true,
-		"grid-column-end": true,
-		"grid-row-start": true,
-		"grid-row-end": true,
-		"grid-area": true,
-		"justify-self": true,
-		"font-family": true,
 		"font-size": true,
+		"text-align": true,
 		"font-weight": true,
-		"text-align": true
+		"font-family": true,
+		"line-height": true
 	};
 	
-	//设置元素文本内容
-	editor._setElementText = function(ele, text, sync)
+	editor._getInnerHTML = function(ele)
 	{
-		text = (text || "");
-		sync = (sync == null ? true : sync);
-		
-		ele.text(text);
-		
-		if(sync)
-		{
-			var editEle = this._editElement(ele);
-			editEle.text(text);
-		}
-		
-		this.changeFlag(true);
+		return ele.prop("innerHTML");
 	};
 	
-	//设置元素属性
-	editor._setElementAttr = function(ele, name, value, sync)
+	editor._getElementStyleObj = function(ele)
 	{
-		sync = (sync == null ? true : sync);
+		var styleObj = chartFactory.styleStringToObj(chartFactory.elementStyle(ele));
+		styleObj.className = (ele.attr("class") || "");
 		
-		ele.attr(name, value);
-		
-		if(sync)
-		{
-			var editEle = this._editElement(ele);
-			editEle.attr(name, value);
-		}
-		
-		this.changeFlag(true);
+		return styleObj;
 	};
 	
-	//删除元素属性
-	editor._removeElementAttr = function(ele, name, sync)
+	editor._spitStyleAndOption = function(styleObj)
 	{
-		sync = (sync == null ? true : sync);
-		
-		ele.removeAttr(name);
-		
-		if(sync)
+		var optionObj =
 		{
-			var editEle = this._editElement(ele);
-			editEle.removeAttr(name);
+			syncChartTheme: (styleObj.syncChartTheme == true || styleObj.syncChartTheme == "true"),
+			className: styleObj.className
+		};
+		
+		var plainStyleObj = $.extend({}, styleObj);
+		plainStyleObj.syncChartTheme = undefined;
+		plainStyleObj.className = undefined;
+		
+		var re =
+		{
+			style: plainStyleObj,
+			option: optionObj
+		};
+		
+		return re;
+	};
+	
+	editor._evalElementChartThemeByStyleObj = function(chartEle, styleEle, styleObj)
+	{
+		var nowTheme = this._getElementChartTheme(chartEle);
+		var styleTheme = { color: null, actualBackgroundColor: null, fontSize: null };
+		
+		var color = styleObj['color'];
+		var bgColor = styleObj['background-color'];
+		var fontSize = styleObj['font-size'];
+		
+		if(!chartFactory.isNullOrEmpty(color))
+			styleTheme.color = color;
+		
+		//始终将图表元素的背景色置为null，因为背景色会自动继承父级元素
+		styleTheme.backgroundColor = null;
+		
+		if(!chartFactory.isNullOrEmpty(bgColor))
+		{
+			//应忽略透明度
+			var bgColorObj = chartFactory.parseColor(bgColor);
+			bgColorObj.a = undefined;
+			styleTheme.actualBackgroundColor = chartFactory.colorToHexStr(bgColorObj, true);
 		}
 		
-		this.changeFlag(true);
+		if(!chartFactory.isNullOrEmpty(fontSize))
+		{
+			//从元素的css中取才能获取字体尺寸像素数
+			styleTheme.fontSize = styleEle.css("font-size");
+		}
+		
+		if(!nowTheme)
+		{
+			return styleTheme;
+		}
+		else
+		{
+			nowTheme.color = styleTheme.color;
+			nowTheme.backgroundColor = styleTheme.backgroundColor;
+			nowTheme.actualBackgroundColor = styleTheme.actualBackgroundColor;
+			nowTheme.fontSize = styleTheme.fontSize;
+			
+			return nowTheme;
+		}
+	};
+	
+	editor._reSelectElementIf = function(ele)
+	{
+		if(this._isEmptyElement(ele))
+			return false;
+		
+		var currentEle = this._currentElement(null, true);
+		
+		if(this._isEmptyElement(currentEle))
+			return false;
+		
+		if($(ele)[0] === currentEle[0])
+		{
+			this.selectElement(ele);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
 	};
 	
 	editor._currentElement = function(currentEle, excludeBody)
@@ -2372,67 +3352,104 @@
 	
 	editor._addVisualEditIdAttr = function($ele)
 	{
-		$ele.attr(ELEMENT_ATTR_VISUAL_EDIT_ID, this._nextVisualEditId());
+		var veId = this._nextVisualEditId();
+		$ele.attr(ELEMENT_ATTR_VISUAL_EDIT_ID, veId);
 		
 		var children = $ele.children();
 		
 		if(children.length < 1)
 			return;
-			
+		
+		var thisEditor = this;
+		
 		children.each(function()
 		{
-			editor._addVisualEditIdAttr($(this));
+			thisEditor._addVisualEditIdAttr($(this));
 		});
+		
+		return veId;
 	};
 	
-	editor._insertElement = function(refEle, insertEle, insertType)
+	editor._genFormatTabs = function(count)
 	{
-		if(insertType == "after")
+		var re = "";
+		
+		for(var i=0; i<count; i++)
+			re += "\t";
+		
+		return re;
+	};
+	
+	editor._evalElementLevel = function(ele)
+	{
+		var level = 0;
+		
+		var tmpEle = ele;
+		
+		while(!this._isEmptyElement(tmpEle) && !tmpEle.is("body"))
 		{
-			refEle.after(insertEle);
-			
-			refEle.after("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
+			level += 1;
+			tmpEle = tmpEle.parent();
 		}
-		else if(insertType == "before")
+		
+		if(level > 0 && !this._isEmptyElement(tmpEle) && tmpEle.is("body"))
 		{
-			refEle.before(insertEle);
-			
-			refEle.before("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
+			//编辑HTML做了转换，多内嵌了一层，参考editor._toEditIframeBodyHtml()函数，所以这里要减一层
+			if(tmpEle.hasClass(EDIT_BODY_CLASS_FLAG))
+			{
+				level -= 1;
+			}
+			//展示HTML内的元素，应根据对应的编辑HTML内元素计算层级，因为展示HTML内的可能是被自定义引入的UI库动态调整层级了
+			else if(tmpEle.hasClass(SHOW_BODY_CLASS_FLAG))
+			{
+				var editEle = this._editElement(ele);
+				level = this._evalElementLevel(editEle);
+			}
 		}
-		else if(insertType == "append")
-		{
-			var innerHtml = refEle.prop("innerHTML");
-			if(!innerHtml || innerHtml.charAt(innerHtml.length-1) != '\n')
-				refEle.append("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
-			
-			refEle.append(insertEle);
-			
-			refEle.append("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
-		}
-		else if(insertType == "prepend")
-		{
-			var innerHtml = refEle.prop("innerHTML");
-			if(!innerHtml || innerHtml.charAt(0) != '\n')
-				refEle.prepend("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
-			
-			refEle.prepend(insertEle);
-			
-			refEle.prepend("\n"+INSERT_ELE_FORMAT_FLAG+"\n");
-		}
+		
+		return level;
+	};
+	
+	editor._isOnlyEmptyOrFormat = function(text)
+	{
+		if(chartFactory.isNullOrEmpty(text))
+			return true;
+		
+		if(/^\s*$/.test(text))
+			return true;
+		
+		if(/^(\s*\<\!\-\-((dgInsertFmtStart)|(dgInsertFmtEnd)|(dgDeleteFmtFlag))\-\-\>\s*)*$/i.test(text))
+			return true;
+		
+		return false;
+	};
+	
+	editor._getInsertParentElement = function(refEle, insertType)
+	{
+		var insertParentEle = null;
+		
+		if(refEle.is("body"))
+			insertParentEle = refEle;
+		else if(INSERT_TYPE_AFTER == insertType || INSERT_TYPE_BEFORE == insertType)
+			insertParentEle = refEle.parent();
+		else
+			insertParentEle = refEle;
+		
+		return insertParentEle;
 	};
 	
 	editor._trimInsertType = function(refEle, insertType)
 	{
-		insertType = (!insertType ? "after" : insertType);
-		insertType = (insertType == "after" || insertType == "before"
-						|| insertType == "append" || insertType == "prepend" ? insertType : "after");
+		insertType = (!insertType ? INSERT_TYPE_AFTER : insertType);
+		insertType = (insertType == INSERT_TYPE_AFTER || insertType == INSERT_TYPE_BEFORE
+						|| insertType == INSERT_TYPE_APPEND || insertType == INSERT_TYPE_PREPEND ? insertType : INSERT_TYPE_AFTER);
 		
 		if(refEle.is("body"))
 		{
-			if(insertType == "after")
-				insertType = "append";
-			else if(insertType == "before")
-				insertType = "prepend";
+			if(insertType == INSERT_TYPE_AFTER)
+				insertType = INSERT_TYPE_APPEND;
+			else if(insertType == INSERT_TYPE_BEFORE)
+				insertType = INSERT_TYPE_PREPEND;
 		}
 		
 		return insertType;
@@ -2442,17 +3459,7 @@
 	//注意：返回的图表元素中可能有还未渲染为图表的元素
 	editor._getChartElements = function(ele)
 	{
-		var chartEles = [];
-		
-		if(ele.attr(chartFactory.elementAttrConst.WIDGET))
-			chartEles.push(ele[0]);
-		
-		$("["+chartFactory.elementAttrConst.WIDGET+"]", ele).each(function()
-		{
-			chartEles.push(this);
-		});
-		
-		return $(chartEles);
+		return $(chartFactory.domsWithWidgetId(ele));
 	};
 	
 	editor._selectedElement = function(context)
@@ -2478,23 +3485,45 @@
 		$ele.removeClass(ELEMENT_CLASS_SELECTED);
 	};
 	
-	editor._removeElementClassNewInsert = function()
+	editor._removeElementClassNewInsert = function($ele)
 	{
-		if(this._hasElementClassNewInsert)
+		while($ele != null && $ele.length > 0)
 		{
-			$("."+ELEMENT_CLASS_NEW_INSERT).removeClass(ELEMENT_CLASS_NEW_INSERT);
-			this._hasElementClassNewInsert = false;
+			$ele.removeClass(ELEMENT_CLASS_NEW_INSERT);
+			$ele = $ele.parent();
 		}
+	};
+	
+	editor._checkNotEmptyElement = function(ele)
+	{
+		if(this._isEmptyElement(ele))
+		{
+			this.tipInfo(i18n.selectedElementRequired);
+			return false;
+		}
+		
+		return true;
 	};
 	
 	editor._isEmptyElement = function(ele)
 	{
-		return (ele == null || ele.length == 0);
+		if(ele == null)
+			return true;
+		
+		if(ele.length != null && ele.length == 0)
+			return true;
+		
+		return false;
 	};
 	
 	editor._getVisualEditId = function($ele)
 	{
 		return $ele.attr(ELEMENT_ATTR_VISUAL_EDIT_ID);
+	};
+	
+	editor._getEleByVisualEditId = function(editId)
+	{
+		return $("["+ELEMENT_ATTR_VISUAL_EDIT_ID+"='"+editId+"']");
 	};
 	
 	editor._nextVisualEditId = function()
@@ -2515,25 +3544,36 @@
 		},
 		options);
 		
-		chartFactory.styleSheetText("dg-show-ve-style",
-			  "\n"
+		chartFactory.styleSheetText("dg-show-ve-style", this._buildPageStyleText(options));
+	};
+	
+	editor._buildPageStyleText = function(options)
+	{
+		var bgColorNew = chartFactory.parseColor(options.selectedBorderColor);
+		bgColorNew.a = 0.1;
+		bgColorNew = chartFactory.colorToHexStr(bgColorNew, true);
+		
+		var re = "\n"
 			+ "."+BODY_CLASS_VISUAL_EDITOR+"."+BODY_CLASS_ELEMENT_BOUNDARY+" *["+ELEMENT_ATTR_VISUAL_EDIT_ID+"]{\n"
-			+ "  box-shadow: inset 0 0 1px 1px " + options.selectedBorderColor + ";"
+			+ "  box-shadow: inset 0 0 1px 1px " + options.selectedBorderColor + ",0 0 1px 1px " + options.selectedBorderColor + ";"
 			+ "\n}"
 			+ "\n"
 			+ "."+BODY_CLASS_VISUAL_EDITOR+" ."+ELEMENT_CLASS_SELECTED+",\n"
 			+ "."+BODY_CLASS_VISUAL_EDITOR+"."+BODY_CLASS_ELEMENT_BOUNDARY+" ."+ELEMENT_CLASS_SELECTED+"{\n"
-			+ "  box-shadow: inset 0 0 3px 3px " + options.selectedBorderColor + " !important;"
+			+ "  box-shadow: inset 0 0 2px 2px " + options.selectedBorderColor + ",0 0 2px 2px " + options.selectedBorderColor + " !important;"
 			+ "\n}"
 			+ "\n"
 			+ "."+BODY_CLASS_VISUAL_EDITOR+" ."+ELEMENT_CLASS_NEW_INSERT+",\n"
 			+ "."+BODY_CLASS_VISUAL_EDITOR+"."+BODY_CLASS_ELEMENT_BOUNDARY+" ."+ELEMENT_CLASS_NEW_INSERT+"{\n"
 			+ "  box-shadow: inset 0 0 1px 1px " + options.selectedBorderColor + ";"
-			+ "\n}");
+			+ "  background-color: " + bgColorNew + ";"
+			+ "\n}";
+		
+		return re;
 	};
 	
 	//获取编辑HTML信息
-	//结构参考：org.datagear.web.controller.DashboardController.DashboardShowForEdit.EditHtmlInfo
+	//结构参考：org.datagear.web.controller.DashboardVisualController.DashboardShowForEdit.EditHtmlInfo
 	editor._editHtmlInfo = function()
 	{
 		return this.dashboard.renderContextAttr(DASHBOARD_BUILTIN_RENDER_CONTEXT_ATTR_EDIT_HTML_INFO);
@@ -2591,10 +3631,14 @@
 			
 			for(var i=0; i<obj.length; i++)
 			{
-				if(i > 0)
-					str += ",";
-				
-				str += this._serializeForAttrValue(obj[i]);
+				var vstr = this._serializeForAttrValue(obj[i]);
+				if(vstr != null && vstr !== "")
+				{
+					if(str != "[")
+						str += ",";
+					
+					str += vstr;
+				}
 			}
 			
 			str += "]";
@@ -2607,13 +3651,14 @@
 			
 			for(var p in obj)
 			{
-				if(str != "{")
-					str += ",";
-				
-				var v = this._serializeForAttrValue(obj[p]);
-				
-				if(v != null)
-					str += this._serializeForAttrValue(p) + ":" + v;
+				var vstr = this._serializeForAttrValue(obj[p]);
+				if(vstr != null && vstr !== "")
+				{
+					if(str != "{")
+						str += ",";
+					
+					str += this._serializeForAttrValue(p) + ":" + vstr;
+				}
 			}
 			
 			str += "}";
@@ -2677,7 +3722,7 @@
 			
 			for(var i=0; i<a.length; i++)
 			{
-				if(!editor._deepEqualsForJson(a[i], b[i]))
+				if(!this._deepEqualsForJson(a[i], b[i]))
 					return false;
 			}
 			
@@ -2690,7 +3735,7 @@
 			
 			for(var p in a)
 			{
-				if(!editor._deepEqualsForJson(a[p], b[p]))
+				if(!this._deepEqualsForJson(a[p], b[p]))
 					return false;
 			}
 			
@@ -2698,6 +3743,14 @@
 		}
 		else
 			return (a == b);
+	};
+	
+	editor._isEmptyJsonObjStr = function(str)
+	{
+		if(chartFactory.isNullOrEmpty(str))
+			return true;
+		
+		return /^\s*\{\s*\}\s*$/i.test(str);
 	};
 	
 	/**
@@ -2729,7 +3782,7 @@
 			
 			var editDoc = this._editDocument();
 			editDoc.open();
-			editDoc.write("<!DOCTYPE html><html><head></head><body>");
+			editDoc.write("<!DOCTYPE html><html><head></head><body class='"+EDIT_BODY_CLASS_FLAG+"'>");
 			editDoc.write(editIframeBodyHtml);
 			editDoc.write("</body></html>");
 			editDoc.close();
@@ -2825,7 +3878,7 @@
 	editor._buildLoadChartAjaxOptions = function()
 	{
 		var webContext = chartFactory.renderContextAttrWebContext(this.dashboard.renderContext);
-		var url = chartFactory.toWebContextPathURL(webContext, webContext.attributes.loadChartURL);
+		var url = this.dashboard.contextURL(webContext.attributes.loadChartURL);
 		var qidx = url.indexOf('?');
 		url = url + (qidx < 0 ? "?" : "&") + LOAD_CHART_FOR_EDITOR_PARAM + "=true";
 		
@@ -2837,55 +3890,57 @@
 		return re;
 	};
 	
-	/**
-	 * 获取元素节点路径信息。
-	 */
-	editor.getElementPath = function(ele)
+	editor._isDisplayGrid = function(display)
 	{
-		ele = $(ele);
+		display = this._displayCssValue(display);
 		
-		var paths = [];
+		if(!display)
+			return false;
 		
-		while(true)
+		return /^(grid|inline-grid)$/i.test(display);
+	};
+	
+	editor._isDisplayFlex = function(display)
+	{
+		display = this._displayCssValue(display);
+		
+		if(!display)
+			return false;
+		
+		return /^(flex|inline-flex)$/i.test(display);
+	};
+	
+	editor._displayCssValue = function(display)
+	{
+		if(!display)
+			return display;
+		
+		//是DOM元素
+		if(!chartFactory.isStringOrNumber(display))
 		{
-			if(ele.length == 0)
-				break;
-			
-			var isBody =  ele.is("body");
-			
-			if(!this._isSelectableElement(ele) && !isBody)
-			{
-				ele = ele.parent();
-				continue;
-			}
-			
-			var editEle = this._editElement(ele);
-			var pathInfo =
-			{
-				tagName: (ele[0].tagName || "").toLowerCase(),
-				selected: this._isSelectedElement(ele),
-				id: editEle.attr("id"),
-				className: editEle.attr("class"),
-				visualEditId: editEle.attr(ELEMENT_ATTR_VISUAL_EDIT_ID)
-			};
-			
-			var displayName = pathInfo.tagName;
-			if(pathInfo.id)
-				displayName += "#"+pathInfo.id;
-			else if(pathInfo.className)
-				displayName += "."+pathInfo.className;
-			
-			pathInfo.displayName = displayName;
-			
-			paths.push(pathInfo);
-			
-			if(isBody)
-				break;
-			else
-				ele = ele.parent();
+			display = display.css("display");
 		}
 		
-		return paths.reverse();
+		return display;
+	};
+	
+	editor._evalInsertLayoutHeightStyle = function(fillParent, parentEle)
+	{
+		fillParent = (fillParent === true || fillParent === "true");
+		
+		var re = "";	
+		var isBodyParent = parentEle.is("body");
+		
+		if(fillParent)
+		{
+			re = "height:100%;";
+		}
+		else if(isBodyParent)
+			re = "height:300px;";
+		else
+			re = "height:100%;";
+		
+		return re;
 	};
 })
 (this);

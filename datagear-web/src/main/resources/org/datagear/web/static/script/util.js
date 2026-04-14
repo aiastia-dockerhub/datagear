@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -36,6 +36,8 @@
 	 *              dialog: true,
 	 *              //当dialog=true时，是否作为模态框
 	 * 				modal: true,
+	 *              //当dialog=true时，是否可关闭
+	 * 				closable: true,
 	 *              //当dialog=true时，对话框标题
 	 * 				title: undefined,
 	 *              //当dialog=true时，对话框宽度
@@ -44,8 +46,14 @@
 	 * 				styleClass: "",
 	 *              //当dialog=true时，对话框位置
 	 * 				position: "center",
+	 *              //当dialog=true时，按ESC是否关闭对话框
+	 * 				closeOnEscape: false,
 	 *              //当dialog=true时，对话框位置
 	 * 				onShow: function(dialogEle){},
+	 *              //当dialog=true时，对话框头部自定义HTML模板
+	 * 				templateHeader: "",
+	 *              //当dialog=true时，对话框setup回调函数
+	 * 				onSetup: function(setupObj){},
 	 *				//可选，传递给新页面的参数，可以在目标页面通过$.pageParam(dom)获取
 	 * 				pageParam : undefined,
 	 * 				//其他$.ajax参数
@@ -63,6 +71,7 @@
 			width: "60vw",
 			styleClass: "",
 			position: "center",
+			closeOnEscape: false,
 			onShow: null,
 			pageParam : undefined
 		},
@@ -101,15 +110,21 @@
 					const rootEle = $("<div id='"+rootEleId+"' dialog-ele-id='"+dialogEleId+"' />").appendTo(container);
 					
 					rootEle.addClass("vue-app-dialog");
-					$("<p-dialog />").attr("id", dialogEleId).attr("app-ele-id", rootEleId)
-								.attr(":header", "model.header").attr("v-model:visible", "model.visible").attr(":modal", options.modal)
+					const pdialogEle = $("<p-dialog></p-dialog>").attr("id", dialogEleId).attr("app-ele-id", rootEleId)
+								.attr(":header", "model.header").attr("v-model:visible", "model.visible")
+								.attr("v-model:closable", "model.closable").attr(":modal", options.modal)
 								.attr("v-on:show", "onDialogShow").attr("v-on:after-hide", "onDialogAfterHide")
 								.attr("v-on:hide", "onDialogHide")
-								.attr(":close-on-escape", "false")
+								.attr(":close-on-escape", options.closeOnEscape)
 								.attr(":style", "{width: model.width}")
 								.attr("class", "ajax-dialog " + $.PAGE_PARAM_BINDER_CLASS + " " + options.styleClass)
 								.attr("position", options.position)
 								.appendTo(rootEle);
+					
+					if(options.templateHeader)
+					{
+						pdialogEle.prepend("<template #header>"+options.templateHeader+"</template>");
+					}
 					
 					var dialogApp =
 					{
@@ -119,7 +134,8 @@
 							{
 								header: (options.title || " "),
 								visible: true,
-								width: options.width
+								width: options.width,
+								closable: options.closable
 							});
 							
 							const onDialogShow = function()
@@ -144,16 +160,21 @@
 							};
 							const onDialogHide = function()
 							{
-								$._callBeforeDialogCloseCallbacks(rootEle);
 							};
 							const onDialogAfterHide = function()
 							{
 								$._destroyDialogApp(rootEle);
 							};
 							
-							return {model, onDialogShow, onDialogHide, onDialogAfterHide};
+							const setupObj = {model, onDialogShow, onDialogHide, onDialogAfterHide};
+							
+							if(options.onSetup)
+								options.onSetup(setupObj);
+							
+							return setupObj;
 						},
-						components: { "p-dialog": primevue.dialog }
+						components: $.vueComponents(),
+						
 					};
 					
 					dialogApp = Vue.createApp(dialogApp);
@@ -268,14 +289,15 @@
 	$.bindBeforeCloseDialogCallback = function(ele, name, callback)
 	{
 		var dialogEle = $.getInDialog(ele);
+		var appEle = $("#"+ dialogEle.attr("app-ele-id"));
 		
-		if(dialogEle && dialogEle.length > 0)
+		if(appEle && appEle.length > 0)
 		{
-			var callbacks = dialogEle.data("beforeCloseCallbacks");
+			var callbacks = appEle.data("beforeCloseCallbacks");
 			if(!callbacks)
 			{
 				callbacks = {};
-				dialogEle.data("beforeCloseCallbacks", callbacks);
+				appEle.data("beforeCloseCallbacks", callbacks);
 			}
 			
 			callbacks[name] = callback;
@@ -299,20 +321,14 @@
 	
 	$._callBeforeDialogCloseCallbacks = function(appEle)
 	{
-		var dialogEleId = appEle.attr("dialog-ele-id");
+		var beforeCloseCallbacks = appEle.data("beforeCloseCallbacks");
 		
-		if(dialogEleId)
+		if(beforeCloseCallbacks)
 		{
-			var dialogEle = $("#"+ appEle.attr("dialog-ele-id"));
-			var beforeCloseCallbacks = dialogEle.data("beforeCloseCallbacks");
-			
-			if(beforeCloseCallbacks)
+			$.each(beforeCloseCallbacks, function(name, callback)
 			{
-				$.each(beforeCloseCallbacks, function(name, callback)
-				{
-					callback();
-				});
-			}
+				callback();
+			});
 		}
 	};
 	
@@ -320,7 +336,6 @@
 	{
 		var dialogApp = appEle.data("dialogApp");
 		var dialogVm = appEle.data("dialogVm");
-		var dialogEleId = appEle.attr("dialog-ele-id");
 		
 		$._callBeforeDialogCloseCallbacks(appEle);
 		
@@ -600,6 +615,13 @@
 		return val;
 	};
 	
+	//聚焦至指定元素内的第一个可操作（非只读、非禁用）输入框
+	$.focusOnFirstInput = function(ele)
+	{
+		var input = $(":input:not(:disabled,[readonly]):first", ele); 
+		input.focus();
+	};
+	
 	$.TYPEOF_STRING = "string";
 	$.TYPEOF_NUMBER = "number";
 	$.TYPEOF_BOOLEAN = "boolean";
@@ -641,6 +663,9 @@
 	{
 		idPropName = (idPropName == null ? "id" : idPropName);
 		
+		if(array == null)
+			return -1;
+		
 		for(var i=0; i<array.length; i++)
 		{
 			if(array[i] && array[i][idPropName] == idValue)
@@ -650,11 +675,37 @@
 		return -1;
 	};
 	
+	$.inTreeArrayById = function(treeArray, idValue, idPropName, childrenPropName)
+	{
+		idPropName = (idPropName == null ? "id" : idPropName);
+		childrenPropName = (childrenPropName == null ? "children" : childrenPropName);
+		
+		var idx = $.inArrayById(treeArray, idValue, idPropName);
+		
+		if(idx > -1)
+			return true;
+			
+		for(var i=0; i<treeArray.length; i++)
+		{
+			var children = (treeArray[i] ?  treeArray[i][childrenPropName] : null);
+			
+			if(children && $.inTreeArrayById(children, idValue, idPropName, childrenPropName))
+				return true;
+		}
+		
+		return false;
+	};
+	
 	$.removeById = function(array, idValue, idPropName)
 	{
 		var idx = $.inArrayById(array, idValue, idPropName);
 		if(idx >= 0)
-			array.splice(idx, 1);
+		{
+			var dels = array.splice(idx, 1);
+			return (dels ? dels[0] : undefined);
+		}
+		
+		return undefined;
 	};
 	
 	$.addById = function(array, eleOrEles, idPropName)
@@ -724,6 +775,24 @@
 		return ($.isArray(obj) ? obj : [ obj ]);
 	};
 	
+	//整理数组至指定长度
+	$.trimArrayLen = function(array, len, initValue)
+	{
+		len = (len == null ? 0 : len);
+		
+		while(array.length < len)
+		{
+			array.push($.isFunction(initValue) ? initValue() : initValue);
+		}
+		
+		while(array.length > len)
+		{
+			array.pop();
+		}
+		
+		return array;
+	};
+	
 	/**
 	 * 生成一个唯一ID
 	 * 
@@ -746,14 +815,14 @@
 	};
 	
 	//是否为空
-	$.isEmptyValue = function(value, checkElement)
+	$.isEmptyValue = function(value, checkElement, checkProperty)
 	{
 		checkElement = (checkElement == null ? false : checkElement);
+		checkProperty = (checkProperty == null ? false : checkProperty);
 		
 		if(value == null)
 			return true;
-		
-		if($.isTypeString(value))
+		else if($.isTypeString(value))
 			return (value.length == 0);
 		else if($.isArray(value))
 		{
@@ -763,66 +832,86 @@
 			{
 				for(var i=0; i<value.length; i++)
 				{
-					if($.isEmptyValue(value[i], false))
+					if($.isEmptyValue(value[i], false, false))
 						return true;
 				}
 				
 				return (value.length == 0);
 			}
 		}
+		else if($.isPlainObject(value))
+		{
+			var pcount = 0;
+			
+			for(var p in value)
+			{
+				pcount++;
+				
+				if(checkProperty && $.isEmptyValue(value[p], false, false))
+					return true;
+			}
+			
+			return (pcount == 0);
+		}
 		else
 			return false;
 	};
 	
 	/**
-	 * 比较两个版本号。
-	 * > 1：v0高于v1；= 0：v0等于v1；< 0：v0小于v1。
+	 * 比较版本号。
+	 * 支持版本号格式示例：
+	 * 1、1-alpha、1.1、1.1-alpha、1.1.1、1.1.1-alpha、1.1.1.1、1.1.1.1-alpha
 	 * 
-	 * @param v0
 	 * @param v1
+	 * @param v2
+	 * @returns -1 v1低于v2；0 v1等于v2；1 v1高于v2
 	 */
-	$.compareVersion = function(v0, v1)
+	$.compareVersion = function(v1, v2)
 	{
-		var vv0 = $.resolveVersion(v0);
-		var vv1 = $.resolveVersion(v1);
+		if(v1 === v2)
+			return 0;
 		
-		for(var i=0; i<Math.max(vv0.length,vv1.length); i++)
+		var b1 = "";
+		var b2 = "";
+		
+		var bIdx1 = v1.indexOf("-");
+		if(bIdx1 > 0)
 		{
-			if(vv0[i] > vv1[i])
+			b1 = (bIdx1 >= v1.length - 1 ? "" : v1.substring(bIdx1 + 1));
+			v1 = v1.substring(0, bIdx1);
+		}
+		
+		var bIdx2 = v2.indexOf("-");
+		if(bIdx2 > 0)
+		{
+			b2 = (bIdx2 >= v2.length - 1 ? "" : v2.substring(bIdx2 + 1));
+			v2 = v2.substring(0, bIdx2);
+		}
+		
+		var v1ds = v1.split(".");
+		var v2ds = v2.split(".");
+		
+		for(var i= 0, len = Math.max(v1ds.length, v2ds.length); i<len; i++)
+		{
+			var num1 = (v1ds[i] == null ? 0 : parseInt(v1ds[i]));
+			var num2 = (v2ds[i] == null ? 0 : parseInt(v2ds[i]));
+			
+			if(num1 > num2)
+			{
 				return 1;
-			else if(vv0[i] < vv1[i])
+			}
+			else if(num1 < num2)
+			{
 				return -1;
+			}
 		}
 		
-		return 0;
-	};
-	
-	/**
-	 * 解析版本号字符串（格式为：1.0, 1.1.0, 1.1.0-build），返回包含各分段的数组。
-	 */
-	$.resolveVersion = function(version)
-	{
-		version = (version || "");
-		
-		var ary = [0, 0, 0, ""];
-		
-		var bidx = version.indexOf("-");
-		if(bidx > -1)
-		{
-			if((bidx+1) < version.length)
-				ary[3] = version.substring(bidx+1);
-			version = version.substring(0, bidx);
-		}
-		
-		var vs = version.split(".");
-		for(var i=0; i< Math.min(3, vs.length); i++)
-		{
-			var v = parseInt(vs[i]);
-			if(!isNaN(v))
-				ary[i] = v;
-		}
-		
-		return ary;
+		if(b1 > b2)
+			return 1;
+		else if(b1 < b2)
+			return -1;
+		else
+			return 0;
 	};
 	
 	/**
@@ -859,13 +948,21 @@
 		name = encodeURIComponent(name);
 		value = encodeURIComponent(value);
 		
+		var anchor = "";
+		var aidx = url.indexOf('#');
+		if(aidx >= 0)
+		{
+			var tmpUrl = url.substring(0, aidx);
+			anchor = url.substring(aidx);
+			url = tmpUrl;
+		}
+		
 		var qidx = url.indexOf('?');
 		
 		if(multiple == true || qidx < 0)
 		{
 			var f = (qidx < 0 ? "?" : "&");
 			url = url + f + name + "=" + value;
-			return url;
 		}
 		else
 		{
@@ -875,15 +972,17 @@
 			{
 				var head = url.substring(0, start);
 				start = start+keyword.length;
-				var end = url.indexOf("&", start);
-				var tail = (end >= 0 ? url.substr(end) : "");
+				var endIdx = url.indexOf("&", start);
+				var tail = (endIdx >= 0 ? url.substr(endIdx) : "");
 				url = head + tail;
 			}
 			
-			url += "&" + name +"=" + value;
+			qidx = url.indexOf('?');
+			
+			url += (qidx == (url.length-1) ? "" : "&") + name +"=" + value;
 		}
 		
-		return url;
+		return url + anchor;
 	};
 	
 	/**
@@ -1289,6 +1388,108 @@
 	};
 	
 	/**
+	 * 获取/设置指定属性路径的值。
+	 * 
+	 * @param obj
+	 * @param propPath
+	 * @param value
+	 */
+	$.propPathValue = function(obj, propPath, value)
+	{
+		var setOpt = (value !== undefined);
+		
+		if(setOpt && obj == null)
+			return;
+		
+		var propArray = $.splitPropPath(propPath);
+		var parent = obj;
+		
+		for(var i=0; i<propArray.length; i++)
+		{
+			if(parent == null && !setOpt)
+				return null;
+			
+			var pn = propArray[i];
+			var isEle = (pn.length >= 3 && pn.charAt(0) == '[' && pn.charAt(pn.length-1) == ']' );
+			var eleIdx = (isEle ? parseInt(pn.substring(1, pn.length-1)) : null);
+			var pv = parent[(isEle ? eleIdx : pn)];
+			
+			if(i == (propArray.length - 1))
+			{
+				if(!setOpt)
+				{
+					return pv;
+				}
+				else
+				{
+					parent[(isEle ? eleIdx : pn)] = value;
+				}
+			}
+			else
+			{
+				//设置操作，补全中间对象
+				if(setOpt && pv == null)
+				{
+					var pnNext = propArray[i+1];
+					var isPnNextEle = (pnNext.length >= 3 && pnNext.charAt(0) == '[' && pnNext.charAt(pnNext.length-1) == ']' );
+					pv = (isPnNextEle ? [] : {});
+					parent[(isEle ? eleIdx : pn)] = pv;
+				}
+				
+				parent = pv;
+			}
+		}
+	};
+	
+	/**
+	 * 拆分属性路径字符串为数组。
+	 * 
+	 * @param str 属性路径字符串，格式为："a.b[0].c"，拆分为：["a", "b", "[0]", "c"]
+	 */
+	$.splitPropPath = function(str)
+	{
+		var array = [];
+		
+		var ele = "";
+		for(var i=0; i<str.length; i++)
+		{
+			var c = str.charAt(i);
+			
+			if(c == '\\')
+			{
+				if((i + 1) < str.length)
+					ele += str.charAt(i+1);
+				i+=1;
+			}
+			else if(c == '.')
+			{
+				if(ele)
+					array.push(ele);
+				ele = "";
+			}
+			else if(c == '[')
+			{
+				if(ele)
+					array.push(ele);
+				ele = c;
+			}
+			else if(c == ']')
+			{
+				if(ele)
+					array.push(ele+c);
+				ele = "";
+			}
+			else
+				ele += c;
+		}
+		
+		if(ele)
+			array.push(ele);
+		
+		return array;
+	};
+	
+	/**
 	 * 获取对象或者对象数组的属性值参数字符串，例如：“id=1&id=2&id=3”
 	 * 
 	 * @param objOrArray
@@ -1358,9 +1559,114 @@
 		return (fileName && fileName.charAt(fileName.length - 1) == '/');
 	};
 	
-	$.toJsonString = function(obj)
+	$.toJsonString = function(obj, pretty)
 	{
-		return JSON.stringify(obj);
+		if(pretty == null)
+			return JSON.stringify(obj);
+		else
+			return JSON.stringify(obj, null, 2);
+	};
+	
+	$.replaceAllSubStr = function(str, subStr, replacement)
+	{
+		if(str == null)
+			return str;
+		
+		if(str.replaceAll !== undefined)
+		{
+			str = str.replaceAll(subStr, replacement);
+		}
+		else
+		{
+			//兼容旧版浏览器
+			while(str.indexOf(subStr) >= 0)
+				str = str.replace(subStr, replacement);
+		}
+		
+		return str;
+	};
+	
+	$.trimStr = function(str)
+	{
+		if(str == null)
+			return str;
+		
+		if(str.trim !== undefined)
+		{
+			return str.trim();
+		}
+		else
+		{
+			//兼容旧版浏览器
+			return str.replace(/^\s+|\s+$/gm, "");
+		}
+	};
+	
+	/**
+	 * 静默执行函数。
+	 * 
+	 * @param func 函数
+	 * @param exceptionHandler 可选，异常处理函数
+	 */
+	$.executeSilently = function(func, exceptionHandler)
+	{
+		try
+		{
+			return func();
+		}
+		catch(e)
+		{
+			if(exceptionHandler)
+			{
+				return exceptionHandler(e);
+			}
+			else
+			{
+				$.logException(e);
+			}
+		}
+	};
+	
+	/**
+	 * 记录异常日志。
+	 * 
+	 * @param exception 异常对象、异常消息字符串
+	 */
+	$.logException = function(exception)
+	{
+		if(typeof(console) != "undefined")
+		{
+			if(console.error)
+				console.error(exception);
+			else if(console.warn)
+				console.warn(exception);
+			else if(console.info)
+				console.info(exception);
+		}
+	};
+	
+	/**
+	 * 获取/设置本地存储条目
+	 */
+	$.localStorageItem = function(name, value)
+	{
+		if(value === undefined)
+		{
+			if(window.localStorage && window.localStorage.getItem)
+				return window.localStorage.getItem(name);
+			else
+				return undefined;
+		}
+		else
+		{
+			if(window.localStorage && window.localStorage.setItem)
+			{
+				window.localStorage.setItem(name, value);
+				return true;
+			}
+			else
+				return false;
+		}
 	};
 	
 	/**ajax内容类型常量*/
@@ -1541,6 +1847,9 @@
 			
 			if($(".message-detail", $omp).length > 0)
 				message += "<span class='ui-icon ui-icon-comment message-detail-icon' onclick='_showAjaxOperationMessageDetail();'></span>";
+			
+			//删除首尾空格，避免提示信息错行
+			message = message.trim();
 			
 			if(isSuccessResponse)
 			{
@@ -1769,7 +2078,9 @@
 			//是否竖向排版
 			vertical: false,
 			//横向对齐方式："start"、"center"、"end"
-			justifyContent: "center"
+			justifyContent: "center",
+			showVersion: false,
+			showAuthor: false
 		},
 		options);
 		
@@ -1784,9 +2095,19 @@
 				html += "<div class='plugin-icon' style='background-image:url("+contextPath+$.escapeHtml(chartPlugin.iconUrl)+")'></div>";
 			
 			var name = (chartPlugin.nameLabel ? (chartPlugin.nameLabel.value || chartPlugin.id) : chartPlugin.id);
-			name = $.escapeHtml(name);
+			name = $.escapeHtml(name || "");
 			
 			html += "<div class='plugin-name'>"+name+"</div>";
+			
+			if(options.showVersion)
+			{
+				html += "<div class='plugin-version text-color-secondary'><small>"+(chartPlugin.version ? $.escapeHtml(chartPlugin.version) : "")+"</small></div>";
+			}
+			
+			if(options.showAuthor)
+			{
+				html += "<div class='plugin-author text-color-secondary'><small>"+(chartPlugin.author ? $.escapeHtml(chartPlugin.author) : "")+"</small></div>";
+			}
 		}
 		
 		html += "</div>"
@@ -1831,7 +2152,7 @@ $.validator.addMethod("required", function(value, ele)
 			value = Vue.toRaw(reactiveFormModel[name]);
 	}
 	
-	return !$.isEmptyValue(value, true);
+	return !$.isEmptyValue(value, true, false);
 });
 
 $.fn.extend(
@@ -1916,1544 +2237,1006 @@ $.fn.extend(
 })
 (jQuery);
 
+
+/**
+ * 数据库JDBC连接URL构建工具。
+ */
 (function($, undefined)
 {
-
-//填充page_obj.ftl里JS对象的静态逻辑
-$.inflatePageObj = function(po)
-{
-	//获取父页面JS对象
-	po.parent = function()
-	{
-		var parentPage = (this.ppid ? window[this.ppid] : null);
-		//父页面DOM元素可能会在回调过程中被删除，这里加一层元素判断
-		return (!parentPage || parentPage.element().length == 0 ? null : parentPage);
-	};
+	var dtbsSourceUrlBuilder = ($.dtbsSourceUrlBuilder || ($.dtbsSourceUrlBuilder={}));
+	var builders = (dtbsSourceUrlBuilder.builders || (dtbsSourceUrlBuilder.builders={}));
 	
-	//获取页面内的元素
-	po.element = function(selector, parent)
-	{
-		return (selector == null ? $("#"+this.pid) : (parent ? $(selector, parent) : $(selector, $("#"+this.pid))));
-	};
+	dtbsSourceUrlBuilder.TEMPLATE_HOST="{host}";
+	dtbsSourceUrlBuilder.TEMPLATE_PORT="{port}";
+	dtbsSourceUrlBuilder.TEMPLATE_NAME="{name}";
 	
-	//获取页面内指定id的元素
-	po.elementOfId = function(id, parent)
+	/**
+	 * 列出所有构建器信息。
+	 */
+	dtbsSourceUrlBuilder.list = function()
 	{
-		return this.element("#"+id, parent);
-	};
-	
-	//获取页面内指定name的元素
-	po.elementOfName = function(name, parent)
-	{
-		return this.element("[name='"+name+"']", parent);
-	};
-	
-	//打开URL
-	po.open = function(url, options)
-	{
-		options = $.extend({ fullUrl: false }, (options || {}));
+		var infoArray = [];
 		
-		if(options.fullUrl !== true)
-			url = this.concatContextPath(url);
-		url = $.addParam(url, this.ppidParamName, this.pid);
+		var builders = $.dtbsSourceUrlBuilder.builders;
 		
-		$.open(url, (options || {}));
-	};
-	
-	//打开表格对话框
-	po.openTableDialog = function(url, options)
-	{
-		options = $.extend({ width: "80vw" }, options);
-		this.open(url, options);
-	};
-	
-	//关闭此页面
-	po.close = function()
-	{
-		$.closeDialog(this.element());
-	};
-	
-	po.beforeClose = function(name, callback)
-	{
-		$.bindBeforeCloseDialogCallback(this.element(), name, callback);
-	};
-	
-	po.getJson = function(url, data, success)
-	{
-		var args = $.makeArray(arguments);
-		args[0] = this.concatContextPath(url);
-		$.getJSON.apply($, args);
-	};
-	
-	po.post = function(url, data, success)
-	{
-		var args = $.makeArray(arguments);
-		args[0] = this.concatContextPath(url);
-		$.post.apply($, args);
-	};
-	
-	po.ajaxJson = function(url, options)
-	{
-		url = this.concatContextPath(url);
-		$.ajaxJson(url, options);
-	};
-	
-	po.ajax = function(url, options)
-	{
-		url = this.concatContextPath(url);
-		options = (options || {});
+		for(var dbType in builders)
+		{
+			var builder = builders[dbType];
+			
+			infoArray.push({ "dbType" : dbType, "dbDesc" : (builder.dbDesc || dbType), "order" : builder.order });
+		}
 		
-		if(options.data && !options.type)
-			options = $.extend({ type: "POST" }, options);
+		infoArray.sort(function(a, b)
+		{
+			if(a.order != undefined && b.order != undefined)
+				return a.order - b.order;
+			else if(a.order != undefined)
+				return -1;
+			else
+				return 1;
+		});
 		
-		$.ajax(url, options);
-	};
-	
-	//页面是否在对话框内
-	po.isInDialog = function()
-	{
-		return $.isInDialog(this.element());
+		return infoArray;
 	};
 	
 	/**
-	 * 获取页面参数对象。
-	 * @param name 可选，页面参数对象属性名
+	 * 构建JDBC连接URL。
+	 * 
+	 * @param dbType 数据库类型标识
+	 * @param value URL值对象
 	 */
-	po.pageParam = function(name)
+	dtbsSourceUrlBuilder.build = function(dbType, value)
 	{
-		var ppo = $.pageParam(this.element());
-		return (name == null ? ppo : (ppo ? ppo[name] : null));
+		var builder = $.dtbsSourceUrlBuilder.builders[dbType];
+		
+		if(!builder)
+			return "";
+		
+		if(builder.build) 
+			return builder.build(value);
+		else if(builder.template)
+			return $.dtbsSourceUrlBuilder._resolveUrl(builder.template, value);
+		else
+			return "";
 	};
 	
 	/**
-	 * 调用页面参数对象指定函数。
-	 * @param functionName 必选
-	 * @param arg,... 可选，函数参数
+	 * 由JDBC连接URL解析连接信息。
+	 * 返回对象格式：{ dbType : "", value : { host : "", port : "", name : "" } }。
+	 * 如果无法解析，返回null。
+	 * 
+	 * @param url JDBC连接URL
 	 */
-	po.pageParamCall = function(functionName, arg)
+	dtbsSourceUrlBuilder.extract = function(url)
 	{
-		var argArray = (arg == undefined ? undefined : $.makeArray(arguments).slice(1));
-		return $.pageParamCall(this.element(), functionName, argArray);
-	};
-	
-	//打开确认对话框
-	po.confirm = function(options)
-	{
-		options = $.extend(
-		{
-			acceptLabel : this.i18n.confirm,
-			rejectLabel : this.i18n.cancel,
-			header : this.i18n.operationConfirm
-		},
-		options);
+		var builders = $.dtbsSourceUrlBuilder.builders;
 		
-		$.confirm(options);
-	};
-	
-	//删除操作确认
-	po.confirmDelete = function(acceptHandler, rejectHandler)
-	{
-		var msg = this.i18n.confirmDeleteAsk;
-		this.confirm({ message: msg, accept: acceptHandler, reject: rejectHandler });
-	};
-	
-	//连接应用根路径
-	po.concatContextPath = function(path)
-	{
-		return (path.charAt(0) == "/" ? this.contextPath + path : path);
-	};
-	
-	po.attr = function(name, value)
-	{
-		var attrs = (this._attrs || (this._attrs = {}));
-		
-		if(value === undefined)
-			return attrs[name];
-		else
-			attrs[name] = value;
-	};
-	
-	//获取/填充并返回vue页面模型，在vue页面中可以"pm.*"访问模型中的属性
-	po.vuePageModel = function(obj)
-	{
-		return this.vueReactive("pm", obj);
-	};
-	
-	//获取/填充并返回vue的setup响应式对象（自动reactive），对象格式必须为：{...}
-	po.vueReactive = function(name, obj)
-	{
-		if(obj === undefined)
-			return this._vueSetup[name];
-		else
+		for(var dbType in builders)
 		{
-			var rtvObj = (this._vueSetup[name] || (this._vueSetup[name] = Vue.reactive({})));
+			var builder = builders[dbType];
 			
-			for(var p in obj)
-				rtvObj[p] = obj[p];
+			var value = null;
 			
-			return rtvObj;
-		}
-	};
-	
-	//获取/设置（自动ref）vue的setup引用值
-	po.vueRef = function(name, value)
-	{
-		var obj = this._vueSetup[name];
-		
-		if(value === undefined)
-			return obj;
-		else
-		{
-			if(obj == null)	
-				this._vueSetup[name] = Vue.ref(value);
-			else
-				obj.value = value;
-		}
-	};
-	
-	//设置vue的setup函数
-	po.vueMethod = function(name, method)
-	{
-		var methodsObj = {};
-		
-		// ({ a: Function, b: Function)
-		if(arguments.length == 1)
-			methodsObj = name;
-		// (name, Function)
-		else if(arguments.length == 2)
-			methodsObj[name] = method;
-		
-		for(var p in methodsObj)
-			this._vueSetup[p] = methodsObj[p];
-	};
-	
-	//设置vue的计算属性
-	po.vueComputed = function(name, handler)
-	{
-		var computedObj = {};
-		
-		// ({ a: Function, b: Function)
-		if(arguments.length == 1)
-			computedObj = name;
-		// (name, Function)
-		else if(arguments.length == 2)
-			computedObj[name] = handler;
-		
-		for(var p in computedObj)
-			this._vueComputed[p] = computedObj[p];
-	};
-	
-	//获取/设置vue组件
-	po.vueComponent = function(name, value)
-	{
-		if(value === undefined)
-			return this._vueComponents[name];
-		else
-			this._vueComponents[name] = value;
-	};
-	
-	//设置vue监听
-	po.vueWatch = function(target, callback)
-	{
-		this._vueWatch.push({ target: target, callback: callback });
-	};
-	
-	//设置vue挂在后回调函数
-	po.vueMounted = function(callback)
-	{
-		this._vueMounted.push(callback);
-	};
-
-	//获取指定名称对象的unref()结果
-	po.vueUnref = function(name)
-	{
-		var obj = this._vueSetup[name];
-		return Vue.unref(obj);
-	};
-	
-	//获取toRaw()结果对象
-	po.vueRaw = function(reactiveObj)
-	{
-		if($.isArray(reactiveObj))
-		{
-			var re = [];
-			$.each(reactiveObj, function(idx, item)
-			{
-				re.push(Vue.toRaw(item));
-			});
+			if(builder.extract) 
+				value = builder.extract(url);
+			else if(builder.template)
+				value = $.dtbsSourceUrlBuilder._resolveValue(builder.template, url);
 			
-			return re;
-		}
-		else
-			return Vue.toRaw(reactiveObj);
-	};
-	
-	//执行vue的$nextTick操作
-	po.vueNextTick = function(callback)
-	{
-		po.vueApp().$nextTick(callback);
-	};
-	
-	//vue的setup对象
-	po._vueSetup = {};
-	//vue的watch对象
-	po._vueWatch = [];
-	//vue的watch对象
-	po._vueComputed = {};
-	//vue的mounted回调函数
-	po._vueMounted = [];
-	//vue组件
-	po._vueComponents =
-	{
-		"p-tabmenu": primevue.tabmenu,
-		"p-button": primevue.button,
-		"p-datatable": primevue.datatable,
-		"p-column": primevue.column,
-		"p-inputtext": primevue.inputtext,
-		"p-checkbox": primevue.checkbox,
-		"p-textarea": primevue.textarea,
-		"p-card": primevue.card,
-		"p-dialog": primevue.dialog,
-		"p-password": primevue.password,
-		"p-divider": primevue.divider,
-		"p-selectbutton": primevue.selectbutton,
-		"p-dropdown": primevue.dropdown,
-		"p-togglebutton": primevue.togglebutton,
-		"p-radiobutton": primevue.radiobutton,
-		"p-splitbutton": primevue.splitbutton,
-		"p-tree": primevue.tree,
-		"p-tabview": primevue.tabview,
-		"p-tabpanel": primevue.tabpanel,
-		"p-menu": primevue.menu,
-		"p-menubar": primevue.menubar,
-		"p-tieredmenu": primevue.tieredmenu,
-		"p-chip": primevue.chip,
-		"p-fileupload": primevue.fileupload,
-		"p-inlinemessage": primevue.inlinemessage,
-		"p-steps": primevue.steps,
-		"p-dataview": primevue.dataview,
-		"p-overlaypanel": primevue.overlaypanel,
-		"p-panel": primevue.panel,
-		"p-fieldset": primevue.fieldset,
-		"p-listbox": primevue.listbox,
-		"p-colorpicker": primevue.colorpicker,
-		"p-splitter": primevue.splitter,
-        "p-splitterpanel": primevue.splitterpanel,
-        "p-progressbar": primevue.progressbar,
-		"p-multiselect": primevue.multiselect
-	};
-	
-	//vue挂载
-	po.vueMount = function(app)
-	{
-		const setupObj = this._vueSetup;
-		const watchObj = this._vueWatch;
-		const computedObj = this._vueComputed;
-		const mountedObj = this._vueMounted;
-		const componentsObj = this._vueComponents;
-		
-		app = $.extend((app || {}),
-		{
-			setup()
-			{
-				$.each(watchObj, function(idx, wt)
-				{
-					Vue.watch(wt.target, wt.callback);
-				});
-				
-				for(var cpn in computedObj)
-				{
-					setupObj[cpn] = Vue.computed(computedObj[cpn]);
-				}
-				
-				Vue.onMounted(function()
-				{
-					$.each(mountedObj, function(idx, callback)
-					{
-						callback();
-					});
-					
-					$.initGlobalTip();
-					$.initGlobalConfirm();
-				});
-				
-				return setupObj;
-			},
-			components: componentsObj
-		});
-		
-		this._vueApp = Vue.createApp(app).use(primevue.config.default)
-						.directive("tooltip", primevue.tooltip).mount("#"+this.pid);
-		return this._vueApp;
-	};
-	
-	//获取挂载后的vue实例
-	po.vueApp = function()
-	{
-		return this._vueApp;
-	};
-};
-
-//填充page_manager.ftl里JS对象的静态逻辑
-$.inflatePageManager = function(po)
-{
-	po.refresh = function(){ /*需实现*/ };
-	po.getSelectedEntities = function(){ /*需实现*/ };
-	
-	po.setupAction = function()
-	{
-		po.vuePageModel(
-		{
-			action: po.action,
-			isQueryAction: po.isQueryAction,
-			isSelectAction: po.isSelectAction,
-			isMultipleSelect: po.isMultipleSelect,
-			isReadonlyAction: po.isReadonlyAction
-		});
-	};
-	
-	//单选处理函数
-	po.executeOnSelect = function(callback)
-	{
-		var selected = po.getSelectedEntities();
-		
-		if(!selected || selected.length != 1)
-		{
-			$.tipInfo(po.i18n.pleaseSelectOnlyOne);
-			return;
+			if(value != null)
+				return { dbType : dbType, value : value };
 		}
 		
-		callback.call(po, selected[0]);
+		return null;
 	};
 	
-	//多选处理函数
-	po.executeOnSelects = function(callback)
+	/**
+	 * 获取数据库的默认URL值对象。
+	 * 
+	 * @param dbType 数据库类型标识
+	 */
+	dtbsSourceUrlBuilder.defaultValue = function(dbType)
 	{
-		var selected = po.getSelectedEntities();
+		var builder = $.dtbsSourceUrlBuilder.builders[dbType];
 		
-		if(!selected || selected.length < 1)
-		{
-			$.tipInfo(po.i18n.pleaseSelectAtLeastOne);
-			return;
-		}
+		if(!builder)
+			return {};
 		
-		callback.call(po, selected);
+		return builder.defaultValue;
 	};
 	
-	po.handleAddAction = function(url, options)
+	/**
+	 * 是否包含指定数据库类型标识的构建器。
+	 * 
+	 * @param dbType 数据库类型标识
+	 */
+	dtbsSourceUrlBuilder.contains = function(dbType)
 	{
-		var action = { url: url, options: options };
-		po.inflateFormActionPageParam(action);
-		po.open(action.url, action.options);
+		return ($.dtbsSourceUrlBuilder.builders[dbType] != undefined);
 	};
 	
-	po.handleOpenOfAction = function(url, options)
-	{
-		po.executeOnSelect(function(entity)
-		{
-			po.doOpenOfAction(url, entity, options);
-		});
-	};
-	
-	po.doOpenOfAction = function(url, entity, options)
-	{
-		var action = { url: url, options: options };
-		po.inflateFormActionPageParam(action);
-		po.inflateEntityAction(action, entity);
-		po.open(action.url, action.options);
-	};
-	
-	po.handleOpenOfsAction = function(url, options)
-	{
-		po.executeOnSelects(function(entities)
-		{
-			po.doOpenOfsAction(url, entities, options);
-		});
-	};
-	
-	po.doOpenOfsAction = function(url, entities, options)
-	{
-		var action = { url: url, options: options };
-		po.inflateFormActionPageParam(action);
-		po.inflateEntityAction(action, entities);
-		po.open(action.url, action.options);
-	};
-	
-	po.handleDeleteAction = function(url, options)
-	{
-		po.executeOnSelects(function(entities)
-		{
-			po.confirmDelete(function()
-			{
-				options = $.extend(
-				{
-					contentType: $.CONTENT_TYPE_JSON,
-					success: function(){ po.refresh(); }
-				},
-				options);
-				
-				var action = { url: url, options: options };
-				po.inflateEntityAction(action, entities);
-				
-				po.ajaxJson(action.url, action.options);
-			});
-		});
-	};
-	
-	po.handleSelectAction = function()
-	{
-		if(po.isMultipleSelect)
-		{
-			po.executeOnSelects(function(entities)
-			{
-				po.pageParamCallSelect(entities);
-			});
-		}
-		else
-		{
-			po.executeOnSelect(function(entity)
-			{
-				po.pageParamCallSelect(entity);
-			});
-		}
-	};
-	
-	//调用页面参数对象的"select"函数
-	po.pageParamCallSelect = function(selected, close)
-	{
-		close = (close == null ? true : close);
-		
-		var myClose = po.pageParamCall("select", selected);
-		
-		if(myClose === false)
-			return;
-		
-		if(close)
-			po.close();
-	};
-	
-	po.inflateFormActionPageParam = function(action)
-	{
-		action.options = $.extend(
-		{
-			pageParam:
-			{
-				submitSuccess: function()
-				{
-					po.refresh();
-				}
-			}
-		},
-		action.options);
-	};
-	
-	//将单行或多行数据对象转换为操作请求数据
-	po.inflateEntityAction = function(action, entityOrArray)
-	{
-		var id = $.propertyValue(entityOrArray, po.inflateEntityActionIdPropName);
-		
-		if($.CONTENT_TYPE_JSON == action.options.contentType)
-		{
-			var options = action.options;
-			if(options.data == null)
-				options.data = id;
-			else
-			{
-				var data = {};
-				data[po.inflateEntityActionIdParamName] = id;
-				options.data = $.extend(data, options.data);
-			}
-		}
-		else
-		{
-			if($.isArray(id))
-			{
-				for(var i=0; i<id.length; i++)
-					action.url = $.addParam(action.url, po.inflateEntityActionIdParamName, id[i], true);
-			}
-			else
-				action.url = $.addParam(action.url, po.inflateEntityActionIdParamName, id);
-		}
-	};
-	
-	po.inflateEntityActionIdPropName = "id";
-	po.inflateEntityActionIdParamName = "id";
-};
-
-//填充page_table.ftl里JS对象的静态逻辑
-$.inflatePageTable = function(po)
-{
-	//重写搜索表单提交处理函数
-	po.search = function(formData, resetPage)
-	{
-		resetPage = (resetPage == null ? po.searchResetPage : resetPage);
-		
-		if(resetPage)
-			formData = $.extend({ page: 1 }, formData);
-		else
-			formData = $.extend({}, formData);
-		
-		//每次应重置
-		if(!po.searchResetPage)
-			po.searchResetPage = true;
-		
-		po.ajaxTableQuery(formData);
-		po.loadAjaxTable();
-	};
-	
-	po.searchResetPage = true;
-	
-	po.refresh = function()
-	{
-		//兼容搜索表单集成
-		if(po.submitSearchForm)
-		{
-			po.searchResetPage = false;
-			po.submitSearchForm();
-		}
-		else
-			po.loadAjaxTable();
-	};
-	
-	po.getSelectedEntities = function()
-	{
-		var pm = po.vuePageModel();
-		return $.wrapAsArray(po.vueRaw(pm.selectedItems));
-	};
-	
-	po.rowsPerPageOptions = [10, 20, 50, 100, 200];
-	po.rowsPerPage = po.rowsPerPageOptions[1];
-	
-	po.ajaxTableAttr = function(obj)
-	{
-		return po.attr("ajaxTableAttr", obj);
-	};
-	
-	po.setupAjaxTable = function(url, options)
-	{
-		options = $.extend({ multiSortMeta: [], initData: true }, options);
-		
-		po.setupAction();
-		
-		var pm = po.vuePageModel(
-		{
-			items: [],
-			paginator: true,
-			pageRecordIndex: 0,
-			paginatorTemplate: "CurrentPageReport FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown",
-			pageReportTemplate: "{first}-{last} / {totalRecords}",
-			rowsPerPage: po.rowsPerPage,
-			rowsPerPageOptions: po.rowsPerPageOptions,
-			totalRecords: 0,
-			loading: false,
-			selectionMode: ((po.isQueryAction || po.isMultipleSelect) ? "multiple" : "single"),
-			multiSortMeta: options.multiSortMeta,
-			selectedItems: null
-		});
-		
-		po.vueMethod(
-		{
-			onPaginator: function(e)
-			{
-				po.ajaxTableQuery({ page: e.page+1, pageSize: e.rows, orders: po.sortMetaToOrders(e.multiSortMeta) });
-				po.loadAjaxTable();
-			},
-			onSort: function(e)
-			{
-				po.ajaxTableQuery({ orders: po.sortMetaToOrders(e.multiSortMeta) });
-				po.loadAjaxTable();
-			}
-		});
-		
-		po.ajaxTableAttr(
-		{
-			url: url,
-			query: { page: 1, pageSize: po.rowsPerPage, orders: po.sortMetaToOrders(options.multiSortMeta) }
-		});
-		
-		if(options.initData)
-		{
-			po.vueMounted(function()
-			{
-				po.refresh();
-			});
-		}
-		
-		return pm;
-	};
-	
-	po.ajaxTableQuery = function(query)
-	{
-		var ajaxTableAttr = po.ajaxTableAttr();
-		
-		if(query === undefined)
-			return ajaxTableAttr.query;
-		else
-			$.extend(ajaxTableAttr.query, query);
-	};
-	
-	po.loadAjaxTable = function(options)
-	{
-		options = (options || {});
-		
-		var ajaxTableAttr = po.ajaxTableAttr();
-		var pm = po.vuePageModel();
-		pm.loading = true;
-		
-		options = $.extend(
-		{
-			data: ajaxTableAttr.query,
-			success: function(response)
-			{
-				po.setAjaxTableData(response);
-			},
-			complete: function()
-			{
-				pm.loading = false;
-			}
-		},
-		options);
-		
-		po.ajaxJson(ajaxTableAttr.url, options);
-	};
-	
-	po.sortMetaToOrders = function(sortMeta)
-	{
-		if(sortMeta == null)
-		{
-			var pm = po.vuePageModel();
-			sortMeta = pm.multiSortMeta;
-		}
-		
-		var orders = [];
-		
-		$.each(sortMeta, function(idx, sm)
-		{
-			orders.push({ name: sm.field, type: (sm.order > 0 ? "ASC" : "DESC") });
-		});
-		
-		return orders;
-	};
-	
-	po.setAjaxTableData = function(data)
-	{
-		var isPagingData = (data.items != null && data.total != null);
-		var pm = po.vuePageModel();
-		
-		pm.items = (isPagingData ? data.items : data);
-		pm.totalRecords = (isPagingData ? data.total : data.length);
-		pm.pageRecordIndex = (isPagingData ? data.startIndex : 0);
-		pm.selectedItems = null;
-	};
-};
-
-//填充page_form.ftl里JS对象的静态逻辑
-$.inflatePageForm = function(po)
-{
-	//获取/填充并返回vue表单模型，在vue页面中可以"fm.*"访问模型中的属性
-	po.vueFormModel = function(obj)
-	{
-		return po.vueReactive("fm", obj);
-	};
-	
-	po.setupForm = function(data, ajaxOptions, validateOptions)
-	{
-		data = (data || {});
-		ajaxOptions = (ajaxOptions || {});
-		validateOptions = (validateOptions || {});
-		
-		po.vuePageModel(
-		{
-			action: po.action,
-			isAddAction: po.isAddAction,
-			isEditAction: po.isEditAction,
-			isViewAction: po.isViewAction,
-			isCopyAction: po.isCopyAction,
-			isReadonlyAction: po.isReadonlyAction
-		});
-		
-		var fm = po.vueFormModel(data);
-		
-		po.vueMounted(function()
-		{
-			po.initValidationMessagesIfNon();
-			
-			//当需要在options中返回DOM元素时，应定义为函数，因为vue挂载前元素可能不必配
-			if($.isFunction(ajaxOptions))
-				ajaxOptions = ajaxOptions();
-			if($.isFunction(validateOptions))
-				validateOptions = validateOptions();
-			
-			validateOptions = $.extend(
-			{
-				submitHandler: function(form)
-				{
-					var submitUrl = ($.isFunction(po.submitUrl) ? po.submitUrl() : po.submitUrl);
-					return po.submitForm(submitUrl, ajaxOptions);
-				}
-			},
-			validateOptions);
-			
-			po.form().validateForm(fm, validateOptions);
-		});
-		
-		return fm;
-	};
-	
-	po.submitForm = function(url, options)
-	{
-		options = $.extend(
-		{
-			defaultSuccessCallback: true,
-			closeAfterSubmit: true,
-			ignoreIfViewAction: true
-		},
-		options);
-		
-		if(options.ignoreIfViewAction && (po.isViewAction || url == "#"))
-			return;
-		
-		var fm = po.vueFormModel();
-		options = $.extend(true, options, { data: po.vueRaw(fm) });
-		
-		var successHandlers = (options.success ? [].concat(options.success) : []);
-		successHandlers.push(function(response)
-		{
-			if(options.defaultSuccessCallback && po.defaultSubmitSuccessCallback)
-				po.defaultSubmitSuccessCallback(response, options.closeAfterSubmit);
-		});
-		options.success = successHandlers;
-		
-		var action = { url: url, options: options };
-		
-		if(po.beforeSubmitForm(action) !== false)
-		{
-			var jsonSubmit = (action.options.contentType == null || action.options.contentType == $.CONTENT_TYPE_JSON);
-			
-			if(jsonSubmit)
-				po.ajaxJson(action.url, action.options);
-			else
-				po.ajax(action.url, action.options);
-		}
-		
-		return false;
-	};
-	
-	//返回false会阻止表单提交
-	po.beforeSubmitForm = function(action){};
-	
-	po.defaultSubmitSuccessCallback = function(response, close)
-	{
-		close = (close == null ? true : close);
-		
-		var myClose = po.pageParamCallSubmitSuccess(response);
-		
-		if(myClose === false)
-			return;
-		
-		if(close)
-			po.close();
-	};
-	
-	po.pageParamCallSubmitSuccess = function(response)
-	{
-		po.pageParamCall("submitSuccess", (response.data ? response.data : response));
-	};
-	
-	po.handleOpenSelectAction = function(url, callback, options)
-	{
-		options = (options || {});
-		options = $.extend(
-		{
-			pageParam:
-			{
-				select: callback
-			}
-		},
-		options);
-		
-		po.openTableDialog(url, options);
-	};
-};
-
-//填充page_code_editor.ftl里JS对象的静态逻辑
-$.inflatePageCodeEditor = function(po)
-{
-	//停止输入这些毫秒数后才进行提示，避免干扰用户输入
-	po.codeEditorHintingDelay = 500;
-	
-	po.createCodeEditor = function(dom, options)
-	{
-		dom = $(dom);
-		options = (options || {});
-		
-		dom.on("keydown,keypress,keyup", function(e)
-		{
-			//阻止TAB键切换焦点
-			if(e.keyCode == $.keyCode.TAB)
-				e.stopPropagation();
-		});
-		
-		//采用系统切换主题功能模式
-		options.theme = "custom";
-		
-		if(options.lineNumbers == null)
-			options.lineNumbers = true;
-		
-		if(options.smartIndent == null)
-			options.smartIndent = false;
-		
-		if(options.indentWithTabs == null)
-			options.indentWithTabs = true;
-		
-		//强制禁用completeSingle选项，因为如果编辑器hint使用change事件中触发的话，
-		//如果这里为true，可能会导致hint死循环，且会导致退格操作无效
-		if(options.hintOptions)
-			options.hintOptions.completeSingle = false;
-		
-		//if(options.hintOptions)
-		//	options.hintOptions.closeOnUnfocus = false;
-		
-		var codeEditor = CodeMirror(dom[0], options);
-		
-		if(options.hintOptions && !options.readOnly)
-		{
-			codeEditor.on("keyup", function(codeEditor, e)
-			{
-				if(e.keyCode == $.keyCode.ESCAPE || e.keyCode == $.keyCode.UP
-						|| e.keyCode == $.keyCode.DOWN)
-				{
-					return;
-				}
-				
-				if(codeEditor._timeoutIdForHinting != null)
-					clearTimeout(codeEditor._timeoutIdForHinting);
-				
-				codeEditor._timeoutIdForHinting = setTimeout(function()
-				{
-					codeEditor.showHint();
-					codeEditor._timeoutIdForHinting = null;
-				},
-				po.codeEditorHintingDelay);
-			});
-		}
-		
-		return codeEditor;
-	};
-	
-	po.evalCodeModeByName = function(name)
-	{
-		var mode = undefined;
-		
-		if($.isHtmlFile(name))
-			mode = "htmlmixed";
-		else if($.isJsFile(name))
-			mode = "javascript";
-		else if($.isCssFile(name))
-			mode = "css";
-		
-		return mode;
-	};
-	
-	po.getCodeText = function(codeEditor)
-	{
-		var doc = codeEditor.getDoc();
-		return doc.getValue();
-	};
-
-	po.setCodeText = function(codeEditor, text)
-	{
-		var doc = codeEditor.getDoc();
-		doc.setValue(text || "");
-	};
-	
-	po.setCodeTextTimeout = function(codeEditor, text, focus)
-	{
-		focus = (focus == null ? false : focus);
-		
-		//在对话框时，直接初始化代码编辑器会出现行号错位的情况，使用这种方式可解决
-		setTimeout(function()
-		{
-			po.setCodeText(codeEditor, text);
-			if(focus)
-				codeEditor.focus();
-		},
-		200);
-	};
-	
-	po.getSelectedCodeText = function(codeEditor)
-	{
-		var doc = codeEditor.getDoc();
-		return (doc.getSelection() || "");
-	};
-	
-	po.getSelectedCodeInfo = function(codeEditor)
-	{
-		var doc = codeEditor.getDoc();
-		var selCodes = doc.getSelections();
-		var selRanges = doc.listSelections();
-		
-		var selText = (selCodes && selCodes[0] ? (selCodes[0] || "") : "");
-		var from = (selRanges && selRanges[0] ? selRanges[0].anchor : null);
-		var to = (selRanges && selRanges[0] ? selRanges[0].head : null);
-		
-		if(from && to)
-		{
-			var swap = ((from.line > to.line) || (from.line == to.line && from.ch > to.ch));
-			if(swap)
-			{
-				var fromTmp = from;
-				from = to;
-				to = fromTmp;
-			}
-		}
-		
-		return { text: selText, from: from, to: to };
-	};
-	
-	po.insertCodeText = function(codeEditor, cursor, text)
-	{
-		//(codeEditor, text)
-		if(arguments.length == 2)
-		{
-			text = cursor;
-			cursor = undefined;
-		}
-		
-		var doc = codeEditor.getDoc();
-		cursor = (cursor == null ? doc.getCursor() : cursor);
-		
-		doc.replaceRange(text, cursor);
-	};
-	
-	//查找补全列表
-	//completions : { name: "...", ?value: "...", ?displayName: "...", ?displayComment: "...", ?categories: [ "小写字符串", ... ] }
-	po.findCompletionList = function(completions, namePrefix, category)
+	/**
+	 * 添加一个构建器。
+	 * 
+	 * @param builder 构建器，可以有两种格式：
+	 * 1.
+	 * {
+	 *   //必选，数据库类型
+	 *   dbType : "...",
+	 *   
+	 *   //必选，模板
+	 *   template : "...{host}...{port}...{name}...",
+	 *   
+	 *   //可选，默认值
+	 *   defaultValue : { host : "...", port : "...", name : "" },
+	 *   
+	 *   //可选，数据库描述
+	 *   dbDesc : "...",
+	 *   
+	 *   //可选，展示排序
+	 *   order : 9
+	 * }
+	 * 
+	 * 2.
+	 * {
+	 *   //必选，数据库类型
+	 *   dbType : "...",
+	 *   
+	 *   //必选，由{ host : "...", port : "...", name : "" }值对象构建URL的函数
+	 *   build : function(value){ ... },
+	 *   
+	 *   //必选，由URL构建{ host : "...", port : "...", name : "" }值对象的函数
+	 *   extract : function(url){ ... },
+	 *   
+	 *   //可选，默认值
+	 *   defaultValue : { host : "...", port : "...", name : "" },
+	 *   
+	 *   //可选，数据库描述
+	 *   dbDesc : "...",
+	 *   
+	 *   //可选，展示排序
+	 *   order : 9
+	 * }
+	 */
+	dtbsSourceUrlBuilder.add = function(builder)
 	{
 		var re = [];
 		
-		if(!completions)
-			return re;
+		var order = 0;
 		
-		namePrefix = (namePrefix ? namePrefix.toLowerCase() : namePrefix);
-		category = (category ? category.toLowerCase() : category);
-		
-		for(var i=0; i<completions.length; i++)
+		for(var i= 0; i<arguments.length; i++)
 		{
-			var comp = completions[i];
+			var ele = arguments[i];
 			
-			//相同时不必列入提示，影响输入
-			if(namePrefix && namePrefix.length == comp.name.length)
-				continue;
+			if(!$.isArray(ele))
+				ele = [ ele ];
 			
-			var nameLower = comp.name.toLowerCase();
-			
-			if(namePrefix && nameLower.indexOf(namePrefix) != 0)
-				continue;
-			
-			if(!category || (category && comp.categories && $.inArray(category, comp.categories) > -1))
+			for(var j=0; j<ele.length; j++)
 			{
-				re.push(
+				var myBuilder = ele[j];
+				
+				if(myBuilder && myBuilder.dbType)
 				{
-					text: (comp.value ? comp.value : comp.name),
-					displayText: (comp.displayName ? comp.displayName : comp.name),
-					displayComment: comp.displayComment,
-					render: po.renderCompletionItem
-				});
+					if(myBuilder.order == undefined)
+						myBuilder.order = order;
+					
+					$.dtbsSourceUrlBuilder.builders[myBuilder.dbType] = myBuilder;
+					
+					re.push(myBuilder);
+					order++;
+				}
 			}
 		}
 		
 		return re;
 	};
 	
-	po.renderCompletionItem = function(element, self, data)
+	/**
+	 * 删除所有构建器。
+	 */
+	dtbsSourceUrlBuilder.clear = function()
 	{
-		//$(element).addClass("code-completion-item");
+		var builders = $.dtbsSourceUrlBuilder.builders;
 		
-		$("<span class='code-completion-item' />").text(data.displayText ? data.displayText : data.text).appendTo(element);
-		if(data.displayComment)
-			$("<span class='code-completion-comment' />").text(data.displayComment ? data.displayComment : "").appendTo(element);
-	};
-	
-	po.findPrevTokenOfType = function(codeEditor, doc, cursor, cursorToken, tokenType)
-	{
-		var tokenInfo = po.findPrevTokenInfoOfType(codeEditor, doc, cursor, cursorToken, tokenType);
-		return (tokenInfo ? tokenInfo.token : undefined);
-	};
-	
-	po.findPrevTokenInfoOfType = function(codeEditor, doc, cursor, cursorToken, tokenType)
-	{
-		return po.findPrevTokenInfo(codeEditor, doc, cursor, cursorToken, function(token){ return (token.type == tokenType); });
-	};
-	
-	po.findPrevTokenInfo = function(codeEditor, doc, cursor, cursorToken, predicate)
-	{
-		doc = (doc ? doc : codeEditor.getDoc());
-		cursor = (cursor ? cursor : doc.getCursor());
-		cursorToken = (cursorToken ? cursorToken : (codeEditor.getTokenAt(cursor) || {}));
-		var minLine = (cursor.line-100 <= 0 ? 0 : cursor.line-100);
+		var removed = [];
 		
-		for(var line=cursor.line; line >=minLine; line--)
-		{
-			var tokens = codeEditor.getLineTokens(line);
-			for(var i=tokens.length-1; i>=0; i--)
-			{
-				var token = tokens[i];
-				
-				if(line == cursor.line && token.start >= cursorToken.start)
-					continue;
-				
-				if(predicate(token) == true)
-					return { token: token, line: line };
-			}
-		}
+		for(var dbType in builders)
+			removed.push(dbType);
 		
-		return null;
+		for(var i=0; i< removed.length; i++)
+			delete builders[removed[i]];
 	};
 	
-	po.findNextTokenInfoOfType = function(codeEditor, doc, cursor, cursorToken, tokenType)
+	dtbsSourceUrlBuilder.sortByDbType = function(builders)
 	{
-		return po.findNextTokenInfo(codeEditor, doc, cursor, cursorToken, function(token){ return (token.type == tokenType); });
-	};
-	
-	po.findNextTokenInfo = function(codeEditor, doc, cursor, cursorToken, predicate)
-	{
-		doc = (doc ? doc : codeEditor.getDoc());
-		var lastLine = doc.lastLine();
-		cursor = (cursor ? cursor : doc.getCursor());
-		cursorToken = (cursorToken ? cursorToken : (codeEditor.getTokenAt(cursor) || {}));
-		
-		for(var line=cursor.line; line<=lastLine; line++)
-		{
-			var tokens = codeEditor.getLineTokens(line);
-			for(var i=0; i<tokens.length; i++)
-			{
-				var token = tokens[i];
-				
-				if(line == cursor.line && token.start <= cursorToken.start)
-					continue;
-				
-				if(predicate(token) == true)
-					return { token: token, line: line };
-			}
-		}
-		
-		return null;
-	};
-};
-
-//填充page_sql_editor.ftl里JS对象的静态逻辑
-$.inflatePageSqlEditor = function(po)
-{
-	//获取数据源ID
-	po.getSqlEditorSchemaId = function(){ /*需实现*/ };
-	
-	//SQL提示缓存
-	po.sqlHintCache =
-	{
-		//表名 -> 列名
-		tableColumnCompletions: {},
-		tableNameCompletions: [],
-		tableNameCompletionsLoaded: false,
-		ajaxRunning: false
-	};
-	
-	po.createSqlEditor = function(dom, options)
-	{
-		options = po.inflateSqlEditorOptions(options);
-		return po.createCodeEditor(dom, options);
-	};
-	
-	po.inflateSqlEditorOptions = function(options)
-	{
-		options = (options || {});
-		options.mode = "sql";
-		
-		if(!options.readOnly)
-		{
-			options.hintOptions = (options.hintOptions || {});
-			options.hintOptions.hint = po.sqlEditorHintHandler;
-			options.hintOptions.hint.async = true;
-		}
-		
-		return options;
-	};
-	
-	po.sqlEditorHintTableAjaxOptions = function(schemaId)
-	{
-		var options = { url: po.concatContextPath("/sqlEditor/"+schemaId+"/findTableNames") };
-		return options;
-	};
-	
-	po.sqlEditorHintColumnAjaxOptions = function(schemaId, tableName)
-	{
-		var options =
-		{
-			url: po.concatContextPath("/sqlEditor/"+schemaId+"/findColumns"),
-			data: { table: tableName }
-		};
-		
-		return options;
-	};
-	
-	po.sqlEditorHintHandler = function(codeEditor, callback)
-	{
-		var doc = codeEditor.getDoc();
-		var cursor = doc.getCursor();
-		var mode = (codeEditor.getModeAt(cursor) || {});
-		var token = (codeEditor.getTokenAt(cursor) || {});
-		
-		var schemaId = po.getSqlEditorSchemaId();
-		
-		//关键字token、分号token不应提示
-		if(!schemaId || token.type == "keyword" || po.isTokenSemicolonOrAfter(codeEditor, doc, cursor, token))
-		{
-			callback();
+		if(!builders || builders.length == 0)
 			return;
-		}
-		
-		var hintInfo = po.resolveSqlHintInfo(codeEditor, doc, cursor, token);
-		
-		if(!hintInfo || (hintInfo.type != "table" &&  hintInfo.type != "column"))
+			
+		builders.sort(function(ba, bb)
 		{
-			callback();
-			return;
-		}
-		
-		var namePrefix = hintInfo.namePrefix;
-		
-		if(hintInfo.type == "table")
-		{
-			if(po.sqlHintCache.tableNameCompletionsLoaded)
-			{
-				var completions =
-				{
-					list: po.findCompletionList(po.sqlHintCache.tableNameCompletions, namePrefix),
-					from: CodeMirror.Pos(cursor.line, (namePrefix ? token.start : token.end)),
-					to: CodeMirror.Pos(cursor.line, token.end)
-				};
-				
-				callback(completions);
-			}
+			var baType = (ba ? ba.dbType : "");
+			var bbType = (bb ? bb.dbType : "");
+			
+			if(baType < bbType)
+				return -1;
+			else if(baType > bbType)
+				return 1;
 			else
-			{
-				if(po.sqlHintCache.ajaxRunning)
-					callback();
-				else
-				{
-					po.sqlHintCache.ajaxRunning = true;
-					
-					var ajaxOptions = $.extend(
-					{
-						type : "POST",
-						success: function(names)
-						{
-							names = (names || []);
-							
-							var tableNameCompletions = [];
-							
-							for(var i=0; i<names.length; i++)
-								tableNameCompletions[i] = { name: names[i] };
-							
-							po.sqlHintCache.tableNameCompletions = tableNameCompletions;
-							po.sqlHintCache.tableNameCompletionsLoaded = true;
-							
-							var completions =
-							{
-								list: po.findCompletionList(po.sqlHintCache.tableNameCompletions, namePrefix),
-								from: CodeMirror.Pos(cursor.line, (namePrefix ? token.start : token.end)),
-								to: CodeMirror.Pos(cursor.line, token.end)
-							};
-							
-							callback(completions);
-							po.sqlHintCache.ajaxRunning = false;
-						},
-						error: function()
-						{
-							callback();
-							po.sqlHintCache.ajaxRunning = false;
-						}
-					},
-					po.sqlEditorHintTableAjaxOptions(schemaId));
-					
-					$.ajax(ajaxOptions);
-				}
-			}
-		}
-		else if(hintInfo.type == "column" && hintInfo.tableName)
-		{
-			if(po.sqlHintCache.tableColumnCompletions[hintInfo.tableName])
-			{
-				var completions =
-				{
-					list: po.findCompletionList(po.sqlHintCache.tableColumnCompletions[hintInfo.tableName], namePrefix),
-					from: CodeMirror.Pos(cursor.line, (namePrefix ? token.start : token.end)),
-					to: CodeMirror.Pos(cursor.line, token.end)
-				};
-				
-				callback(completions);
-			}
-			else
-			{
-				if(po.sqlHintCache.ajaxRunning)
-					callback();
-				else
-				{
-					po.sqlHintCache.ajaxRunning = true;
-					
-					var ajaxOptions = $.extend(
-					{
-						type : "POST",
-						success: function(columns)
-						{
-							var columnCompletions = $.toSqlEditorColumnCompletions(hintInfo.tableName, columns);
-							po.sqlHintCache.tableColumnCompletions[hintInfo.tableName] = columnCompletions;
-							
-							var completions =
-							{
-								list: po.findCompletionList(po.sqlHintCache.tableColumnCompletions[hintInfo.tableName], namePrefix),
-								from: CodeMirror.Pos(cursor.line, (namePrefix ? token.start : token.end)),
-								to: CodeMirror.Pos(cursor.line, token.end)
-							};
-							
-							callback(completions);
-							po.sqlHintCache.ajaxRunning = false;
-						},
-						error: function()
-						{
-							callback();
-							po.sqlHintCache.ajaxRunning = false;
-						}
-					},
-					po.sqlEditorHintColumnAjaxOptions(schemaId, hintInfo.tableName));
-					
-					$.ajax(ajaxOptions);
-				}
-			}
-		}
-		else
-			callback();
-	};
-	
-	//token是否是分号，或者除空格外的下一个
-	po.isTokenSemicolonOrAfter = function(codeEditor, doc, cursor, token)
-	{
-		if(!token)
-			return false;
-		
-		var scReg = /\;\s*$/;
-		
-		if(token.string && scReg.test(token.string))
-			return true;
-		
-		var blankReg = /^\s*$/;
-		
-		var foundTokenInfo = po.findPrevTokenInfo(codeEditor, doc, cursor, token, function(token)
-		{
-			if(token.string != null && !blankReg.test(token.string))
-				return true;
+				return 0;
 		});
-		
-		if(!foundTokenInfo || !foundTokenInfo.token || !foundTokenInfo.token.string)
-			return false;
-		
-		return scReg.test(foundTokenInfo.token.string);
 	};
 	
-	po.resolveSqlHintInfo = function(codeEditor, doc, cursor, cursorToken)
+	/**
+	 * 由数据库URL模板解析URL。
+	 * 
+	 * @param template 数据库URL模板
+	 * @param value 要替换的值
+	 */
+	dtbsSourceUrlBuilder._resolveUrl = function(template, value)
 	{
-		var info = null;
+		return template.replace($.dtbsSourceUrlBuilder.TEMPLATE_HOST, value.host)
+			.replace($.dtbsSourceUrlBuilder.TEMPLATE_PORT, value.port)
+			.replace($.dtbsSourceUrlBuilder.TEMPLATE_NAME, value.name);
+	};
+	
+	/**
+	 * 由数据库URL解析URL值对象。
+	 * 
+	 * @param template 数据库URL模板
+	 * @param url 数据库URL
+	 */
+	dtbsSourceUrlBuilder._resolveValue = function(template, url)
+	{
+		if(!url)
+			return null;
 		
-		var tokenInfo = null;
-		var cursorTmp = cursor;
-		var cursorTokenTmp = cursorToken;
+		var varInfo = null;
 		
-		while((tokenInfo = po.findPrevTokenInfoOfType(codeEditor, doc, cursorTmp, cursorTokenTmp, "keyword")) != null)
+		var varInfos = ($.dtbsSourceUrlBuilder.templateVarInfos || ($.dtbsSourceUrlBuilder.templateVarInfos = {}));
+		varInfo = varInfos[template];
+		
+		if(!varInfo)
 		{
-			var keywordToken = tokenInfo.token;
-			var keyword = (keywordToken.string || "").toUpperCase();
-			
-			if(po.sqlKeywords.all[keyword])
-			{
-				if(po.sqlKeywords.nextIsTable[keyword])
-					info = { type: "table", namePrefix: (po.isNormalSqlNameTokenType(cursorToken.type) ? ($.trim(cursorToken.string) || "") : "") };
-				else if(po.sqlKeywords.nextIsColumn[keyword])
-					info = { type: "column" };
-				
-				break;
-			}
-			
-			cursorTmp = CodeMirror.Pos(tokenInfo.line, keywordToken.start);
-			cursorTokenTmp = keywordToken;
+			varInfo = $.dtbsSourceUrlBuilder._resolveVarInfo(template);
+			varInfos[template] = varInfo;
 		}
 		
-		//查找表名
-		if(info && info.type == "column" && tokenInfo)
+		var value = null;
+		
+		url = $.trim(url);
+		
+		for(var i=0; i<varInfo.length; i++)
 		{
-			var columnInfoStr = po.resolveSqlColumnInfoString(codeEditor, doc, cursor, cursorToken);
+			if(!url)
+				break;
 			
-			if(columnInfoStr)
+			var varEle = varInfo[i];
+			
+			var varName = varEle.name;
+			var prefix = varEle.prefix;
+			var suffix = (!varEle.suffix && i<varInfo.length-1 ? varInfo[i+1].prefix : varEle.suffix);
+			
+			var varValue = null;
+			
+			if(prefix)
 			{
-				var columnInfoStrs = columnInfoStr.split(".");
-				info.namePrefix = (columnInfoStrs.length > 1 ? columnInfoStrs[1] : columnInfoStrs[0]);
-				info.tableName = (columnInfoStrs.length > 1 ? columnInfoStrs[0] : null);
+				if(url.indexOf(prefix) != 0)
+					return null;
+				
+				url = url.substring(prefix.length);
 			}
 			
-			//向上直到SQL语句开头
-			while(tokenInfo != null)
+			if(suffix)
 			{
-				var myToken = tokenInfo.token;
-				var myString = (myToken.string || "").toUpperCase();
+				var endIndex = url.indexOf(suffix);
 				
-				if(po.sqlKeywords.start[myString])
-					break;
+				if(endIndex < 0)
+					return null;
 				
-				tokenInfo = po.findPrevTokenInfoOfType(codeEditor, doc, CodeMirror.Pos(tokenInfo.line, myToken.start), myToken, "keyword");
+				varValue = url.substring(0, endIndex);
+				url = url.substring(endIndex);
+			}
+			else
+			{
+				varValue = url;
+				url = null;
 			}
 			
-			//向下查找表名的前置关键字token
-			while(tokenInfo != null)
+			if(varValue != null)
 			{
-				var myToken = tokenInfo.token;
-				var myString = (myToken.string || "").toUpperCase();
+				if(!value)
+					value = {};
 				
-				if(po.sqlKeywords.nextIsTable[myString])
-					break;
-				
-				tokenInfo = po.findNextTokenInfoOfType(codeEditor, doc, CodeMirror.Pos(tokenInfo.line, myToken.start), myToken, "keyword");
+				value[varName] = varValue;
 			}
+		}
+		
+		return value;
+	};
+	
+	/**
+	 * 解析模板字符串中的变量信息。
+	 */
+	dtbsSourceUrlBuilder._resolveVarInfo = function(template)
+	{
+		var varInfo = [];
+		
+		var prefix = "";
+		
+		var i=0;
+		for(; i<template.length; i++)
+		{
+			var c = template.charAt(i);
 			
-			//向下解析表名
-			if(tokenInfo)
+			if(c == '{')
 			{
-				var prevTokenType = null, prevTokenString = null;
-				var prevPrevTokenType = null, prevPrevTokenString = null;
-				tokenInfo = po.findNextTokenInfo(codeEditor, doc, CodeMirror.Pos(tokenInfo.line, tokenInfo.token.start), tokenInfo.token,
-				function(token)
+				var varName = "";
+				
+				var j=i+1;
+				for(; j<template.length; j++)
 				{
-					//如果有括号，说明是复杂语句，暂不解析
-					if(token.type == "bracket")
-						return true;
+					var cj = template.charAt(j);
 					
-					var myString = ($.trim(token.string) || "");
+					if(cj == '}')
+						break;
 					
-					if(!myString)
-						return false;
-					
-					if(po.isNormalSqlNameTokenType(token.type))
+					varName += cj;
+				}
+				
+				//仅处理{host}, {port}, {name}变量
+				if(varName == "host" || varName == "port" || varName =="name")
+				{
+					varInfo.push({ name : varName, prefix : (prefix == "" ? null : prefix) });
+					prefix = "";
+				}
+				else
+				{
+					prefix += template.substring(i, j+1);
+				}
+				
+				i=j;
+			}
+			else
+			{
+				prefix += c;
+			}
+		}
+		
+		//最后的普通字符串作为最后一个元素的suffix
+		if(prefix != "" && varInfo.length > 0)
+			varInfo[varInfo.length - 1].suffix = prefix;
+		
+		return varInfo;
+	};
+})
+(jQuery);
+
+
+/**
+ * 表元信息工具函数库。
+ */
+(function($, undefined)
+{
+	var tableMeta = ($.tableMeta || ($.tableMeta = {}));
+	tableMeta.dtbsSourceTableCache = (tableMeta.dtbsSourceTableCache || (tableMeta.dtbsSourceTableCache = {}));
+	
+	//PersistenceSupport.supportsSqlType支持的SQL类型
+	tableMeta.Types=
+	{
+		TINYINT: -6, SMALLINT: 5, INTEGER: 4, BIGINT: -5, REAL: 7, FLOAT: 6,
+		DOUBLE: 8, DECIMAL: 3, NUMERIC: 2, BIT: -7, BOOLEAN: 16, CHAR: 1,
+		VARCHAR: 12, LONGVARCHAR: -1, BINARY: -2, VARBINARY: -3, LONGVARBINARY: -4,
+		DATE: 91, TIME: 92, TIME_WITH_TIMEZONE: 2013, TIMESTAMP: 93, TIMESTAMP_WITH_TIMEZONE: 2014,
+		CLOB: 2005, BLOB: 2004, NCHAR: -15, NVARCHAR: -9, LONGNVARCHAR: -16, NCLOB: 2011, SQLXML: 2009
+	};
+	
+	$.extend(tableMeta,
+	{
+		/**
+		 * 获取指定列/列数组。
+		 * 
+		 * @param table
+		 * @param index 列索引、列名称、数组
+		 */
+		column : function(table, index)
+		{
+			var isArray = $.isArray(index);
+			
+			var re = [];
+			var indexes = (isArray ? index : [index]);
+			
+			for(var i=0; i<indexes.length; i++)
+			{
+				index = indexes[i];
+				
+				if(typeof(index) == "string")
+					index = this.columnIndex(table, index);
+	
+				if(index < 0)
+					throw new Error("No column for ["+index+"]");
+				
+				re.push(table.columns[index]);
+			}
+			
+			return (isArray ? re : re[0]);
+		},
+		
+		/**
+		 * 获取列索引。
+		 */
+		columnIndex : function(table, columnName)
+		{
+			var columns=table.columns;
+			for(var i=0; i<columns.length; i++)
+			{
+				if(columns[i].name == columnName)
+					return i;
+			}
+			
+			return -1;
+		},
+		
+		/**
+		 * 获取/设置列值。
+		 * 
+		 * @param obj 必选，对象
+		 * @param column 必选，列对象或者列名
+		 * @parma value 可选，列值
+		 */
+		columnValue : function(obj, column, value)
+		{
+			if(obj == undefined || obj == null)
+				throw new Error("[obj] must be defined");
+			
+			column = (column.name || column);
+			
+			var isGet = (arguments.length == 2);
+			
+			if(isGet)
+				return obj[column];
+			else
+				obj[column] = value;
+		},
+		
+		/**
+		 * 如果列导入外键，则返回ImportKey对象，否则返回false。
+		 */
+		columnImportKey: function(table, column)
+		{
+			if(!table.importKeys)
+				return false;
+			
+			var name = (column.name || column);
+			
+			for(var i=0; i<table.importKeys.length; i++)
+			{
+				var importKey = table.importKeys[i];
+				if($.inArray(name, importKey.columnNames) > -1)
+					return importKey;
+			}
+			
+			return false;
+		},
+		
+		/**
+		 * 获取导入键的本表对象。
+		 * 
+		 * @param importKey
+		 * @param primaryObj 主表对象
+		 */
+		fromImportKeyPrimary: function(importKey, primaryObj)
+		{
+			var re = {};
+			
+			var primaryNames = importKey.primaryColumnNames;
+			var myNames = importKey.columnNames;
+			
+			for(var i=0; i<primaryNames.length; i++)
+			{
+				var value = primaryObj[primaryNames[i]];
+				
+				//在某些情况（比如先将主表以大写命名语句创建加载至系统缓存，之后又以小写命名语句重新创建主表和外键表，而不刷新主表），
+				//会出现primaryNames与primaryObj属性名大小写不一致的情况，所以这里如果没取到，再使用忽略大小写的方式重试一次
+				if(value === undefined)
+				{
+					for(var p in primaryObj)
 					{
-						//如果没有表别名，则使用第一个作为表名
-						if(!info.tableName)
+						if(p.toLowerCase() == primaryNames[i].toLowerCase())
 						{
-							info.tableName = myString;
-							return true;
-						}
-						else
-						{
-							//判断是否表别名
-							if(myString == info.tableName)
-							{
-								//表名 AS 别名
-								if(prevTokenType == "keyword" && /as/i.test(prevTokenString)
-										&& po.isNormalSqlNameTokenType(prevPrevTokenType) && prevPrevTokenString)
-								{
-									info.tableName = prevPrevTokenString;
-								}
-								//表名 别名
-								else if(po.isNormalSqlNameTokenType(prevTokenType) && prevTokenString)
-								{
-									info.tableName = prevTokenString;
-								}
-								
-								return true;
-							}
+							value = primaryObj[p];
+							break;
 						}
 					}
-					
-					prevPrevTokenType = prevTokenType;
-					prevPrevTokenString = prevTokenString;
-					prevTokenType = token.type;
-					prevTokenString = myString;
-				});
+				}
+				
+				if(value == undefined)
+				{
+					value = null;
+				}
+				
+				re[myNames[i]] = value;
 			}
-		}
-		
-		return info;
-	};
-	
-	po.resolveSqlColumnInfoString = function(codeEditor, doc, cursor, cursorToken)
-	{
-		var columnInfoString = "";
-		
-		if(po.isSqlColumnInputStringPart(cursorToken))
-		{
-			columnInfoString = cursorToken.string;
 			
-			po.findPrevTokenInfo(codeEditor, doc, cursor, cursorToken, function(token)
+			return re;
+		},
+		
+		/**
+		 * 获取导入键的主表对象。
+		 * 
+		 * @param importKey
+		 * @param obj 本表对象
+		 */
+		toImportKeyPrimary: function(importKey, obj)
+		{
+			var re = {};
+			
+			var myNames = importKey.columnNames;
+			var primaryNames = importKey.primaryColumnNames;
+			
+			for(var i=0; i<myNames.length; i++)
 			{
-				if(po.isSqlColumnInputStringPart(token))
-					columnInfoString = token.string + columnInfoString;
-				else
+				var value = obj[myNames[i]];
+				if(value == undefined)
+					value = null;
+				
+				re[primaryNames[i]] = value;
+			}
+			
+			return re;
+		},
+		
+		/**
+		 * 创建指定表的实例对象。
+		 * 
+		 * @param table 表
+		 * @param data 可选，待填充的实例对象
+		 */
+		instance : function(table, data)
+		{
+			data = (data || {});
+			
+			for(var i=0; i<table.columns.length; i++)
+			{
+				var column=table.columns[i];
+				
+				if(data[column.name] != undefined)
+					continue;
+				
+				//如果没有默认值，明确赋值为null，避免某些页面逻辑错误（比如DataTable的cell().data()会取值为""空字符串）
+				data[column.name] = null;
+				
+				//不设置默认值了，因为默认值可能仅是数据库级的标识，比如Mysql的"CURRENT_TIMESTAMP"
+				//data[column.name] = (column.defaultValue != undefined ? column.defaultValue : null);
+			}
+			
+			return data;
+		},
+		
+		/**
+		 * 尽量获取能够唯一确定记录的数据对象。
+		 */
+		uniqueRecordData: function(table, row)
+		{
+			var columns;
+			
+			if(table.primaryKey)
+				columns = this.column(table, table.primaryKey.columnNames);
+			else if(table.uniqueKeys && table.uniqueKeys.length > 0)
+				columns = this.column(table, table.uniqueKeys[0].columnNames);
+			else
+			{
+				columns = [];
+				var Types = this.Types;
+				for(var i=0; i<table.columns.length; i++)
+				{
+					var column = table.columns[i];
+					var type = column.type;
+					//与DefaultPersistenceManager.getColumnsMaybeUniqueRecord(Table)保持一致
+					if (Types.BIGINT == type || Types.BIT == type || Types.BOOLEAN == type || Types.CHAR == type
+							|| Types.DATE == type || Types.DECIMAL == type || Types.DOUBLE == type || Types.FLOAT == type
+							|| Types.BINARY == type || Types.VARBINARY == type || Types.INTEGER == type || Types.NULL == type
+							|| Types.NUMERIC == type || Types.REAL == type || Types.SMALLINT == type || Types.TIME == type
+							|| Types.TIME_WITH_TIMEZONE == type || Types.TIMESTAMP == type
+							|| Types.TIMESTAMP_WITH_TIMEZONE == type || Types.TINYINT == type || Types.VARCHAR == type)
+						columns.push(column);
+				}
+			}
+			
+			var re = [];
+			
+			var rows = ($.isArray(row) ? row : [row]);
+			for(var i=0; i<rows.length; i++)
+			{
+				var data = {};
+				var myRow = rows[i];
+				for(var j=0; j<columns.length; j++)
+				{
+					var name = columns[j].name;
+					data[name] = (myRow[name] == null ? null : myRow[name]);
+				}
+				
+				re.push(data);
+			}
+			
+			return ($.isArray(row) ? re : re[0]);
+		},
+		
+		isBinaryColumnValueHex: function(value)
+		{
+			value = this.valueOfLabeledValue(value);
+			return (value ? value.indexOf(this.binaryColumnValueHexPrefix) == 0 : false);
+		},
+		
+		binaryColumnValueHexPrefix: "hex:",
+		
+		isBinaryColumnValueBase64: function(value)
+		{
+			value = this.valueOfLabeledValue(value);
+			return (value ? value.indexOf(this.binaryColumnValueBase64Prefix) == 0 : false);
+		},
+		
+		binaryColumnValueBase64Prefix: "base64:",
+		
+		isBinaryColumnValueFile: function(value)
+		{
+			value = this.valueOfLabeledValue(value);
+			return (value ? value.indexOf(this.binaryColumnValueFilePrefix) == 0 : false);
+		},
+		
+		binaryColumnValueFileContent: function(value)
+		{
+			if(!this.isBinaryColumnValueFile(value))
+				return value;
+			
+			value = this.valueOfLabeledValue(value);
+			return value.substr(this.binaryColumnValueFilePrefix.length);
+		},
+		
+		binaryColumnValueFilePrefix: "file:",
+		
+		/**
+		 * 是否支持指定列的持久化操作，参考PersistenceSupport.supportsSqlType()。
+		 */
+		supportsColumn: function(column)
+		{
+			var type = column.type;
+			
+			for(var p in this.Types)
+			{
+				if(this.Types[p] == type)
 					return true;
-			});
-		}
-		
-		return columnInfoString;
-	};
-	
-	po.isSqlColumnInputStringPart = function(cursorToken)
-	{
-		var str = cursorToken.string;
-		
-		//","、"("、"空白" 不是列相关输入字符串
-		if(/^[\(\,]$/.test(str) || /^\s*$/.test(str))
+			}
+			
 			return false;
-		
-		return true;
-	};
-	
-	po.isNormalSqlNameTokenType = function(tokenType)
-	{
-		return (tokenType == null);
-	};
-	
-	po.sqlKeywords =
-	{
-		//全部，会由下面关键字合并而得
-		all: {},
-		
-		//SQL语句开始关键字*（必须大写）
-		start:
-		{
-			"SELECT" : true, "INSERT" : true, "UPDATE" : true, "DELETE" : true,
-			"ALTER" : true, "DROP" : true, "CREATE" : true, "REPLACE" : true, "MERGE" : true,
-			"GRANT" : true
 		},
 		
-		//下一个Token是表名（必须大写）
-		nextIsTable:
+		isNumberColumn: function(column)
 		{
-			"FROM" : true,
-			"JOIN" : true,
-			"UPDATE" : true,
-			"INTO" : true,
-			"TABLE" : true
+			var Types = this.Types;
+			var sqlType = column.type;
+			
+			switch (sqlType)
+			{
+				case Types.TINYINT:
+				case Types.SMALLINT:
+				case Types.INTEGER:
+				case Types.BIGINT:
+				case Types.REAL:
+				case Types.FLOAT:
+				case Types.DOUBLE:
+				case Types.DECIMAL:
+				case Types.NUMERIC:
+					return true;
+				default:
+					return false;
+			}
 		},
 		
-		//下一个Token是列名（必须大写）
-		nextIsColumn:
+		isBinaryColumn: function(column)
 		{
-			"SELECT" : true,
-			"WHERE" : true,
-			"ON" : true,
-			"BY" : true,
-			"SET" : true
-		}
-	};
-	
-	po.sqlKeywords.all = $.extend(po.sqlKeywords.all, po.sqlKeywords.start,
-									po.sqlKeywords.nextIsTable, po.sqlKeywords.nextIsColumn);
-};
+			var type = column.type;
+			
+			return (type == this.Types.BINARY || type == this.Types.VARBINARY
+						|| type == this.Types.LONGVARBINARY || type == this.Types.BLOB);
+		},
+		
+		isTextColumn: function(column)
+		{
+			var type = column.type;
+			
+			return (type == this.Types.CHAR || type == this.Types.VARCHAR
+					 || type == this.Types.LONGVARCHAR || type == this.Types.CLOB
+					 || type == this.Types.NCHAR || type == this.Types.NVARCHAR
+					 || type == this.Types.LONGNVARCHAR|| type == this.Types.NCLOB
+					 || type == this.Types.SQLXML);
+		},
+		
+		isClobColumn: function(column)
+		{
+			var type = column.type;
+			
+			return (type == this.Types.LONGVARCHAR
+						|| type == this.Types.CLOB
+						|| type == this.Types.LONGNVARCHAR
+						|| type == this.Types.NCLOB);
+		},
+		
+		isSqlxmlColumn: function(column)
+		{
+			var type = column.type;
+			return (type == this.Types.SQLXML);
+		},
+		
+		isDateColumn: function(column)
+		{
+			return (column.type == this.Types.DATE);
+		},
 
+		isTimeColumn: function(column)
+		{
+			var type = column.type;
+			return (type == this.Types.TIME || type == this.Types.TIME_WITH_TIMEZONE);
+		},
+
+		isTimestampColumn: function(column)
+		{
+			var type = column.type;
+			return (type == this.Types.TIMESTAMP || type == this.Types.TIMESTAMP_WITH_TIMEZONE);
+		},
+		
+		isBooleanColumn: function(column)
+		{
+			var type = column.type;
+			return (type == this.Types.BIT || type == this.Types.BOOLEAN);
+		},
+		
+		/**
+		 * 指定列是否是必填项。
+		 */
+		isRequiredColumn: function(column)
+		{
+			return (!column.nullable && !column.autoincrement);
+		},
+		
+		/**
+		 * 是否支持关键字查询的列。
+		 */
+		isKeywordSearchColumn: function(column)
+		{
+			return (column.searchableType == "ONLY_LIKE" || column.searchableType == "ALL"
+						|| this.isNumberColumn(column));
+		},
+		
+		/**
+		 * 获取展示HTML。
+		 * 
+		 * @param tableOrColumn
+		 * @param tagName 可选，HTML标签名
+		 * @param className 可选，自定义样式类名
+		 */
+		displayInfoHtml : function(tableOrColumn, tagName, className)
+		{
+			tagName = (tagName || "span");
+			return "<"+tagName+" class='display-info " + (className ? className : "") + "' title='"+$.escapeHtml(tableOrColumn.comment || "")+"'>"
+						+$.escapeHtml(tableOrColumn.name)+"</"+tagName+">";
+		},
+		
+		/**
+		 * 是否是标签值对象：{value: ..., label: "..."}。
+		 */
+		isLabeledValue : function(value)
+		{
+			return $.isPlainObject(value) && value.hasOwnProperty("value") && value.hasOwnProperty("label");
+		},
+		
+		/**
+		 * 构建标签值对象。
+		 */
+		toLabeledValue : function(value, label)
+		{
+			return { "value" : value, "label" : label };
+		},
+		
+		/**
+		 * 获取标签值对象的值。
+		 */
+		valueOfLabeledValue : function(value)
+		{
+			return (this.isLabeledValue(value) ? value.value : value);
+		},
+		
+		/**
+		 * 获取标签值对象的标签。
+		 */
+		labelOfLabeledValue : function(value)
+		{
+			return (this.isLabeledValue(value) ? value.label : undefined);
+		},
+		
+		/**
+		 * 移除对象/数组的标签值对象特性。
+		 */
+		removeLabeledValueFeature : function(data)
+		{
+			if(!data)
+				return;
+			
+			var datas = ($.isArray(data) ? data : [data]);
+			
+			for(var i=0; i<datas.length; i++)
+			{
+				var ele = datas[i];
+				for(var p in ele)
+				{
+					var v = ele[p];
+					var vv = this.valueOfLabeledValue(v);
+					if(vv !== v)
+						ele[p] = vv;
+				}
+			}
+			
+			return data;
+		}
+	});
+	
+	$.extend(tableMeta,
+	{
+		/**
+		 * 加载表的URL。
+		 * 
+		 * @param dtbsSourceId
+		 * @param tableName
+		 * @param reload 是否让后台重新载入
+		 */
+		loadTableUrl : function(dtbsSourceId, tableName, reload)
+		{
+			var url = "";
+			
+			if(typeof(contextPath) != "undefined")
+				url += contextPath;
+			
+			url = url + "/dtbsSource/" + encodeURIComponent(dtbsSourceId) +"/table/" + encodeURIComponent(tableName);
+			
+			if(reload)
+				url = url +"?reload=1";
+			
+			return url;
+		},
+		
+		/**
+		 * 在指定表上执行callback操作。
+		 * 
+		 * @param dtbsSourceId
+		 * @param tableName
+		 * @param callback
+		 */
+		on : function(dtbsSourceId, tableName, callback)
+		{
+			this._on(dtbsSourceId, tableName, callback, false);
+		},
+		
+		/**
+		 * 获取指定名称的表对象。
+		 * 
+		 * @param dtbsSourceId
+		 * @param tableName
+		 */
+		get : function(dtbsSourceId, tableName)
+		{
+			return this._getCachedTable(dtbsSourceId, tableName);
+		},
+		
+		/**
+		 * 载入指定名称的表对象。
+		 * 
+		 * @param dtbsSourceId
+		 * @param tableName
+		 * @param callback
+		 */
+		load : function(dtbsSourceId, tableName, callback)
+		{
+			this._on(dtbsSourceId, tableName, callback, true);
+		},
+		
+		/**
+		 * 在指定表上执行callback。
+		 * 
+		 * @param dtbsSourceId
+		 * @param tableName 表名
+		 * @param callback || options callback：载入回调函数，格式为：function(table){ ... }，options：ajax请求options
+		 * @param reload 是否让后台重新载入
+		 */
+		_on : function(dtbsSourceId, tableName, callback, reload)
+		{
+			var table = this._getCachedTable(dtbsSourceId, tableName);
+			
+			if(table == null || reload)
+			{
+				var loadUrl = this.loadTableUrl(dtbsSourceId, tableName, reload);
+				
+				var _this = this;
+				
+				if($.isFunction(callback))
+				{
+					$.getJSON(loadUrl, function(table)
+					{
+						_this._inflateColumnInfo(table);
+						_this._setCachedTable(dtbsSourceId, table);
+						
+						if(callback != undefined)
+							callback(table);
+					});
+				}
+				else if($.isPlainObject(callback))
+				{
+					var options = callback;
+					
+					if(!options.url)
+						options.url = loadUrl;
+					
+					if(!options.dataType)
+						options.dataType = "json";
+					
+					var originalSuccessCallback = options.success;
+					options.success = function(table, textStatus, jqXHR)
+					{
+						_this._inflateColumnInfo(table);
+						_this._setCachedTable(dtbsSourceId, table);
+						
+						if(originalSuccessCallback)
+							originalSuccessCallback.call(this, table, textStatus, jqXHR);
+					};
+					
+					$.ajax(options);
+				}
+				else
+					throw new Error("Unknown function parameter type");
+			}
+			else
+			{
+				if($.isFunction(callback))
+					callback(table);
+				else if($.isPlainObject(callback))
+					callback.success(table);
+				else
+					throw new Error("Unknown function parameter type");
+			}
+		},
+		
+		_getCachedTable : function(dtbsSourceId, tableName)
+		{
+			var tables = (this.dtbsSourceTableCache[dtbsSourceId] || (this.dtbsSourceTableCache[dtbsSourceId] = {}));
+			return tables[tableName];
+		},
+		
+		_setCachedTable : function(dtbsSourceId, table)
+		{
+			var tables = (this.dtbsSourceTableCache[dtbsSourceId] || (this.dtbsSourceTableCache[dtbsSourceId] = {}));
+			tables[table.name] = table;
+		},
+		
+		_inflateColumnInfo: function(table)
+		{
+			var columns = (table.columns || []);
+			$.each(columns, function(i, column)
+			{
+				column.isRequired = $.tableMeta.isRequiredColumn(column);
+				column.isSupported = $.tableMeta.supportsColumn(column);
+				column.isRenderAsTextarea = ($.tableMeta.isClobColumn(column) ||
+											(column.size && column.size > $.tableMeta.columnAsTextareaLength
+												&& $.tableMeta.isTextColumn(column)));
+				column.isImportKey = $.tableMeta.columnImportKey(table, column);
+				column.isBinary = $.tableMeta.isBinaryColumn(column);
+				
+				if($.tableMeta.isDateColumn(column))
+					column.isDate = true;
+				else if($.tableMeta.isTimeColumn(column))
+					column.isTime = true;
+				else if($.tableMeta.isTimestampColumn(column))
+					column.isTimestamp = true;
+			});
+		},
+		
+		columnAsTextareaLength : 101,
+	});
 })
 (jQuery);

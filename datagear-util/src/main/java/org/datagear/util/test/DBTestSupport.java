@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,10 +17,8 @@
 
 package org.datagear.util.test;
 
-import java.io.File;
-import java.io.FileReader;
+import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -30,7 +28,13 @@ import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
-import org.datagear.util.FileUtil;
+import org.datagear.util.IOUtil;
+import org.datagear.util.JdbcSupport;
+import org.datagear.util.PropertiesUtil;
+import org.datagear.util.Sql;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 
 /**
  * 数据库测试支持类。
@@ -44,23 +48,45 @@ public abstract class DBTestSupport
 
 	static
 	{
-		File jdbcConfigFile = FileUtil.getFile("test/config/jdbc.properties");
-		if (!jdbcConfigFile.exists())
-			jdbcConfigFile = FileUtil.getFile("../test/config/jdbc.properties");
+		Resource configRes = new ClassPathResource("config/test.properties");
+
+		if(!configRes.exists())
+			configRes = new FileSystemResource("test/config/test.properties");
+		
+		if (!configRes.exists())
+			configRes = new FileSystemResource("../test/config/test.properties");
+
+		if (!configRes.exists())
+			throw new IllegalStateException("No [test.properties] file found");
 
 		try
 		{
-			Reader reader = new FileReader(jdbcConfigFile);
-			JDBC_PROPERTIES.load(reader);
-			reader.close();
+			PropertiesUtil.loadProperties(JDBC_PROPERTIES, configRes, IOUtil.CHARSET_UTF_8);
 		}
-		catch (Exception e)
+		catch (IOException e)
 		{
-			if (e instanceof RuntimeException)
-				throw (RuntimeException) e;
-			else
-				throw new RuntimeException(e);
+			throw new IllegalStateException("Load [test.properties] error", e);
 		}
+	}
+
+	protected Properties getProperties()
+	{
+		return JDBC_PROPERTIES;
+	}
+
+	protected String getUrl()
+	{
+		return JDBC_PROPERTIES.getProperty("jdbc.url");
+	}
+
+	protected String getUser()
+	{
+		return JDBC_PROPERTIES.getProperty("jdbc.user");
+	}
+
+	protected String getPassword()
+	{
+		return JDBC_PROPERTIES.getProperty("jdbc.password");
 	}
 
 	protected Connection getConnection() throws SQLException
@@ -126,6 +152,18 @@ public abstract class DBTestSupport
 				return DBTestSupport.this.getConnection();
 			}
 		};
+	}
+
+	protected void executeUpdateSilently(Connection cn, Sql sql)
+	{
+		JdbcSupport jdbcSupport = new JdbcSupport();
+		try
+		{
+			jdbcSupport.executeUpdate(cn, sql);
+		}
+		catch (Exception e)
+		{
+		}
 	}
 
 	protected void println()

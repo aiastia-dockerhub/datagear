@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,31 +17,33 @@
 
 package org.datagear.management.service.impl;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.datagear.management.domain.Authorization;
 import org.datagear.management.domain.DataIdPermission;
 import org.datagear.management.domain.DataPermissionEntity;
+import org.datagear.management.domain.Entity;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.AnalysisProjectAwareEntityService;
 import org.datagear.management.service.AuthorizationService;
 import org.datagear.management.service.DataPermissionEntityService;
 import org.datagear.management.service.PermissionDeniedException;
+import org.datagear.management.util.DataPermissionSpec;
 import org.datagear.management.util.dialect.MbSqlDialect;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.persistence.Query;
-import org.datagear.util.CacheService;
 import org.datagear.util.StringUtil;
+import org.datagear.util.cache.CollectionCacheValue;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.cache.Cache;
 import org.springframework.cache.Cache.ValueWrapper;
 
 /**
@@ -50,17 +52,27 @@ import org.springframework.cache.Cache.ValueWrapper;
  * @author datagear@163.com
  *
  */
-public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends DataPermissionEntity<ID>>
+public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends DataPermissionEntity & Entity<ID>>
 		extends AbstractMybatisEntityService<ID, T> implements DataPermissionEntityService<ID, T>
 {
 	private AuthorizationService authorizationService;
 
-	private CacheService permissionCacheService = null;
+	private Cache permissionCache = null;
 
 	/**
-	 * 查询操作时缓存权限数目。
+	 * 查询操作时缓存权限的记录数目。
+	 * <p>
+	 * 默认不开启了，影响查询性能，而且缓存价值也不大。
+	 * </p>
 	 */
-	private int permissionCacheCountForQuery = 10;
+	private int permissionCacheCountForQuery = 0;
+
+	/**
+	 * 每条记录权限缓存存储的最多用户权限数。
+	 */
+	private int permissionCacheMaxLength = 10;
+
+	private DataPermissionSpec dataPermissionSpec = new DataPermissionSpec();
 
 	public AbstractMybatisDataPermissionEntityService()
 	{
@@ -91,14 +103,14 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 		this.authorizationService = authorizationService;
 	}
 
-	public CacheService getPermissionCacheService()
+	public Cache getPermissionCache()
 	{
-		return permissionCacheService;
+		return permissionCache;
 	}
 
-	public void setPermissionCacheService(CacheService permissionCacheService)
+	public void setPermissionCache(Cache permissionCache)
 	{
-		this.permissionCacheService = permissionCacheService;
+		this.permissionCache = permissionCache;
 	}
 
 	public int getPermissionCacheCountForQuery()
@@ -109,6 +121,26 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 	public void setPermissionCacheCountForQuery(int permissionCacheCountForQuery)
 	{
 		this.permissionCacheCountForQuery = permissionCacheCountForQuery;
+	}
+
+	public int getPermissionCacheMaxLength()
+	{
+		return permissionCacheMaxLength;
+	}
+
+	public void setPermissionCacheMaxLength(int permissionCacheMaxLength)
+	{
+		this.permissionCacheMaxLength = permissionCacheMaxLength;
+	}
+
+	public DataPermissionSpec getDataPermissionSpec()
+	{
+		return dataPermissionSpec;
+	}
+
+	public void setDataPermissionSpec(DataPermissionSpec dataPermissionSpec)
+	{
+		this.dataPermissionSpec = dataPermissionSpec;
 	}
 
 	@Override
@@ -146,23 +178,35 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 	@Override
 	public boolean update(User user, T entity) throws PermissionDeniedException
 	{
-		int permission = getPermission(user, entity.getId());
+		checkUpdatePermission(user, entity.getId());
+		return super.update(entity);
+	}
+
+	protected int checkUpdatePermission(User user, ID id) throws PermissionDeniedException
+	{
+		int permission = getPermission(user, id);
 
 		if (!Authorization.canEdit(permission))
 			throw new PermissionDeniedException();
 
-		return super.update(entity);
+		return permission;
 	}
 
 	@Override
 	public boolean deleteById(User user, ID id) throws PermissionDeniedException
+	{
+		checkDeletePermission(user, id);
+		return super.deleteById(id);
+	}
+
+	protected int checkDeletePermission(User user, ID id) throws PermissionDeniedException
 	{
 		int permission = getPermission(user, id);
 
 		if (!Authorization.canDelete(permission))
 			throw new PermissionDeniedException();
 
-		return super.deleteById(id);
+		return permission;
 	}
 
 	@Override
@@ -261,8 +305,8 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 		if (!isPermissionCacheEnabled())
 			return false;
 
-		for (String res : resources)
-			this.permissionCacheService.evictImmediately(toPermissionCacheKeyOfStr(res));
+		for (String resource : resources)
+			this.permissionCache.evict(toPermissionCacheKeyOfStr(resource));
 
 		return true;
 	}
@@ -275,8 +319,7 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 
 	protected void setDataFilterParam(Map<String, Object> params, String dataFilter)
 	{
-		if (!StringUtil.isEmpty(dataFilter))
-			params.put("_dataFilter", dataFilter);
+		this.dataPermissionSpec.setFilterParam(params, dataFilter);
 	}
 
 	protected PagingData<T> pagingQueryForAnalysisProjectId(User user, PagingQuery pagingQuery, String dataFilter,
@@ -470,10 +513,11 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 		if (!isPermissionCacheEnabled())
 			return null;
 
-		ValueWrapper valueWrapper = this.permissionCacheService.get(toPermissionCacheKey(id));
-		UserIdPermissionMap upm = (valueWrapper == null ? null : (UserIdPermissionMap) valueWrapper.get());
+		ValueWrapper valueWrapper = this.permissionCache.get(toPermissionCacheKey(id));
+		UserIdPermissionCacheValue upcv = (valueWrapper == null ? null
+				: (UserIdPermissionCacheValue) valueWrapper.get());
 
-		return (upm == null ? null : upm.getPermission(userId));
+		return (upcv == null ? null : upcv.getPermission(userId));
 	}
 
 	protected void permissionCachePut(ID id, String userId, int permission)
@@ -483,15 +527,17 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 
 		Object key = toPermissionCacheKey(id);
 
-		ValueWrapper valueWrapper = this.permissionCacheService.get(key);
-		UserIdPermissionMap upm = (valueWrapper == null ? null : (UserIdPermissionMap) valueWrapper.get());
-		if (upm == null)
-		{
-			upm = new UserIdPermissionMap();
-			this.permissionCacheService.put(key, upm);
-		}
+		ValueWrapper valueWrapper = this.permissionCache.get(key);
+		UserIdPermissionCacheValue upcv = (valueWrapper == null ? null
+				: (UserIdPermissionCacheValue) valueWrapper.get());
 
-		upm.putPermission(userId, permission);
+		if (upcv == null)
+			upcv = new UserIdPermissionCacheValue();
+
+		upcv.add(new UserIdPermission(userId, permission), this.permissionCacheMaxLength);
+
+		// 注意：无论upcv之前是否存在于缓存，这里都应再次执行存入缓存操作
+		this.permissionCache.put(key, upcv);
 	}
 
 	protected void permissionCachePutQueryResult(String statement, Map<String, Object> params, List<T> result)
@@ -499,7 +545,10 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 		if (params == null || result == null || this.permissionCacheCountForQuery <= 0)
 			return;
 
-		User user = (User) params.get(DATA_PERMISSION_PARAM_CURRENT_USER);
+		if (!isPermissionCacheEnabled())
+			return;
+
+		User user = this.dataPermissionSpec.getParamCurrentUser(params);
 
 		if (user == null)
 			return;
@@ -533,7 +582,7 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 		if (!isPermissionCacheEnabled())
 			return;
 
-		this.permissionCacheService.invalidate();
+		this.permissionCache.invalidate();
 	}
 
 	/**
@@ -543,11 +592,12 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 	 * </p>
 	 * 
 	 * @param id
+	 *            实体ID，允许{@code null}
 	 * @return
 	 */
 	protected Object toPermissionCacheKey(ID id)
 	{
-		String idStr = (id == null ? null : id.toString());
+		String idStr = (id == null ? "" : id.toString());
 		return toPermissionCacheKeyOfStr(idStr);
 	}
 
@@ -558,19 +608,22 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 	 * </p>
 	 * 
 	 * @param id
+	 *            实体ID
 	 * @return
 	 */
 	protected Object toPermissionCacheKeyOfStr(String id)
 	{
-		if (this.permissionCacheService.isShared())
-			return new GlobalEntityCacheKey<String>(getSqlNamespace() + "Permission", id);
-		else
-			return id;
+		return new GlobalPermissionCacheKey<String>(getSqlNamespace(), id);
 	}
 
+	/**
+	 * 是否启用了权限缓存。
+	 * 
+	 * @return
+	 */
 	protected boolean isPermissionCacheEnabled()
 	{
-		return (this.permissionCacheService != null && this.permissionCacheService.isEnabled());
+		return (this.permissionCache != null);
 	}
 
 	/**
@@ -602,36 +655,137 @@ public abstract class AbstractMybatisDataPermissionEntityService<ID, T extends D
 	protected void addDataPermissionParameters(Map<String, Object> params, User user, String resourceType,
 			boolean resourceHasCreator)
 	{
-		params.put(DATA_PERMISSION_PARAM_CURRENT_USER, user);
-		params.put(DATA_PERMISSION_PARAM_RESOURCE_TYPE, resourceType);
-		params.put(DATA_PERMISSION_PARAM_RESOURCE_HAS_CREATOR, resourceHasCreator);
-		params.put(DATA_PERMISSION_PARAM_MIN_READ_PERMISSION, Authorization.PERMISSION_READ_START);
-		params.put(DATA_PERMISSION_PARAM_MAX_PERMISSION, Authorization.PERMISSION_MAX);
-		params.put(DATA_PERMISSION_PARAM_UNSET_PERMISSION, Authorization.PERMISSION_NONE_START);
+		this.dataPermissionSpec.setParams(params, user, resourceType, resourceHasCreator);
 	}
 
-	protected static class UserIdPermissionMap
+	/**
+	 * 全局权限缓存KEY。
+	 * 
+	 * @author datagear@163.com
+	 * 
+	 * @param <ID>
+	 */
+	public static class GlobalPermissionCacheKey<ID> extends GlobalEntityCacheKey<ID>
 	{
-		private ConcurrentMap<String, Integer> userIdPermissions = new ConcurrentHashMap<String, Integer>();
+		private static final long serialVersionUID = 1L;
 
-		public UserIdPermissionMap()
+		public GlobalPermissionCacheKey(String namespace, ID id)
+		{
+			super(namespace, id);
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return super.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj)
+		{
+			if (this == obj)
+				return true;
+			if (!super.equals(obj))
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			return true;
+		}
+
+		@Override
+		public String toString()
+		{
+			return getClass().getSimpleName() + " [namespace=" + getNamespace() + ", id=" + getId() + "]";
+		}
+	}
+
+	/**
+	 * 用户权限集缓存值。
+	 * 
+	 * @author datagear@163.com
+	 *
+	 */
+	public static class UserIdPermissionCacheValue extends CollectionCacheValue<UserIdPermission>
+	{
+		private static final long serialVersionUID = 1L;
+
+		public UserIdPermissionCacheValue()
 		{
 			super();
 		}
 
 		public Integer getPermission(String userId)
 		{
-			return this.userIdPermissions.get(userId);
+			UserIdPermission up = find(t ->
+			{
+				return StringUtil.isEquals(userId, t.getUserId());
+			});
+
+			return (up == null ? null : up.getPermission());
 		}
 
-		public void putPermission(String userId, Integer permission)
+		/**
+		 * 添加。
+		 * <p>
+		 * 注意：执行此操作后应执行存入缓存操作。
+		 * </p>
+		 * 
+		 * @param up
+		 * @param maxSize
+		 */
+		public void add(UserIdPermission up, int maxSize)
 		{
-			this.userIdPermissions.put(userId, permission);
+			add(up, (t) ->
+			{
+				return StringUtil.isEquals(up.getUserId(), t.getUserId());
+			}, maxSize);
+		}
+	}
+
+	/**
+	 * 用户权限。
+	 * 
+	 * @author datagear@163.com
+	 *
+	 */
+	public static class UserIdPermission implements Serializable
+	{
+		private static final long serialVersionUID = 1L;
+
+		private String userId;
+
+		private Integer permission;
+
+		public UserIdPermission()
+		{
+			super();
 		}
 
-		public void clear()
+		public UserIdPermission(String userId, Integer permission)
 		{
-			this.userIdPermissions.clear();
+			super();
+			this.userId = userId;
+			this.permission = permission;
+		}
+
+		public String getUserId()
+		{
+			return userId;
+		}
+
+		public void setUserId(String userId)
+		{
+			this.userId = userId;
+		}
+
+		public Integer getPermission()
+		{
+			return permission;
+		}
+
+		public void setPermission(Integer permission)
+		{
+			this.permission = permission;
 		}
 	}
 }

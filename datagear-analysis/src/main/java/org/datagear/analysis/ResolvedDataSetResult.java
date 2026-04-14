@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,6 +17,8 @@
 
 package org.datagear.analysis;
 
+import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -25,21 +27,29 @@ import java.util.List;
  * @author datagear@163.com
  *
  */
-public class ResolvedDataSetResult
+public class ResolvedDataSetResult implements Serializable
 {
+	private static final long serialVersionUID = 1L;
+
 	private DataSetResult result;
 
-	private List<DataSetProperty> properties;
+	private List<DataSetField> fields = Collections.emptyList();
 
 	public ResolvedDataSetResult()
 	{
 	}
 
-	public ResolvedDataSetResult(DataSetResult result, List<DataSetProperty> properties)
+	public ResolvedDataSetResult(DataSetResult result)
 	{
 		super();
 		this.result = result;
-		this.properties = properties;
+	}
+
+	public ResolvedDataSetResult(DataSetResult result, List<DataSetField> fields)
+	{
+		super();
+		this.result = result;
+		this.fields = fields;
 	}
 
 	public DataSetResult getResult()
@@ -52,13 +62,13 @@ public class ResolvedDataSetResult
 		this.result = result;
 	}
 
-	public List<DataSetProperty> getProperties()
+	public List<DataSetField> getFields()
 	{
-		return properties;
+		return fields;
 	}
 
-	public void setProperties(List<DataSetProperty> properties)
+	public void setFields(List<DataSetField> fields)
 	{
-		this.properties = properties;
+		this.fields = fields;
 	}
 }

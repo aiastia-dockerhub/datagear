@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,15 +17,12 @@
 
 package org.datagear.analysis.support;
 
-import java.io.Reader;
 import java.util.List;
 
 import org.datagear.analysis.DataSetException;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
-import org.datagear.analysis.support.AbstractCsvDataSet.CsvDataSetResource;
-import org.datagear.analysis.support.CsvValueDataSet.CsvValueDataSetResource;
-import org.datagear.util.IOUtil;
+import org.datagear.analysis.support.datasetres.CsvValueDataSetResource;
 
 /**
  * CSV值数据集。
@@ -38,6 +35,8 @@ import org.datagear.util.IOUtil;
  */
 public class CsvValueDataSet extends AbstractCsvDataSet<CsvValueDataSetResource>
 {
+	private static final long serialVersionUID = 1L;
+
 	/** CSV字符串 */
 	private String value = "";
 
@@ -52,9 +51,9 @@ public class CsvValueDataSet extends AbstractCsvDataSet<CsvValueDataSetResource>
 		this.value = value;
 	}
 
-	public CsvValueDataSet(String id, String name, List<DataSetProperty> properties, String value)
+	public CsvValueDataSet(String id, String name, List<DataSetField> fields, String value)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.value = value;
 	}
 
@@ -87,61 +86,9 @@ public class CsvValueDataSet extends AbstractCsvDataSet<CsvValueDataSetResource>
 	}
 
 	@Override
-	protected CsvValueDataSetResource getResource(DataSetQuery query, List<DataSetProperty> properties,
-			boolean resolveProperties) throws Throwable
+	protected CsvValueDataSetResource getResource(DataSetQuery query) throws Throwable
 	{
 		String csv = resolveTemplateCsv(this.value, query);
 		return new CsvValueDataSetResource(csv, getNameRow());
-	}
-
-	/**
-	 * CSV文本数据集资源。
-	 * 
-	 * @author datagear@163.com
-	 *
-	 */
-	public static class CsvValueDataSetResource extends CsvDataSetResource
-	{
-		private static final long serialVersionUID = 1L;
-
-		public CsvValueDataSetResource()
-		{
-			super();
-		}
-
-		public CsvValueDataSetResource(String resolvedTemplate, int nameRow)
-		{
-			super(resolvedTemplate, nameRow);
-		}
-
-		@Override
-		public boolean isIdempotent()
-		{
-			return true;
-		}
-
-		@Override
-		public Reader getReader() throws Throwable
-		{
-			return IOUtil.getReader(super.getResolvedTemplate());
-		}
-
-		@Override
-		public int hashCode()
-		{
-			return super.hashCode();
-		}
-
-		@Override
-		public boolean equals(Object obj)
-		{
-			if (this == obj)
-				return true;
-			if (!super.equals(obj))
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			return true;
-		}
 	}
 }

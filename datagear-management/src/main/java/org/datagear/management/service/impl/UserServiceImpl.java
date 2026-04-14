@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -35,6 +35,7 @@ import org.datagear.management.util.dialect.MbSqlDialect;
 import org.datagear.util.IDUtil;
 import org.datagear.util.StringUtil;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * {@linkplain UserService}实现类。
@@ -49,7 +50,7 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 
 	private RoleService roleService;
 
-	private UserPasswordEncoder userPasswordEncoder = null;
+	private PasswordEncoder passwordEncoder = null;
 
 	private AuthorizationListener authorizationListener = null;
 
@@ -84,14 +85,14 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 		this.roleService = roleService;
 	}
 
-	public UserPasswordEncoder getUserPasswordEncoder()
+	public PasswordEncoder getPasswordEncoder()
 	{
-		return userPasswordEncoder;
+		return passwordEncoder;
 	}
 
-	public void setUserPasswordEncoder(UserPasswordEncoder userPasswordEncoder)
+	public void setPasswordEncoder(PasswordEncoder passwordEncoder)
 	{
-		this.userPasswordEncoder = userPasswordEncoder;
+		this.passwordEncoder = passwordEncoder;
 	}
 
 	@Override
@@ -158,7 +159,9 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 		User user = getByIdNoPassword(id);
 
 		if (user != null)
-			user.setRoles(null);
+		{
+			user = user.cloneSimple();
+		}
 
 		return user;
 	}
@@ -169,7 +172,9 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 		User user = getByNameNoPassword(name);
 
 		if (user != null)
-			user.setRoles(null);
+		{
+			user = user.cloneSimple();
+		}
 
 		return user;
 	}
@@ -193,10 +198,29 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 	}
 
 	@Override
+	public int getUserCount()
+	{
+		Number userCount = (Number) selectOneMybatis("getUserCount");
+		return (userCount == null ? 0 : userCount.intValue());
+	}
+
+	@Override
+	public boolean isPasswordMatchById(String id, String password)
+	{
+		Map<String, Object> params = buildParamMap();
+		params.put("id", id);
+
+		String nowPassword = selectOneMybatis("getPasswordById", params);
+
+		return (this.passwordEncoder != null ? this.passwordEncoder.matches(password, nowPassword)
+				: password.equals(nowPassword));
+	}
+
+	@Override
 	public boolean updatePasswordById(String id, String newPassword, boolean encrypt)
 	{
-		if (encrypt && this.userPasswordEncoder != null)
-			newPassword = this.userPasswordEncoder.encode(newPassword);
+		if (encrypt && this.passwordEncoder != null)
+			newPassword = this.passwordEncoder.encode(newPassword);
 
 		Map<String, Object> params = buildParamMap();
 		params.put("id", id);
@@ -211,7 +235,7 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 	public boolean updateIgnoreRole(User user)
 	{
 		Map<String, Object> params = buildParamMap();
-		params.put("ignoreRole", true);
+		setIgnoreUpdateRoleParam(params, true);
 
 		return update(user, params);
 	}
@@ -233,8 +257,8 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 	{
 		String password = entity.getPassword();
 
-		if (password != null && !password.isEmpty() && this.userPasswordEncoder != null)
-			entity.setPassword(this.userPasswordEncoder.encode(password));
+		if (password != null && !password.isEmpty() && this.passwordEncoder != null)
+			entity.setPassword(this.passwordEncoder.encode(password));
 
 		super.add(entity, params);
 		saveUserRoles(entity);
@@ -243,20 +267,9 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 	@Override
 	protected boolean update(User entity, Map<String, Object> params)
 	{
-		String password = entity.getPassword();
-
-		if (password != null && !password.isEmpty())
-		{
-			if (this.userPasswordEncoder != null)
-				entity.setPassword(this.userPasswordEncoder.encode(password));
-		}
-		else
-			entity.setPassword(null);
-
 		boolean updated = super.update(entity, params);
 
-		Boolean ignoreRole = (Boolean) params.get("ignoreRole");
-		if (ignoreRole == null || !ignoreRole.booleanValue())
+		if (!isIgnoreUpdateRoleParam(params))
 		{
 			saveUserRoles(entity);
 
@@ -265,6 +278,17 @@ public class UserServiceImpl extends AbstractMybatisEntityService<String, User>
 		}
 
 		return updated;
+	}
+
+	protected boolean isIgnoreUpdateRoleParam(Map<String, Object> params)
+	{
+		Boolean ignore = (Boolean) params.get("ignoreUpdateRole");
+		return (ignore != null && ignore.booleanValue());
+	}
+
+	protected void setIgnoreUpdateRoleParam(Map<String, Object> params, boolean ignore)
+	{
+		params.put("ignoreUpdateRole", ignore);
 	}
 
 	@Override

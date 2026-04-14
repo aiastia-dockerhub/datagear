@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,7 +21,7 @@ import java.io.File;
 import java.util.List;
 import java.util.Locale;
 
-import org.datagear.management.domain.Schema;
+import org.datagear.management.domain.DtbsSource;
 import org.datagear.management.domain.User;
 import org.datagear.persistence.RowMapper;
 import org.datagear.util.SqlScriptParser.SqlStatement;
@@ -41,7 +41,7 @@ public class SqlpadExecutionSubmit
 
 	private User user;
 
-	private Schema schema;
+	private DtbsSource dtbsSource;
 
 	private String sqlpadId;
 
@@ -68,18 +68,18 @@ public class SqlpadExecutionSubmit
 
 	public SqlpadExecutionSubmit(SqlpadExecutionSubmit from)
 	{
-		this(from.user, from.schema, from.sqlpadId, from.sqlpadFileDirectory, from.sqlStatements, from.commitMode,
+		this(from.user, from.dtbsSource, from.sqlpadId, from.sqlpadFileDirectory, from.sqlStatements, from.commitMode,
 				from.exceptionHandleMode, from.overTimeThreashold, from.resultsetFetchSize, from.resultsetRowMapper,
 				from.locale);
 	}
 
-	public SqlpadExecutionSubmit(User user, Schema schema, String sqlpadId, File sqlpadFileDirectory,
+	public SqlpadExecutionSubmit(User user, DtbsSource dtbsSource, String sqlpadId, File sqlpadFileDirectory,
 			List<SqlStatement> sqlStatements, CommitMode commitMode, ExceptionHandleMode exceptionHandleMode,
 			Integer overTimeThreashold, int resultsetFetchSize, RowMapper resultsetRowMapper, Locale locale)
 	{
 		super();
 		this.user = user;
-		this.schema = schema;
+		this.dtbsSource = dtbsSource;
 		this.sqlpadId = sqlpadId;
 		this.sqlpadFileDirectory = sqlpadFileDirectory;
 		this.sqlStatements = sqlStatements;
@@ -101,14 +101,14 @@ public class SqlpadExecutionSubmit
 		this.user = user;
 	}
 
-	public Schema getSchema()
+	public DtbsSource getDtbsSource()
 	{
-		return schema;
+		return dtbsSource;
 	}
 
-	public void setSchema(Schema schema)
+	public void setDtbsSource(DtbsSource dtbsSource)
 	{
-		this.schema = schema;
+		this.dtbsSource = dtbsSource;
 	}
 
 	public String getSqlpadId()

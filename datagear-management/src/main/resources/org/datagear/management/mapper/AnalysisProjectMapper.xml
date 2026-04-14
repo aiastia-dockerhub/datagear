@@ -10,14 +10,14 @@
 			)
 		VALUES
 			(
-			#{entity.id}, #{entity.name}, #{entity.desc}, #{entity.createUser.id}, #{entity.createTime}
+			#{entity.id}, #{entity.name}, #{entity.description}, #{entity.createUser.id}, #{entity.createTime}
 			)
 	</insert>
 	
 	<update id="update">
 		UPDATE DATAGEAR_ANALYSIS_PROJECT SET
 			AP_NAME = #{entity.name},
-			AP_DESC = #{entity.desc}
+			AP_DESC = #{entity.description}
 		WHERE
 			AP_ID = #{entity.id}
 	</update>
@@ -126,7 +126,7 @@
 		SELECT
 			A.AP_ID AS ${_iq_}id${_iq_},
 			A.AP_NAME AS ${_iq_}name${_iq_},
-			A.AP_DESC AS ${_iq_}desc${_iq_},
+			A.AP_DESC AS ${_iq_}description${_iq_},
 			A.AP_CREATE_TIME AS ${_iq_}createTime${_iq_},
 			A.AP_CREATE_USER_ID AS ${_iq_}createUser.id${_iq_},
 			<include refid="common.fieldsForCreateUser" />
@@ -144,7 +144,7 @@
 		AND
 		(
 			${_iq_}name${_iq_} LIKE #{queryKeyword}
-			OR ${_iq_}desc${_iq_} LIKE #{queryKeyword}
+			OR ${_iq_}description${_iq_} LIKE #{queryKeyword}
 		)
 		</if>
 		<include refid="commonDataPermission.dataFilterCondition" />
@@ -163,27 +163,6 @@
 			A.AP_CREATE_USER_ID AS ${_iq_}analysisProject.createUser.id${_iq_}
 		FROM
 			DATAGEAR_ANALYSIS_PROJECT A
-	</sql>
-	
-	<!--
-		 用于外部AnalysisProjectAwareEntity实体处理权限级联引用的公用SQL，下面的include必须采用全名，不然会出现死循环。
-		 注意：
-		 引用方必须传递DP_RESOURCE_TYPE_ANALYSIS_PROJECT参数，且值为：AnalysisProject.AUTHORIZATION_RESOURCE_TYPE，
-		 因为此SQL片段通常作为第二处数据权限片段被引入，会出现DP_RESOURCE_TYPE冲突而导致逻辑出错。
-	-->
-	<sql id="queryViewIdPermissionForAnalysisProjectAwareEntity">
-		<bind name="DP_RESOURCE_TYPE" value="DP_RESOURCE_TYPE_ANALYSIS_PROJECT"/>
-		SELECT
-			T.DATA_ID as AP_ID,
-			T.DATA_PERMISSION
-		FROM
-			(
-				<include refid="commonDataPermission.dataIdPermissionQueryViewHead" />
-				<include refid="org.datagear.management.domain.AnalysisProject.queryViewDataPermissionId" />
-				<include refid="commonDataPermission.dataIdPermissionQueryViewFoot" />
-			) T
-		WHERE
-			T.DATA_PERMISSION >= ${DP_MIN_READ_PERMISSION}
 	</sql>
 	
 </mapper>

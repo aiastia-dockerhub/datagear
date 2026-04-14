@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,7 +17,6 @@
 
 package org.datagear.management.service.impl;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 
@@ -27,22 +26,23 @@ import org.datagear.management.domain.AnalysisProject;
 import org.datagear.management.domain.AnalysisProjectAwareEntity;
 import org.datagear.management.domain.CloneableEntity;
 import org.datagear.management.domain.CreateUserEntity;
-import org.datagear.management.domain.DataSetResDirectory;
 import org.datagear.management.domain.DirectoryFileDataSetEntity;
 import org.datagear.management.domain.Entity;
+import org.datagear.management.domain.FileSource;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.AnalysisProjectService;
 import org.datagear.management.service.CreateUserEntityService;
-import org.datagear.management.service.DataSetResDirectoryService;
 import org.datagear.management.service.EntityService;
+import org.datagear.management.service.FileSourceService;
 import org.datagear.management.service.UserService;
 import org.datagear.management.util.dialect.MbSqlDialect;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.persistence.Query;
-import org.datagear.util.CacheService;
 import org.datagear.util.StringUtil;
+import org.datagear.util.cache.CommonCacheKey;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.cache.Cache;
 import org.springframework.cache.Cache.ValueWrapper;
 import org.springframework.cache.support.SimpleValueWrapper;
 
@@ -55,7 +55,7 @@ import org.springframework.cache.support.SimpleValueWrapper;
 public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> extends AbstractMybatisService<T>
 		implements EntityService<ID, T>
 {
-	private CacheService cacheService = null;
+	private Cache cache = null;
 	
 	/**
 	 * 查询操作时缓存实体数目。
@@ -83,14 +83,14 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 		super(sqlSessionTemplate, dialect);
 	}
 
-	public CacheService getCacheService()
+	public Cache getCache()
 	{
-		return cacheService;
+		return cache;
 	}
 
-	public void setCacheService(CacheService cacheService)
+	public void setCache(Cache cache)
 	{
-		this.cacheService = cacheService;
+		this.cache = cache;
 	}
 
 	public int getCacheCountForQuery()
@@ -227,11 +227,10 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	}
 
 	@Override
-	protected boolean update(T entity, Map<String, Object> params)
+	protected int update(String statement, T entity, Map<String, Object> params)
 	{
 		cacheEvict(entity.getId());
-
-		return super.update(entity, params);
+		return super.update(statement, entity, params);
 	}
 
 	/**
@@ -325,7 +324,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	 *            允许为{@code null}
 	 * @param service
 	 */
-	protected void inflateCreateUserEntity(CreateUserEntity<?> entity, UserService service)
+	protected void inflateCreateUserEntity(CreateUserEntity entity, UserService service)
 	{
 		User user = (entity == null ? null : entity.getCreateUser());
 
@@ -346,7 +345,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	 * @param entity  允许为{@code null}
 	 * @param service
 	 */
-	protected void inflateAnalysisProjectAwareEntity(AnalysisProjectAwareEntity<?> entity,
+	protected void inflateAnalysisProjectAwareEntity(AnalysisProjectAwareEntity entity,
 			AnalysisProjectService service)
 	{
 		AnalysisProject ap = (entity == null ? null : entity.getAnalysisProject());
@@ -357,20 +356,20 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	}
 
 	/**
-	 * 如果{@linkplain DirectoryFileDataSetEntity#getDataSetResDirectory()}不为空，
-	 * 则使用{@linkplain DataSetResDirectoryService#getById(String)}对其进行更新。
+	 * 如果{@linkplain DirectoryFileDataSetEntity#getFileSource()}不为空，
+	 * 则使用{@linkplain FileSourceService#getById(String)}对其进行更新。
 	 * 
 	 * @param entity  允许为{@code null}
 	 * @param service
 	 */
 	protected void inflateDirectoryFileDataSetEntity(DirectoryFileDataSetEntity entity,
-			DataSetResDirectoryService service)
+			FileSourceService service)
 	{
-		DataSetResDirectory dsd = (entity == null ? null : entity.getDataSetResDirectory());
+		FileSource dsd = (entity == null ? null : entity.getFileSource());
 		String dsdId = (dsd == null ? null : dsd.getId());
 
 		if (!StringUtil.isEmpty(dsdId))
-			entity.setDataSetResDirectory(service.getById(dsdId));
+			entity.setFileSource(service.getById(dsdId));
 	}
 
 	/**
@@ -387,7 +386,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 		if (!isCacheEnabled())
 			return null;
 
-		ValueWrapper valueWrapper = this.cacheService.get(toCacheKey(id));
+		ValueWrapper valueWrapper = this.cache.get(toCacheKey(id));
 
 		if (valueWrapper == null)
 			return null;
@@ -418,7 +417,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 		if (value != null)
 			value = cacheCloneEntity(value);
 
-		this.cacheService.put(toCacheKey(id), value);
+		this.cache.put(toCacheKey(id), value);
 	}
 
 	/**
@@ -443,7 +442,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 			if (value != null)
 			{
 				value = cacheCloneEntity(value);
-				this.cacheService.put(toCacheKey(value.getId()), value);
+				this.cache.put(toCacheKey(value.getId()), value);
 			}
 		}
 	}
@@ -453,7 +452,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 		if (!isCacheEnabled())
 			return;
 
-		this.cacheService.evictImmediately(toCacheKey(id));
+		this.cache.evict(toCacheKey(id));
 	}
 
 	protected void cacheInvalidate()
@@ -461,12 +460,17 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 		if (!isCacheEnabled())
 			return;
 
-		this.cacheService.invalidate();
+		this.cache.invalidate();
 	}
 
+	/**
+	 * 是否启用缓存。
+	 * 
+	 * @return
+	 */
 	protected boolean isCacheEnabled()
 	{
-		return (this.cacheService != null && this.cacheService.isEnabled());
+		return (this.cache != null);
 	}
 
 	/**
@@ -475,14 +479,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	 * 参考{@linkplain #cacheGet(Object)}、{@linkplain #cachePut(Object, Entity)}、{@linkplain #cachePutQueryResult(List)}。
 	 * </p>
 	 * <p>
-	 * 如果{@linkplain #getCacheService()}的{@linkplain CacheService#isSerialized()}为{@code false}（比如进程内缓存），应遵循{@linkplain CloneableEntity#clone()}规则；
-	 * 否则，可直接返回原实体。
-	 * </p>
-	 * <p>
-	 * 此方法默认是现是：当需要克隆时，如果{@code value}是{@linkplain CloneableEntity}，则返回{@linkplain CloneableEntity#clone()}，否则，返回原对象。
-	 * </p>
-	 * <p>
-	 * 调用此方法前应确保{@linkplain #isCacheEnabled()}为{@code true}。
+	 * 此方法默认是现是：如果{@code value}是{@linkplain CloneableEntity}，则返回{@linkplain CloneableEntity#clone()}，否则，返回原对象。
 	 * </p>
 	 * 
 	 * @param value
@@ -491,9 +488,6 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	@SuppressWarnings("unchecked")
 	protected T cacheCloneEntity(T value)
 	{
-		if (this.cacheService.isSerialized())
-			return value;
-
 		if (value instanceof CloneableEntity)
 			return (T) ((CloneableEntity) value).clone();
 
@@ -511,10 +505,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	 */
 	protected Object toCacheKey(ID id)
 	{
-		if (this.cacheService.isShared())
-			return new GlobalEntityCacheKey<ID>(getSqlNamespace(), id);
-		else
-			return id;
+		return new GlobalEntityCacheKey<ID>(getSqlNamespace(), id);
 	}
 
 	/**
@@ -524,7 +515,7 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 	 *
 	 * @param <ID>
 	 */
-	protected static class GlobalEntityCacheKey<ID> implements Serializable
+	public static class GlobalEntityCacheKey<ID> implements CommonCacheKey
 	{
 		private static final long serialVersionUID = 1L;
 
@@ -584,6 +575,12 @@ public abstract class AbstractMybatisEntityService<ID, T extends Entity<ID>> ext
 			else if (!namespace.equals(other.namespace))
 				return false;
 			return true;
+		}
+
+		@Override
+		public String toString()
+		{
+			return getClass().getSimpleName() + " [namespace=" + namespace + ", id=" + id + "]";
 		}
 	}
 }

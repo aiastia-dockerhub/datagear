@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -40,7 +40,7 @@
 		        <div class="field-input col-12 md:col-9">
 		        	<div id="${pid}pluginFile" class="fileupload-wrapper flex align-items-center mt-1" v-if="!pm.isReadonlyAction">
 			        	<p-fileupload mode="basic" name="file" :url="pm.uploadFileUrl"
-			        		@upload="onUploaded" @select="uploadFileOnSelect" @progress="uploadFileOnProgress"
+			        		@upload="onUploaded" @select="uploadFileOnSelect" @progress="uploadFileOnProgress" @error="uploadFileOnError"
 			        		:auto="true" choose-label="<@spring.message code='select' />" class="mr-2">
 			        	</p-fileupload>
 						<#include "../include/page_fileupload.ftl">
@@ -63,7 +63,7 @@
 		        </div>
 			</div>
 		</div>
-		<div class="page-form-foot flex-grow-0 pt-3 text-center">
+		<div class="page-form-foot flex-grow-0 flex justify-content-center gap-2 pt-2">
 			<p-button type="submit" label="<@spring.message code='save' />"></p-button>
 		</div>
 	</form>
@@ -121,10 +121,9 @@
 			po.setChartPlugins(response.pluginInfos);
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

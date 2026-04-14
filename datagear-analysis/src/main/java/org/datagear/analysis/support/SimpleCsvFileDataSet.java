@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -20,7 +20,7 @@ package org.datagear.analysis.support;
 import java.io.File;
 import java.util.List;
 
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetQuery;
 
 /**
@@ -34,6 +34,8 @@ import org.datagear.analysis.DataSetQuery;
  */
 public class SimpleCsvFileDataSet extends AbstractCsvFileDataSet
 {
+	private static final long serialVersionUID = 1L;
+
 	/** CSV文件 */
 	private File file;
 
@@ -48,9 +50,9 @@ public class SimpleCsvFileDataSet extends AbstractCsvFileDataSet
 		this.file = file;
 	}
 
-	public SimpleCsvFileDataSet(String id, String name, List<DataSetProperty> properties, File file)
+	public SimpleCsvFileDataSet(String id, String name, List<DataSetField> fields, File file)
 	{
-		super(id, name, properties);
+		super(id, name, fields);
 		this.file = file;
 	}
 
@@ -65,8 +67,8 @@ public class SimpleCsvFileDataSet extends AbstractCsvFileDataSet
 	}
 
 	@Override
-	protected File getCsvFile(DataSetQuery query) throws Throwable
+	protected FileResolvedInfo getCsvFile(DataSetQuery query) throws Throwable
 	{
-		return this.file;
+		return new FileResolvedInfo(this.file);
 	}
 }

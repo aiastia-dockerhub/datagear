@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -18,13 +18,16 @@
 package org.datagear.analysis.support;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +43,13 @@ import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.impl.bootstrap.HttpServer;
 import org.apache.hc.core5.http.impl.bootstrap.ServerBootstrap;
 import org.apache.hc.core5.http.io.HttpRequestHandler;
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.protocol.HttpContext;
+import org.datagear.analysis.DataSetField;
 import org.datagear.analysis.DataSetParam;
-import org.datagear.analysis.DataSetProperty;
 import org.datagear.analysis.DataSetQuery;
+import org.datagear.analysis.DataSetResult;
 import org.datagear.util.IOUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -65,6 +70,8 @@ public class HttpDataSetTest
 	protected static final String PARAM_NAME_0 = "param0";
 
 	protected static final String PARAM_NAME_1 = "param1";
+
+	protected static final byte[] BYTES = new byte[] { 9, 5, 36, 29, 16, 30, 98, 56 };
 
 	protected static HttpServer server;
 
@@ -181,8 +188,48 @@ public class HttpDataSetTest
 							throws HttpException, IOException
 					{
 						StringEntity responseEntity = new StringEntity(
-								"{ path0: { path1: [ { path2: [{name: 'aaa', value: 11}, {name: '名称b', value: 22}] } ] } }",
+								"{ path0: { path1: [ { path2: [{name: 'aaa', value: 11}, {name: '名称b', value: 22}] } ] }, total: 200, page: 1, pageSize: 20 }",
 								ContentType.APPLICATION_JSON);
+						response.setEntity(responseEntity);
+					}
+				})
+				//
+				//
+				.register("/testGetChineseParam", new HttpRequestHandler()
+				{
+					@Override
+					public void handle(ClassicHttpRequest request, ClassicHttpResponse response, HttpContext context)
+							throws HttpException, IOException
+					{
+						URI uri = null;
+
+						try
+						{
+							uri = request.getUri();
+						}
+						catch (Exception e)
+						{
+							throw new IOException(e);
+						}
+
+						String q = uri.getQuery();
+
+						StringEntity responseEntity = new StringEntity(
+								"{ q : '" + q + "' }",
+								ContentType.APPLICATION_JSON);
+						response.setEntity(responseEntity);
+					}
+				})
+				//
+				//
+				.register("/testGetBinary", new HttpRequestHandler()
+				{
+					@Override
+					public void handle(ClassicHttpRequest request, ClassicHttpResponse response, HttpContext context)
+							throws HttpException, IOException
+					{
+						ByteArrayEntity responseEntity = new ByteArrayEntity(BYTES,
+								ContentType.APPLICATION_OCTET_STREAM);
 						response.setEntity(responseEntity);
 					}
 				})
@@ -215,26 +262,26 @@ public class HttpDataSetTest
 		paramValues.put("param", "pv");
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("param=pv"));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.NUMBER, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.NUMBER, field.getType());
 			}
 		}
 
@@ -266,11 +313,11 @@ public class HttpDataSetTest
 		dataSet.setRequestMethod(HttpDataSet.REQUEST_METHOD_GET);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 
-		assertEquals(2, properties.size());
+		assertEquals(2, fields.size());
 		assertEquals(2, data.size());
 	}
 
@@ -283,11 +330,11 @@ public class HttpDataSetTest
 		dataSet.setRequestMethod(HttpDataSet.REQUEST_METHOD_POST);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 
-		assertEquals(2, properties.size());
+		assertEquals(2, fields.size());
 		assertEquals(2, data.size());
 	}
 
@@ -310,26 +357,26 @@ public class HttpDataSetTest
 		paramValues.put("param", pv1);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("value: \"" + pv1JsonStr + "\""));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 		}
 
@@ -372,26 +419,26 @@ public class HttpDataSetTest
 		paramValues.put("param", pv1);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("value: \"" + pv1JsonStr + "\""));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 		}
 
@@ -415,6 +462,70 @@ public class HttpDataSetTest
 	}
 
 	@Test
+	public void resolveTest_REQUEST_CONTENT_TYPE_JSON_resultJsonRule() throws Throwable
+	{
+		HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+				SERVER + "/testResponseJsonPath");
+		dataSet.setResultJsonRule(new ResultJsonRule("path0.path1[0].path2",
+				"{ reTotal: 'total', rePageSize: 'pageSize', reData: 'path0.path1[0].path2[0,1].name' }"));
+
+		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
+		DataSetResult dr = result.getResult();
+		List<DataSetField> fields = result.getFields();
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> data = (List<Map<String, Object>>) dr.getData();
+
+		{
+			Integer v = dr.getAddition("reTotal");
+			assertEquals(200, v.intValue());
+		}
+		{
+			Integer v = dr.getAddition("rePageSize");
+			assertEquals(20, v.intValue());
+		}
+		{
+			List<String> v = dr.getAddition("reData");
+			assertEquals(2, v.size());
+			assertEquals("aaa", v.get(0));
+			assertEquals("名称b", v.get(1));
+		}
+
+		{
+			assertEquals(2, fields.size());
+
+			{
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
+			}
+
+			{
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.NUMBER, field.getType());
+			}
+		}
+
+		{
+			assertEquals(2, data.size());
+
+			{
+				Map<String, Object> row = data.get(0);
+
+				assertEquals("aaa", row.get("name"));
+				assertEquals(11, ((Number) row.get("value")).intValue());
+			}
+
+			{
+				Map<String, Object> row = data.get(1);
+
+				assertEquals("名称b", row.get("name"));
+				assertEquals(22, ((Number) row.get("value")).intValue());
+			}
+		}
+	}
+
+	@Test
 	public void resolveTest_REQUEST_CONTENT_TYPE_TEXT() throws Throwable
 	{
 		String pv0 = "p0";
@@ -433,26 +544,26 @@ public class HttpDataSetTest
 		paramValues.put("param", pv1);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("value1=" + pv1));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("contentType", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("contentType", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 		}
 
@@ -492,28 +603,28 @@ public class HttpDataSetTest
 		paramValues.put("v2", v2);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("<v0>" + v0 + "</v0>"));
 			assertTrue(templateResult.contains("<v1>" + v1 + "</v1>"));
 			assertTrue(templateResult.contains("<v2>" + v2Escape + "</v2>"));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("contentType", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("contentType", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 		}
 
@@ -547,26 +658,26 @@ public class HttpDataSetTest
 		paramValues.put("param", pv1);
 
 		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
-		List<DataSetProperty> properties = result.getProperties();
+		List<DataSetField> fields = result.getFields();
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
 		String templateResult = result.getTemplateResult();
 
 		{
-			assertEquals(2, properties.size());
+			assertEquals(2, fields.size());
 
 			assertTrue(templateResult.contains("value: '" + pv1 + "'"));
 
 			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(0);
+				assertEquals("name", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 
 			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
+				DataSetField field = fields.get(1);
+				assertEquals("value", field.getName());
+				assertEquals(DataSetField.DataType.STRING, field.getType());
 			}
 		}
 
@@ -590,49 +701,131 @@ public class HttpDataSetTest
 	}
 
 	@Test
-	public void resolveTest_setResponseDataJsonPath() throws Throwable
+	public void resolveTest_chineseInUri() throws Throwable
 	{
-		HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
-				SERVER + "/testResponseJsonPath");
-		dataSet.setResponseDataJsonPath("path0.path1[0].path2");
-
-		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
-		List<DataSetProperty> properties = result.getProperties();
-		@SuppressWarnings("unchecked")
-		List<Map<String, Object>> data = (List<Map<String, Object>>) result.getResult().getData();
-
+		// 默认
 		{
-			assertEquals(2, properties.size());
+			HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+					SERVER + "/testGetChineseParam?p=中文");
+			dataSet.setRequestMethod(HttpDataSet.REQUEST_METHOD_GET);
 
-			{
-				DataSetProperty property = properties.get(0);
-				assertEquals("name", property.getName());
-				assertEquals(DataSetProperty.DataType.STRING, property.getType());
-			}
+			TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
+			DataSetResult dr = result.getResult();
+			@SuppressWarnings("unchecked")
+			Map<String, String> data = (Map<String, String>) dr.getData();
+			String v = data.get("q");
 
-			{
-				DataSetProperty property = properties.get(1);
-				assertEquals("value", property.getName());
-				assertEquals(DataSetProperty.DataType.NUMBER, property.getType());
-			}
+			assertNotEquals("p=中文", v);
 		}
 
+		// false
 		{
-			assertEquals(2, data.size());
+			HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+					SERVER + "/testGetChineseParam?p=中文");
+			dataSet.setRequestMethod(HttpDataSet.REQUEST_METHOD_GET);
+			dataSet.setEncodeUri(false);
 
-			{
-				Map<String, Object> row = data.get(0);
+			TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
+			DataSetResult dr = result.getResult();
+			@SuppressWarnings("unchecked")
+			Map<String, String> data = (Map<String, String>) dr.getData();
+			String v = data.get("q");
 
-				assertEquals("aaa", row.get("name"));
-				assertEquals(11, ((Number) row.get("value")).intValue());
-			}
+			assertNotEquals("p=中文", v);
+		}
 
-			{
-				Map<String, Object> row = data.get(1);
+		// true
+		{
+			HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+					SERVER + "/testGetChineseParam?p=中文");
+			dataSet.setRequestMethod(HttpDataSet.REQUEST_METHOD_GET);
+			dataSet.setEncodeUri(true);
 
-				assertEquals("名称b", row.get("name"));
-				assertEquals(22, ((Number) row.get("value")).intValue());
-			}
+			TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
+			DataSetResult dr = result.getResult();
+			@SuppressWarnings("unchecked")
+			Map<String, String> data = (Map<String, String>) dr.getData();
+			String v = data.get("q");
+
+			assertEquals("p=中文", v);
+		}
+	}
+
+	@Test
+	public void resolveTest_responseContentType_TEXT() throws Throwable
+	{
+		String pv0 = "v0";
+		String pv1 = "参数值1";
+
+		List<DataSetParam> params = Arrays.asList(new DataSetParam("param", DataSetParam.DataType.NUMBER, true));
+		List<DataSetField> fields = Arrays.asList(new DataSetField("custom", DataSetField.DataType.STRING));
+		fields.get(0).setDefaultValue("vvv");
+
+		HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+				SERVER + "/testParam");
+		dataSet.setRequestContent("[ { name: \"" + PARAM_NAME_0 + "\", value: \"" + pv0 + "\" }, { name: \""
+				+ PARAM_NAME_1 + "\", value: \"${param}\" } ]");
+		dataSet.setParams(params);
+		dataSet.setFields(fields);
+		dataSet.setResponseContentType(HttpDataSet.RESPONSE_CONTENT_TYPE_TEXT);
+
+		Map<String, Object> paramValues = new HashMap<>();
+		paramValues.put("param", pv1);
+
+		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf(paramValues));
+		List<DataSetField> resultFields = result.getFields();
+		@SuppressWarnings("unchecked")
+		Map<String, Object> data = (Map<String, Object>) result.getResult().getData();
+
+		assertEquals(2, resultFields.size());
+
+		{
+			DataSetField field = resultFields.get(0);
+			String expected = "[{\"name\":\"param0\",\"value\":\"v0\"},{\"name\":\"param1\",\"value\":\"参数值1\"}]";
+
+			assertEquals("value", field.getName());
+			assertEquals(DataSetField.DataType.STRING, field.getType());
+			assertEquals(expected, data.get("value"));
+		}
+		{
+			DataSetField field = resultFields.get(1);
+			assertEquals("custom", field.getName());
+			assertEquals(DataSetField.DataType.STRING, field.getType());
+			assertEquals("vvv", data.get("custom"));
+		}
+	}
+
+	@Test
+	public void resolveTest_responseContentType_BASE64() throws Throwable
+	{
+		List<DataSetField> fields = Arrays.asList(new DataSetField("custom", DataSetField.DataType.STRING));
+		fields.get(0).setDefaultValue("vvv");
+
+		HttpDataSet dataSet = new HttpDataSet(HttpDataSet.class.getName(), HttpDataSet.class.getName(), httpClient,
+				SERVER + "/testGetBinary");
+		dataSet.setFields(fields);
+		dataSet.setResponseContentType(HttpDataSet.RESPONSE_CONTENT_TYPE_BASE64);
+
+		TemplateResolvedDataSetResult result = dataSet.resolve(DataSetQuery.valueOf());
+		List<DataSetField> resultFields = result.getFields();
+		@SuppressWarnings("unchecked")
+		Map<String, Object> data = (Map<String, Object>) result.getResult().getData();
+
+		assertEquals(2, resultFields.size());
+
+		{
+			DataSetField field = resultFields.get(0);
+			String expected = Base64.getEncoder().encodeToString(BYTES);
+
+			assertEquals("value", field.getName());
+			assertEquals(DataSetField.DataType.STRING, field.getType());
+			assertEquals(expected, data.get("value"));
+		}
+		{
+			DataSetField field = resultFields.get(1);
+			assertEquals("custom", field.getName());
+			assertEquals(DataSetField.DataType.STRING, field.getType());
+			assertEquals("vvv", data.get("custom"));
 		}
 	}
 

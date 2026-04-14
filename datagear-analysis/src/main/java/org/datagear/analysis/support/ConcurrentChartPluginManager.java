@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -44,15 +44,14 @@ public class ConcurrentChartPluginManager extends AbstractChartPluginManager
 	}
 
 	@Override
-	public void register(ChartPlugin chartPlugin)
+	public boolean register(ChartPlugin chartPlugin)
 	{
 		WriteLock writeLock = this.lock.writeLock();
 
 		try
 		{
 			writeLock.lock();
-
-			registerChartPlugin(chartPlugin);
+			return registerChartPlugin(chartPlugin);
 		}
 		finally
 		{

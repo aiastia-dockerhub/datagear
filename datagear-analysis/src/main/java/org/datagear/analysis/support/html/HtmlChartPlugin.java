@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -47,7 +47,7 @@ import org.datagear.util.i18n.Label;
  * 	varName : "[图表变量名]",
  * 	plugin : [图表插件变量名],
  * 	renderContext : [渲染上下文变量名],
- * 	chartDataSets : [{...}, ...]
+ * 	dataSetBinds : [{...}, ...]
  * };
  * [图表插件变量名].renderer.render([图表变量名]);
  * &lt;/script&gt;
@@ -59,6 +59,8 @@ import org.datagear.util.i18n.Label;
  */
 public class HtmlChartPlugin extends AbstractChartPlugin
 {
+	private static final long serialVersionUID = 1L;
+
 	/** 图表渲染器属性名 */
 	public static final String PROPERTY_RENDERER = "renderer";
 	
@@ -70,12 +72,14 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 	/** HTML换行符 */
 	public static final String HTML_NEW_LINE = "\n";
 
-	protected static final HtmlChartPluginScriptObjectWriter HTML_CHART_PLUGIN_SCRIPT_OBJECT_WRITER = new HtmlChartPluginScriptObjectWriter();
-	protected static final HtmlRenderContextScriptObjectWriter HTML_RENDER_CONTEXT_SCRIPT_OBJECT_WRITER = new HtmlRenderContextScriptObjectWriter();
-	protected static final HtmlChartScriptObjectWriter HTML_CHART_SCRIPT_OBJECT_WRITER = new HtmlChartScriptObjectWriter();
-
 	/** JS图表渲染器 */
 	private JsChartRenderer renderer;
+
+	private HtmlChartPluginScriptObjectWriter pluginWriter;
+
+	private HtmlRenderContextScriptObjectWriter renderContextWriter;
+
+	private HtmlChartScriptObjectWriter chartWriter;
 
 	/** 图表HTML元素标签名 */
 	private String elementTagName = "div";
@@ -91,10 +95,15 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 		super();
 	}
 
-	public HtmlChartPlugin(String id, Label nameLabel, JsChartRenderer renderer)
+	public HtmlChartPlugin(String id, Label nameLabel, JsChartRenderer renderer,
+			HtmlChartPluginScriptObjectWriter pluginWriter, HtmlRenderContextScriptObjectWriter renderContextWriter,
+			HtmlChartScriptObjectWriter chartWriter)
 	{
 		super(id, nameLabel);
 		this.renderer = renderer;
+		this.pluginWriter = pluginWriter;
+		this.renderContextWriter = renderContextWriter;
+		this.chartWriter = chartWriter;
 	}
 
 	public JsChartRenderer getRenderer()
@@ -105,6 +114,36 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 	public void setRenderer(JsChartRenderer renderer)
 	{
 		this.renderer = renderer;
+	}
+
+	public HtmlChartPluginScriptObjectWriter getPluginWriter()
+	{
+		return pluginWriter;
+	}
+
+	public void setPluginWriter(HtmlChartPluginScriptObjectWriter pluginWriter)
+	{
+		this.pluginWriter = pluginWriter;
+	}
+
+	public HtmlRenderContextScriptObjectWriter getRenderContextWriter()
+	{
+		return renderContextWriter;
+	}
+
+	public void setRenderContextWriter(HtmlRenderContextScriptObjectWriter renderContextWriter)
+	{
+		this.renderContextWriter = renderContextWriter;
+	}
+
+	public HtmlChartScriptObjectWriter getChartWriter()
+	{
+		return chartWriter;
+	}
+
+	public void setChartWriter(HtmlChartScriptObjectWriter chartWriter)
+	{
+		this.chartWriter = chartWriter;
 	}
 
 	public String getElementTagName()
@@ -214,7 +253,7 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 		Writer out = renderContext.getWriter();
 		HtmlChartPlugin plugin = chart.getPlugin();
 
-		getHtmlChartPluginScriptObjectWriter().write(out, plugin, renderContext.getPluginVarName(),
+		this.pluginWriter.write(out, plugin, renderContext.getPluginVarName(),
 				renderContext.getLocale());
 
 		return true;
@@ -227,7 +266,7 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 
 		Writer out = renderContext.getWriter();
 		
-		getHtmlRenderContextScriptObjectWriter().write(out, renderContext, renderContext.getRenderContextVarName());
+		this.renderContextWriter.write(out, renderContext, renderContext.getRenderContextVarName());
 
 		return true;
 	}
@@ -237,10 +276,10 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 		Writer out = renderContext.getWriter();
 		
 		if (renderContext.isWriteChartJson())
-			getHtmlChartScriptObjectWriter().writeJson(out, chart, renderContext.getRenderContextVarName(),
+			this.chartWriter.writeJson(out, chart, renderContext.getRenderContextVarName(),
 					renderContext.getPluginVarName());
 		else
-			getHtmlChartScriptObjectWriter().write(out, chart, renderContext.getRenderContextVarName(),
+			this.chartWriter.write(out, chart, renderContext.getRenderContextVarName(),
 					renderContext.getPluginVarName());
 
 		if (!renderContext.isNotWriteInvoke())
@@ -249,21 +288,6 @@ public class HtmlChartPlugin extends AbstractChartPlugin
 					+ JsChartRenderer.RENDER_FUNCTION_NAME + "(" + chart.getVarName() + ");");
 			writeNewLine(out);
 		}
-	}
-
-	protected HtmlChartPluginScriptObjectWriter getHtmlChartPluginScriptObjectWriter()
-	{
-		return HTML_CHART_PLUGIN_SCRIPT_OBJECT_WRITER;
-	}
-
-	protected HtmlRenderContextScriptObjectWriter getHtmlRenderContextScriptObjectWriter()
-	{
-		return HTML_RENDER_CONTEXT_SCRIPT_OBJECT_WRITER;
-	}
-
-	protected HtmlChartScriptObjectWriter getHtmlChartScriptObjectWriter()
-	{
-		return HTML_CHART_SCRIPT_OBJECT_WRITER;
 	}
 
 	protected void writeScriptStartTag(RenderContext renderContext, Writer out) throws IOException

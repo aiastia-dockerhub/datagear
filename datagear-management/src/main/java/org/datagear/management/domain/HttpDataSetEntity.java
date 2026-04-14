@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,9 +21,13 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.hc.client5.http.classic.HttpClient;
-import org.datagear.analysis.DataSetProperty;
+import org.datagear.analysis.DataSetField;
+import org.datagear.analysis.ResultJsonRuleUtil;
 import org.datagear.analysis.support.HttpDataSet;
+import org.datagear.analysis.support.ResultJsonRule;
 import org.springframework.beans.BeanUtils;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * {@linkplain HttpDataSet}实体。
@@ -31,7 +35,7 @@ import org.springframework.beans.BeanUtils;
  * @author datagear@163.com
  *
  */
-public class HttpDataSetEntity extends HttpDataSet implements DataSetEntity, CloneableEntity
+public class HttpDataSetEntity extends HttpDataSet implements DataSetEntity, CloneableEntity, ResultJsonRuleAwareSplitEntity
 {
 	private static final long serialVersionUID = 1L;
 
@@ -39,7 +43,7 @@ public class HttpDataSetEntity extends HttpDataSet implements DataSetEntity, Clo
 	private User createUser;
 
 	/** 创建时间 */
-	private Date createTime;
+	private Date createTime = null;
 
 	/** 权限 */
 	private int dataPermission = PERMISSION_NOT_LOADED;
@@ -49,21 +53,18 @@ public class HttpDataSetEntity extends HttpDataSet implements DataSetEntity, Clo
 	public HttpDataSetEntity()
 	{
 		super();
-		this.createTime = new Date();
 	}
 
 	public HttpDataSetEntity(String id, String name, HttpClient httpClient, String uri, User createUser)
 	{
 		super(id, name, httpClient, uri);
-		this.createTime = new Date();
 		this.createUser = createUser;
 	}
 
-	public HttpDataSetEntity(String id, String name, List<DataSetProperty> properties, HttpClient httpClient,
+	public HttpDataSetEntity(String id, String name, List<DataSetField> fields, HttpClient httpClient,
 			String uri, User createUser)
 	{
-		super(id, name, properties, httpClient, uri);
-		this.createTime = new Date();
+		super(id, name, fields, httpClient, uri);
 		this.createUser = createUser;
 	}
 
@@ -126,6 +127,47 @@ public class HttpDataSetEntity extends HttpDataSet implements DataSetEntity, Clo
 	public void setAnalysisProject(AnalysisProject analysisProject)
 	{
 		this.analysisProject = analysisProject;
+	}
+
+	@Override
+	@JsonIgnore
+	public String getResultJsonRuleJson()
+	{
+		return null;
+	}
+
+	@Override
+	@JsonIgnore
+	public void setResultJsonRuleJson(ResultJsonRule resultJsonRule)
+	{
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstDataJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultDataJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstDataJsonPath(String rstDataJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultDataJsonPath(getResultJsonRule(), rstDataJsonPath));
+	}
+
+	@Override
+	@JsonIgnore
+	public String getRstAdditionJsonPath()
+	{
+		return ResultJsonRuleUtil.getResultAdditionJsonPath(getResultJsonRule());
+	}
+
+	@Override
+	@JsonIgnore
+	public void setRstAdditionJsonPath(String rstAdditionJsonPath)
+	{
+		setResultJsonRule(ResultJsonRuleUtil.setResultAdditionJsonPath(getResultJsonRule(), rstAdditionJsonPath));
 	}
 
 	@Override

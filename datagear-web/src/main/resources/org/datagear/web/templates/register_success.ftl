@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -61,10 +61,9 @@
 	{
 		po.element(".loginLinkWrapper a").attr("href", "${contextPath}/login");
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "include/page_vue_mount.ftl">
 </body>
 </html>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -34,10 +34,11 @@ import java.util.concurrent.Executors;
 
 import org.datagear.connection.ConnectionSource;
 import org.datagear.connection.ConnectionSourceException;
-import org.datagear.management.domain.Schema;
+import org.datagear.management.domain.DtbsSource;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.SqlHistoryService;
-import org.datagear.management.util.SchemaConnectionSupport;
+import org.datagear.management.util.DtbsSourceConnectionSupport;
+import org.datagear.management.util.DtbsSourceSqlPermissionValidator;
 import org.datagear.persistence.support.PersistenceSupport;
 import org.datagear.persistence.support.SqlSelectManager;
 import org.datagear.persistence.support.SqlSelectResult;
@@ -45,9 +46,10 @@ import org.datagear.util.JdbcUtil;
 import org.datagear.util.SqlScriptParser.SqlStatement;
 import org.datagear.util.sqlvalidator.DatabaseProfile;
 import org.datagear.util.sqlvalidator.SqlValidation;
-import org.datagear.web.controller.SqlpadController.SqlpadFileDirectory;
+import org.datagear.web.controller.DtbsSourceSqlpadController.SqlpadFileDirectory;
 import org.datagear.web.util.MessageChannel;
 import org.datagear.web.util.OperationMessage;
+import org.datagear.web.util.msg.Message;
 import org.springframework.context.MessageSource;
 import org.springframework.context.NoSuchMessageException;
 
@@ -67,12 +69,11 @@ public class SqlpadExecutionService extends PersistenceSupport
 
 	private SqlSelectManager sqlSelectManager;
 
-	private SqlPermissionValidator sqlPermissionValidator = null;
+	private MessageChannel messageChannel;
 
-	private SchemaConnectionSupport schemaConnectionSupport = new SchemaConnectionSupport();
+	private DtbsSourceSqlPermissionValidator dtbsSourceSqlPermissionValidator = null;
 
-	private MessageChannel _messageChannel = new MessageChannel(
-			SqlpadExecutionSubmit.MAX_PAUSE_OVER_TIME_THREASHOLD_MINUTES * 60);
+	private DtbsSourceConnectionSupport dtbsSourceConnectionSupport = new DtbsSourceConnectionSupport();
 
 	private ExecutorService _executorService = Executors.newCachedThreadPool();
 
@@ -84,13 +85,14 @@ public class SqlpadExecutionService extends PersistenceSupport
 	}
 
 	public SqlpadExecutionService(ConnectionSource connectionSource, MessageSource messageSource,
-			SqlHistoryService sqlHistoryService, SqlSelectManager sqlSelectManager)
+			SqlHistoryService sqlHistoryService, SqlSelectManager sqlSelectManager, MessageChannel messageChannel)
 	{
 		super();
 		this.connectionSource = connectionSource;
 		this.messageSource = messageSource;
 		this.sqlHistoryService = sqlHistoryService;
 		this.sqlSelectManager = sqlSelectManager;
+		this.messageChannel = messageChannel;
 	}
 
 	public ConnectionSource getConnectionSource()
@@ -113,11 +115,6 @@ public class SqlpadExecutionService extends PersistenceSupport
 		this.messageSource = messageSource;
 	}
 
-	protected MessageChannel getMessageChannel()
-	{
-		return this._messageChannel;
-	}
-
 	public SqlHistoryService getSqlHistoryService()
 	{
 		return sqlHistoryService;
@@ -138,24 +135,34 @@ public class SqlpadExecutionService extends PersistenceSupport
 		this.sqlSelectManager = sqlSelectManager;
 	}
 
-	public SqlPermissionValidator getSqlPermissionValidator()
+	public MessageChannel getMessageChannel()
 	{
-		return sqlPermissionValidator;
+		return messageChannel;
 	}
 
-	public void setSqlPermissionValidator(SqlPermissionValidator sqlPermissionValidator)
+	public void setMessageChannel(MessageChannel messageChannel)
 	{
-		this.sqlPermissionValidator = sqlPermissionValidator;
+		this.messageChannel = messageChannel;
 	}
 
-	public SchemaConnectionSupport getSchemaConnectionSupport()
+	public DtbsSourceSqlPermissionValidator getDtbsSourceSqlPermissionValidator()
 	{
-		return schemaConnectionSupport;
+		return dtbsSourceSqlPermissionValidator;
 	}
 
-	public void setSchemaConnectionSupport(SchemaConnectionSupport schemaConnectionSupport)
+	public void setDtbsSourceSqlPermissionValidator(DtbsSourceSqlPermissionValidator dtbsSourceSqlPermissionValidator)
 	{
-		this.schemaConnectionSupport = schemaConnectionSupport;
+		this.dtbsSourceSqlPermissionValidator = dtbsSourceSqlPermissionValidator;
+	}
+
+	public DtbsSourceConnectionSupport getDtbsSourceConnectionSupport()
+	{
+		return dtbsSourceConnectionSupport;
+	}
+
+	public void setDtbsSourceConnectionSupport(DtbsSourceConnectionSupport dtbsSourceConnectionSupport)
+	{
+		this.dtbsSourceConnectionSupport = dtbsSourceConnectionSupport;
 	}
 
 	/**
@@ -208,7 +215,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	public <T> List<T> message(String sqlpadId, int count)
 	{
-		return this._messageChannel.pull(sqlpadId, count);
+		return this.messageChannel.poll(sqlpadId, count);
 	}
 
 	/**
@@ -220,15 +227,15 @@ public class SqlpadExecutionService extends PersistenceSupport
 	}
 
 	/**
-	 * 获取指定{@linkplain Schema}的{@linkplain Connection}。
+	 * 获取指定{@linkplain DtbsSource}的{@linkplain Connection}。
 	 * 
-	 * @param schema
+	 * @param dtbsSource
 	 * @return
 	 * @throws ConnectionSourceException
 	 */
-	protected Connection getSchemaConnection(Schema schema) throws ConnectionSourceException
+	protected Connection getDtbsSourceConnection(DtbsSource dtbsSource) throws ConnectionSourceException
 	{
-		return this.schemaConnectionSupport.getSchemaConnection(this.connectionSource, schema);
+		return this.dtbsSourceConnectionSupport.getDtbsSourceConnection(this.connectionSource, dtbsSource);
 	}
 
 	/**
@@ -239,7 +246,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendStartMessage(String channel, int sqlCount)
 	{
-		this._messageChannel.push(channel, new StartMessageData(sqlCount));
+		this.messageChannel.push(channel, new StartMessage(sqlCount));
 	}
 
 	/**
@@ -251,8 +258,8 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendSqlSuccessMessage(String channel, SqlStatement sqlStatement, int sqlStatementIndex)
 	{
-		this._messageChannel.push(channel,
-				new SqlSuccessMessageData(sqlStatement, sqlStatementIndex, SqlResultType.NONE));
+		this.messageChannel.push(channel,
+				new SqlSuccessMessage(sqlStatement, sqlStatementIndex, SqlResultType.NONE));
 	}
 
 	/**
@@ -266,11 +273,11 @@ public class SqlpadExecutionService extends PersistenceSupport
 	protected void sendSqlSuccessMessage(String channel, SqlStatement sqlStatement, int sqlStatementIndex,
 			int updateCount)
 	{
-		SqlSuccessMessageData sqlSuccessMessageData = new SqlSuccessMessageData(sqlStatement, sqlStatementIndex,
+		SqlSuccessMessage sqlSuccessMessage = new SqlSuccessMessage(sqlStatement, sqlStatementIndex,
 				SqlResultType.UPDATE_COUNT);
-		sqlSuccessMessageData.setUpdateCount(updateCount);
+		sqlSuccessMessage.setUpdateCount(updateCount);
 
-		this._messageChannel.push(channel, sqlSuccessMessageData);
+		this.messageChannel.push(channel, sqlSuccessMessage);
 	}
 
 	/**
@@ -284,11 +291,11 @@ public class SqlpadExecutionService extends PersistenceSupport
 	protected void sendSqlSuccessMessage(String channel, SqlStatement sqlStatement, int sqlStatementIndex,
 			SqlSelectResult sqlSelectResult)
 	{
-		SqlSuccessMessageData sqlSuccessMessageData = new SqlSuccessMessageData(sqlStatement, sqlStatementIndex,
+		SqlSuccessMessage sqlSuccessMessage = new SqlSuccessMessage(sqlStatement, sqlStatementIndex,
 				SqlResultType.RESULT_SET);
-		sqlSuccessMessageData.setSqlSelectResult(sqlSelectResult);
+		sqlSuccessMessage.setSqlSelectResult(sqlSelectResult);
 
-		this._messageChannel.push(channel, sqlSuccessMessageData);
+		this.messageChannel.push(channel, sqlSuccessMessage);
 	}
 
 	/**
@@ -303,9 +310,9 @@ public class SqlpadExecutionService extends PersistenceSupport
 	protected void sendSqlExceptionMessage(String channel, SqlStatement sqlStatement, int sqlStatementIndex,
 			SQLException e, String content)
 	{
-		SQLExceptionMessageData messageData = new SQLExceptionMessageData(sqlStatement, sqlStatementIndex, content);
+		SQLExceptionMessage messageData = new SQLExceptionMessage(sqlStatement, sqlStatementIndex, content);
 
-		this._messageChannel.push(channel, messageData);
+		this.messageChannel.push(channel, messageData);
 	}
 
 	/**
@@ -319,9 +326,9 @@ public class SqlpadExecutionService extends PersistenceSupport
 	protected void sendSqlExceptionMessage(String channel, SqlStatement sqlStatement, int sqlStatementIndex,
 			String content)
 	{
-		SQLExceptionMessageData messageData = new SQLExceptionMessageData(sqlStatement, sqlStatementIndex, content);
+		SQLExceptionMessage messageData = new SQLExceptionMessage(sqlStatement, sqlStatementIndex, content);
 
-		this._messageChannel.push(channel, messageData);
+		this.messageChannel.push(channel, messageData);
 	}
 
 	/**
@@ -334,11 +341,11 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendExceptionMessage(String channel, Throwable t, String content, boolean trace)
 	{
-		ExceptionMessageData messageData = new ExceptionMessageData(content);
+		ExceptionMessage messageData = new ExceptionMessage(content);
 		if (trace)
 			messageData.setDetailTrace(t);
 
-		this._messageChannel.push(channel, messageData);
+		this.messageChannel.push(channel, messageData);
 	}
 
 	/**
@@ -349,8 +356,8 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendExceptionMessage(String channel, String content)
 	{
-		ExceptionMessageData messageData = new ExceptionMessageData(content);
-		this._messageChannel.push(channel, messageData);
+		ExceptionMessage messageData = new ExceptionMessage(content);
+		this.messageChannel.push(channel, messageData);
 	}
 
 	/**
@@ -362,7 +369,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendSqlCommandMessage(String channel, SqlCommand sqlCommand, String content)
 	{
-		this._messageChannel.push(channel, new SqlCommandMessageData(sqlCommand, content));
+		this.messageChannel.push(channel, new SqlCommandMessage(sqlCommand, content));
 	}
 
 	/**
@@ -376,10 +383,10 @@ public class SqlpadExecutionService extends PersistenceSupport
 	protected void sendSqlCommandMessage(String channel, SqlCommand sqlCommand, String content,
 			SQLExecutionStat sqlExecutionStat)
 	{
-		SqlCommandMessageData sqlCommandMessageData = new SqlCommandMessageData(sqlCommand, content);
-		sqlCommandMessageData.setSqlExecutionStat(sqlExecutionStat);
+		SqlCommandMessage sqlCommandMessage = new SqlCommandMessage(sqlCommand, content);
+		sqlCommandMessage.setSqlExecutionStat(sqlExecutionStat);
 
-		this._messageChannel.push(channel, sqlCommandMessageData);
+		this.messageChannel.push(channel, sqlCommandMessage);
 	}
 
 	/**
@@ -390,7 +397,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendTextMessage(String channel, String text)
 	{
-		this._messageChannel.push(channel, new TextMessageData(text));
+		this.messageChannel.push(channel, new TextMessage(text));
 	}
 
 	/**
@@ -402,10 +409,10 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendTextMessage(String channel, String text, String textType)
 	{
-		TextMessageData textMessageData = new TextMessageData(text);
-		textMessageData.setTextType(textType);
+		TextMessage textMessage = new TextMessage(text);
+		textMessage.setTextType(textType);
 
-		this._messageChannel.push(channel, textMessageData);
+		this.messageChannel.push(channel, textMessage);
 	}
 
 	/**
@@ -418,11 +425,11 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendTextMessage(String channel, String text, String textType, SQLExecutionStat sqlExecutionStat)
 	{
-		TextMessageData textMessageData = new TextMessageData(text);
-		textMessageData.setTextType(textType);
-		textMessageData.setSqlExecutionStat(sqlExecutionStat);
+		TextMessage textMessage = new TextMessage(text);
+		textMessage.setTextType(textType);
+		textMessage.setSqlExecutionStat(sqlExecutionStat);
 
-		this._messageChannel.push(channel, textMessageData);
+		this.messageChannel.push(channel, textMessage);
 	}
 
 	/**
@@ -435,7 +442,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendFinishMessage(String channel)
 	{
-		this._messageChannel.push(channel, new FinishMessageData());
+		this.messageChannel.push(channel, new FinishMessage());
 	}
 
 	/**
@@ -449,10 +456,10 @@ public class SqlpadExecutionService extends PersistenceSupport
 	 */
 	protected void sendFinishMessage(String channel, SQLExecutionStat sqlExecutionStat)
 	{
-		FinishMessageData finishMessageData = new FinishMessageData();
-		finishMessageData.setSqlExecutionStat(sqlExecutionStat);
+		FinishMessage finishMessage = new FinishMessage();
+		finishMessage.setSqlExecutionStat(sqlExecutionStat);
 
-		this._messageChannel.push(channel, finishMessageData);
+		this.messageChannel.push(channel, finishMessage);
 	}
 
 	/**
@@ -519,7 +526,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 
 			try
 			{
-				cn = getSchemaConnection(getSchema());
+				cn = getDtbsSourceConnection(getDtbsSource());
 				JdbcUtil.setAutoCommitIfSupports(cn, false);
 				JdbcUtil.setReadonlyIfSupports(cn, false);
 				st = createStatement(cn);
@@ -540,7 +547,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 			int totalCount = getSqlStatements().size();
 			SQLExecutionStat sqlExecutionStat = new SQLExecutionStat(totalCount);
 			SqlpadFileDirectory sqlpadFileDirectory = SqlpadFileDirectory.valueOf(getSqlpadFileDirectory());
-			SqlPermissionValidator sqlPermissionValidator = SqlpadExecutionService.this.sqlPermissionValidator;
+			DtbsSourceSqlPermissionValidator dtbsSourceSqlPermissionValidator = SqlpadExecutionService.this.dtbsSourceSqlPermissionValidator;
 			DatabaseProfile databaseProfile = DatabaseProfile.valueOf(cn);
 
 			List<String> sqlHistories = new ArrayList<>();
@@ -553,8 +560,9 @@ public class SqlpadExecutionService extends PersistenceSupport
 						break;
 
 					SqlStatement sqlStatement = getSqlStatements().get(i);
-					SqlValidation sqlValidation = (sqlPermissionValidator == null ? null
-							: sqlPermissionValidator.validate(getUser(), getSchema(), sqlStatement, databaseProfile));
+					SqlValidation sqlValidation = (dtbsSourceSqlPermissionValidator == null ? null
+							: dtbsSourceSqlPermissionValidator.validate(getDtbsSource().getDataPermission(),
+									sqlStatement.getSql(), databaseProfile));
 
 					if (sqlValidation != null && !sqlValidation.isValid())
 					{
@@ -625,7 +633,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 			User user = getUser();
 			
 			if (!user.isAnonymous() && !sqlHistories.isEmpty())
-				SqlpadExecutionService.this.sqlHistoryService.addForRemain(getSchema().getId(), user.getId(),
+				SqlpadExecutionService.this.sqlHistoryService.addForRemain(getDtbsSource().getId(), user.getId(),
 						sqlHistories);
 		}
 
@@ -735,7 +743,7 @@ public class SqlpadExecutionService extends PersistenceSupport
 				{
 					sendTextMessage(getSqlpadId(),
 							getMessage(getLocale(), "sqlpad.waitingForCommitOrRollback", getOverTimeThreashold()),
-							TextMessageData.TEXT_TYPE_WAIT_COR, sqlExecutionStat);
+							TextMessage.TEXT_TYPE_WAIT_COR, sqlExecutionStat);
 
 					sendWatingMessage = true;
 				}
@@ -1059,35 +1067,18 @@ public class SqlpadExecutionService extends PersistenceSupport
 		NONE
 	}
 
-	protected static abstract class MessageData
+	public static abstract class SqlpadMessage extends Message
 	{
-		protected static final String TIME_PATTERN = "HH:mm:ss";
+		private static final long serialVersionUID = 1L;
 
-		private String type;
+		protected static final String TIME_PATTERN = "HH:mm:ss";
 
 		private Date date;
 
-		public MessageData()
+		public SqlpadMessage()
 		{
 			super();
 			this.date = new Date();
-		}
-
-		public MessageData(String type)
-		{
-			super();
-			this.type = type;
-			this.date = new Date();
-		}
-
-		public String getType()
-		{
-			return type;
-		}
-
-		protected void setType(String type)
-		{
-			this.type = type;
 		}
 
 		public Date getDate()
@@ -1106,20 +1097,20 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class StartMessageData extends MessageData
+	public static class StartMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "START";
+		private static final long serialVersionUID = 1L;
 
 		private int sqlCount = 0;
 
-		public StartMessageData()
+		public StartMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
-		public StartMessageData(int sqlCount)
+		public StartMessage(int sqlCount)
 		{
-			super(TYPE);
+			super();
 			this.sqlCount = sqlCount;
 		}
 
@@ -1134,9 +1125,9 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class SqlSuccessMessageData extends MessageData
+	public static class SqlSuccessMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "SQLSUCCESS";
+		private static final long serialVersionUID = 1L;
 
 		private SqlStatement sqlStatement;
 
@@ -1151,14 +1142,14 @@ public class SqlpadExecutionService extends PersistenceSupport
 
 		private SqlSelectResult sqlSelectResult;
 
-		public SqlSuccessMessageData()
+		public SqlSuccessMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
-		public SqlSuccessMessageData(SqlStatement sqlStatement, int sqlStatementIndex, SqlResultType sqlResultType)
+		public SqlSuccessMessage(SqlStatement sqlStatement, int sqlStatementIndex, SqlResultType sqlResultType)
 		{
-			super(TYPE);
+			super();
 			this.sqlStatement = sqlStatement;
 			this.sqlStatementIndex = sqlStatementIndex;
 			this.sqlResultType = sqlResultType;
@@ -1215,22 +1206,22 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class ExceptionMessageData extends MessageData
+	public static class ExceptionMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "EXCEPTION";
+		private static final long serialVersionUID = 1L;
 
 		private String content;
 
 		private String detailTrace;
 
-		public ExceptionMessageData()
+		public ExceptionMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
-		public ExceptionMessageData(String content)
+		public ExceptionMessage(String content)
 		{
-			super(TYPE);
+			super();
 			this.content = content;
 		}
 
@@ -1260,25 +1251,23 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class SQLExceptionMessageData extends ExceptionMessageData
+	public static class SQLExceptionMessage extends ExceptionMessage
 	{
-		public static final String TYPE = "SQLEXCEPTION";
+		private static final long serialVersionUID = 1L;
 
 		private SqlStatement sqlStatement;
 
 		/** SQL语句索引 */
 		private int sqlStatementIndex;
 
-		public SQLExceptionMessageData()
+		public SQLExceptionMessage()
 		{
 			super();
-			super.setType(TYPE);
 		}
 
-		public SQLExceptionMessageData(SqlStatement sqlStatement, int sqlStatementIndex, String content)
+		public SQLExceptionMessage(SqlStatement sqlStatement, int sqlStatementIndex, String content)
 		{
 			super(content);
-			super.setType(TYPE);
 			this.sqlStatement = sqlStatement;
 			this.sqlStatementIndex = sqlStatementIndex;
 		}
@@ -1304,9 +1293,9 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class SqlCommandMessageData extends MessageData
+	public static class SqlCommandMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "SQLCOMMAND";
+		private static final long serialVersionUID = 1L;
 
 		private SqlCommand sqlCommand;
 
@@ -1314,14 +1303,14 @@ public class SqlpadExecutionService extends PersistenceSupport
 
 		private SQLExecutionStat sqlExecutionStat;
 
-		public SqlCommandMessageData()
+		public SqlCommandMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
-		public SqlCommandMessageData(SqlCommand sqlCommand, String content)
+		public SqlCommandMessage(SqlCommand sqlCommand, String content)
 		{
-			super(TYPE);
+			super();
 			this.sqlCommand = sqlCommand;
 			this.content = content;
 		}
@@ -1357,10 +1346,10 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 
-	protected static class TextMessageData extends MessageData
+	public static class TextMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "TEXT";
-		
+		private static final long serialVersionUID = 1L;
+
 		public static final String TEXT_TYPE_WAIT_COR = "WAIT_COMMIT_OR_ROLLBACK";
 
 		private String text;
@@ -1369,14 +1358,14 @@ public class SqlpadExecutionService extends PersistenceSupport
 
 		private SQLExecutionStat sqlExecutionStat;
 
-		public TextMessageData()
+		public TextMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
-		public TextMessageData(String text)
+		public TextMessage(String text)
 		{
-			super(TYPE);
+			super();
 			this.text = text;
 		}
 
@@ -1411,15 +1400,15 @@ public class SqlpadExecutionService extends PersistenceSupport
 		}
 	}
 	
-	protected static class FinishMessageData extends MessageData
+	public static class FinishMessage extends SqlpadMessage
 	{
-		public static final String TYPE = "FINISH";
+		private static final long serialVersionUID = 1L;
 
-		private SQLExecutionStat sqlExecutionStat;
+		private SQLExecutionStat sqlExecutionStat = null;
 
-		public FinishMessageData()
+		public FinishMessage()
 		{
-			super(TYPE);
+			super();
 		}
 
 		public SQLExecutionStat getSqlExecutionStat()

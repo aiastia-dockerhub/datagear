@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -17,7 +17,7 @@
 
 package org.datagear.analysis.support.html;
 
-import org.datagear.analysis.ChartDataSet;
+import org.datagear.analysis.DataSetBind;
 import org.datagear.analysis.ChartDefinition;
 import org.datagear.analysis.ChartPlugin;
 import org.datagear.analysis.RenderContext;
@@ -35,14 +35,16 @@ import org.datagear.analysis.support.ChartWidget;
  */
 public class HtmlChartWidget extends ChartWidget
 {
+	private static final long serialVersionUID = 1L;
+
 	public HtmlChartWidget()
 	{
 		super();
 	}
 
-	public HtmlChartWidget(String id, String name, ChartDataSet[] chartDataSets, HtmlChartPlugin plugin)
+	public HtmlChartWidget(String id, String name, DataSetBind[] dataSetBinds, HtmlChartPlugin plugin)
 	{
-		super(id, name, chartDataSets, plugin);
+		super(id, name, dataSetBinds, plugin);
 	}
 
 	public HtmlChartWidget(ChartDefinition chartDefinition, HtmlChartPlugin plugin)

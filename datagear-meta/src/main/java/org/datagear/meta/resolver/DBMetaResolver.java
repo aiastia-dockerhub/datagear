@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -34,7 +34,7 @@ import org.datagear.meta.Table;
  * @author datagear@163.com
  *
  */
-public interface DBMetaResolver
+public interface DBMetaResolver extends TableTypeResolver
 {
 	/**
 	 * 获取{@linkplain Database}。
@@ -46,51 +46,74 @@ public interface DBMetaResolver
 	Database getDatabase(Connection cn) throws DBMetaResolverException;
 
 	/**
-	 * 获取所有{@linkplain SimpleTable}。
+	 * 获取当前连接用户的所有表。
 	 * 
 	 * @param cn
 	 * @return
 	 * @throws DBMetaResolverException
 	 */
-	List<SimpleTable> getSimpleTables(Connection cn) throws DBMetaResolverException;
+	List<SimpleTable> getTables(Connection cn) throws DBMetaResolverException;
 
 	/**
-	 * 随机获取一个{@linkplain SimpleTable}。
+	 * 获取当前连接用户的所有数据表。
 	 * <p>
-	 * 返回表的{@linkplain #isUserEntityDataTable(SimpleTable)}应为{@code true}。
+	 * 返回表的{@linkplain #isDataTable(Connection, SimpleTable)}为{@code true}。
+	 * </p>
+	 * 
+	 * @param cn
+	 * @return
+	 * @throws DBMetaResolverException
+	 */
+	List<SimpleTable> getDataTables(Connection cn) throws DBMetaResolverException;
+
+	/**
+	 * 获取当前连接用户的所有实体表。
+	 * <p>
+	 * 返回表的{@linkplain #isEntityTable(Connection, SimpleTable)}为{@code true}。
+	 * </p>
+	 * 
+	 * @param cn
+	 * @return
+	 * @throws DBMetaResolverException
+	 */
+	List<SimpleTable> getEntityTables(Connection cn) throws DBMetaResolverException;
+
+	/**
+	 * 随机获取当前连接用户的一个数据表。
+	 * <p>
+	 * 返回表的{@linkplain #isDataTable(Connection, SimpleTable)}应为{@code true}。
 	 * </p>
 	 * 
 	 * @param cn
 	 * @return 可能返回{@code null}
 	 * @throws DBMetaResolverException
 	 */
-	SimpleTable getRandomSimpleTable(Connection cn) throws DBMetaResolverException;
+	SimpleTable getRandomDataTable(Connection cn) throws DBMetaResolverException;
 
 	/**
-	 * 是否是用户数据表。
+	 * 获取准确表名。
 	 * <p>
-	 * 用户数据表是用户可创建，且包含数据的表。
+	 * 某些数据库的表名可能会区分大小写，导致此类的其他方法异常（比如{@linkplain #getTable(Connection, String)}会在给定的表名参数大小写不匹配时报找不到表错误），
+	 * 此时，可以使用这个方法获取准确表名后再尝试。
 	 * </p>
 	 * 
 	 * @param cn
-	 * @param table
-	 * @return
+	 * @param tableName
+	 * @return 数据库中准确使用的表名，可能是与{@code tableName}相同的，或者大小写不同的，{@code null}表示不存在
 	 * @throws DBMetaResolverException
 	 */
-	boolean isUserDataTable(Connection cn, SimpleTable table) throws DBMetaResolverException;
+	String getExactTableName(Connection cn, String tableName) throws DBMetaResolverException;
 
 	/**
-	 * 是否是用户数据实体表。
-	 * <p>
-	 * 用户数据实体表是用户可创建，且真实存储数据的表（非视图、别名、同义词）。
-	 * </p>
+	 * 获取准确表名。
 	 * 
 	 * @param cn
-	 * @param table
-	 * @return
+	 * @param tableNames
+	 * @return 元素为{@code null}表示不存在
 	 * @throws DBMetaResolverException
+	 * @see {@linkplain #getExactTableName(Connection, String)}
 	 */
-	boolean isUserDataEntityTable(Connection cn, SimpleTable table) throws DBMetaResolverException;
+	String[] getExactTableNames(Connection cn, String[] tableNames) throws DBMetaResolverException;
 
 	/**
 	 * 获取指定名称的{@linkplain Table}。
@@ -98,9 +121,10 @@ public interface DBMetaResolver
 	 * @param cn
 	 * @param tableName
 	 * @return
+	 * @throws TableNotFoundException
 	 * @throws DBMetaResolverException
 	 */
-	Table getTable(Connection cn, String tableName) throws DBMetaResolverException;
+	Table getTable(Connection cn, String tableName) throws TableNotFoundException, DBMetaResolverException;
 
 	/**
 	 * 获取指定表的所有{@linkplain Column}。
@@ -152,11 +176,13 @@ public interface DBMetaResolver
 	List<DataType> getDataTypes(Connection cn) throws DBMetaResolverException;
 
 	/**
-	 * 获取导入键表名洌表。
+	 * 获取导入键表名列表。
 	 * 
 	 * @param cn
 	 * @param tableNames
+	 *            元素允许为{@code null}
 	 * @return
+	 * @throws DBMetaResolverException
 	 */
-	List<String[]> getImportTables(Connection cn, String... tableNames);
+	List<String[]> getImportTables(Connection cn, String... tableNames) throws DBMetaResolverException;
 }

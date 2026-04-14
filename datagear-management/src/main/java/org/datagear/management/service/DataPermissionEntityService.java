@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.datagear.management.domain.Authorization;
 import org.datagear.management.domain.DataPermissionEntity;
+import org.datagear.management.domain.Entity;
 import org.datagear.management.domain.User;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
@@ -34,36 +35,9 @@ import org.datagear.persistence.Query;
  * @param <ID>
  * @param <T>
  */
-public interface DataPermissionEntityService<ID, T extends DataPermissionEntity<ID>>
+public interface DataPermissionEntityService<ID, T extends DataPermissionEntity & Entity<ID>>
 		extends EntityService<ID, T>, AuthorizationListener
 {
-	/** 数据权限参数：当前用户，参考commonDataPermissionSqls.xml */
-	String DATA_PERMISSION_PARAM_CURRENT_USER = "DP_CURRENT_USER";
-
-	/** 数据权限参数：资源类型，参考commonDataPermissionSqls.xml */
-	String DATA_PERMISSION_PARAM_RESOURCE_TYPE = "DP_RESOURCE_TYPE";
-
-	/** 数据权限参数：资源是否有创建用户，参考commonDataPermissionSqls.xml */
-	String DATA_PERMISSION_PARAM_RESOURCE_HAS_CREATOR = "DP_RESOURCE_HAS_CREATOR";
-
-	/** 数据权限参数：最小读权限值 */
-	String DATA_PERMISSION_PARAM_MIN_READ_PERMISSION = "DP_MIN_READ_PERMISSION";
-
-	/** 数据权限参数：最大权限值 */
-	String DATA_PERMISSION_PARAM_MAX_PERMISSION = "DP_MAX_PERMISSION";
-
-	/** 数据权限参数：未设置任何权限时的默认权限值 */
-	String DATA_PERMISSION_PARAM_UNSET_PERMISSION = "DP_UNSET_PERMISSION";
-
-	/** 查询过滤值：我的 */
-	String DATA_FILTER_VALUE_MINE = "mine";
-
-	/** 查询过滤值：其他人的 */
-	String DATA_FILTER_VALUE_OTHER = "other";
-
-	/** 查询过滤值：全部 */
-	String DATA_FILTER_VALUE_ALL = "all";
-
 	/**
 	 * {@linkplain DataPermissionEntity#getDataPermission()}的权限值标识，表明未加载实际权限值
 	 */

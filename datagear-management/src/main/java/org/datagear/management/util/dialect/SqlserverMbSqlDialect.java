@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,16 +25,16 @@ package org.datagear.management.util.dialect;
  */
 public class SqlserverMbSqlDialect extends MbSqlDialect
 {
-	public static final String DEFAULT_FUNC_PREFIX = "dbo.";
-
 	public SqlserverMbSqlDialect()
 	{
 		super();
+		setGlobalVariable(new SqlserverMbGlobalVariable());
 	}
 
 	public SqlserverMbSqlDialect(String identifierQuote)
 	{
 		super(identifierQuote);
+		setGlobalVariable(new SqlserverMbGlobalVariable());
 	}
 
 	@Override
@@ -53,11 +53,5 @@ public class SqlserverMbSqlDialect extends MbSqlDialect
 	public String pagingSqlFoot(int index, int fetchSize)
 	{
 		return null;
-	}
-
-	@Override
-	public String funcNameModInt()
-	{
-		return DEFAULT_FUNC_PREFIX + super.funcNameModInt();
 	}
 }

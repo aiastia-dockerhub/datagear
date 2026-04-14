@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -21,6 +21,7 @@ import java.io.File;
 
 import org.datagear.analysis.DataSetQuery;
 import org.datagear.analysis.support.AbstractDataSet;
+import org.datagear.analysis.support.FileResolvedInfo;
 import org.datagear.util.FileUtil;
 
 /**
@@ -59,7 +60,7 @@ public interface DirectoryFileDataSetEntity extends DataSetEntity
 	/**
 	 * 获取用户上传文件的存储目录。
 	 * 
-	 * @return
+	 * @return 当{@linkplain #getFileSourceType()}为{@linkplain #FILE_SOURCE_TYPE_UPLOAD}时不应为{@code null}
 	 */
 	File getDirectory();
 
@@ -73,7 +74,7 @@ public interface DirectoryFileDataSetEntity extends DataSetEntity
 	/**
 	 * 获取用户上传文件的文件名。
 	 * 
-	 * @return
+	 * @return 当{@linkplain #getFileSourceType()}为{@linkplain #FILE_SOURCE_TYPE_UPLOAD}时不应为{@code null}
 	 */
 	String getFileName();
 
@@ -101,26 +102,26 @@ public interface DirectoryFileDataSetEntity extends DataSetEntity
 	/**
 	 * 获取服务器端文件所在的目录。
 	 * 
-	 * @return
+	 * @return 当{@linkplain #getFileSourceType()}为{@linkplain #FILE_SOURCE_TYPE_SERVER}时不应为{@code null}
 	 */
-	DataSetResDirectory getDataSetResDirectory();
+	FileSource getFileSource();
 
 	/**
 	 * 设置服务器端文件所在的目录。
 	 * 
-	 * @param dataSetResDirectory
+	 * @param fileSource
 	 */
-	void setDataSetResDirectory(DataSetResDirectory dataSetResDirectory);
+	void setFileSource(FileSource fileSource);
 
 	/**
-	 * 获取服务器端文件的文件名（相对于{@linkplain #getDataSetResDirectory()}）。
+	 * 获取服务器端文件的文件名（相对于{@linkplain #getFileSource()}）。
 	 * 
-	 * @return
+	 * @return 当{@linkplain #getFileSourceType()}为{@linkplain #FILE_SOURCE_TYPE_SERVER}时不应为{@code null}
 	 */
 	String getDataSetResFileName();
 
 	/**
-	 * 设置服务器端文件的文件名（相对于{@linkplain #getDataSetResDirectory()}）。
+	 * 设置服务器端文件的文件名（相对于{@linkplain #getFileSource()}）。
 	 * 
 	 * @param fileName
 	 */
@@ -138,28 +139,34 @@ public interface DirectoryFileDataSetEntity extends DataSetEntity
 	 */
 	String resolveTemplateFileName(String fileName, DataSetQuery query);
 
-	FileSupport FILE_SUPPORT = new FileSupport();
-
-	class FileSupport
+	/**
+	 * 获取文件。
+	 * 
+	 * @param query
+	 * @return
+	 * @throws Throwable
+	 */
+	default FileResolvedInfo getFileForDataSetQuery(DataSetQuery query) throws Throwable
 	{
-		public File getFile(DirectoryFileDataSetEntity entity, DataSetQuery query) throws Throwable
+		File file = null;
+
+		if (FILE_SOURCE_TYPE_UPLOAD.equals(getFileSourceType()))
 		{
-			File file = null;
+			file = FileUtil.getFile(getDirectory(), getFileName());
 
-			if (FILE_SOURCE_TYPE_UPLOAD.equals(entity.getFileSourceType()))
-				file = FileUtil.getFile(entity.getDirectory(), entity.getFileName());
-			else if (FILE_SOURCE_TYPE_SERVER.equals(entity.getFileSourceType()))
-			{
-				// 服务器端文件名允许参数化
-				String fileName = entity.resolveTemplateFileName(entity.getDataSetResFileName(), query);
-
-				File directory = FileUtil.getDirectory(entity.getDataSetResDirectory().getDirectory(), false);
-				file = FileUtil.getFile(directory, fileName, false);
-			}
-			else
-				throw new IllegalStateException("Unknown file source type :" + entity.getFileSourceType());
-
-			return file;
+			return new FileResolvedInfo(file);
 		}
+		else if (FILE_SOURCE_TYPE_SERVER.equals(getFileSourceType()))
+		{
+			// 服务器端文件名允许参数化
+			String fileName = resolveTemplateFileName(getDataSetResFileName(), query);
+
+			File directory = FileUtil.getDirectory(getFileSource().getDirectory(), false);
+			file = FileUtil.getFile(directory, fileName, false);
+
+			return new FileResolvedInfo(file, fileName);
+		}
+		else
+			throw new IllegalStateException("Unknown file source type :" + getFileSourceType());
 	}
 }

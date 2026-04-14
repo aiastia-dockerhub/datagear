@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -94,7 +94,7 @@ public class InvalidPatternSqlValidator extends AbstractSqlValidator
 	{
 		SqlValidation validation = new SqlValidation(true);
 		
-		sql = replaceSqlIfNeed(sql, profile);
+		sql = simplifySqlIfNeed(sql, profile);
 
 		List<Pattern> patterns = findPatterns(profile);
 		
@@ -136,7 +136,7 @@ public class InvalidPatternSqlValidator extends AbstractSqlValidator
 		return new SqlValidation(sql.substring(start, end));
 	}
 
-	protected String replaceSqlIfNeed(String sql, DatabaseProfile profile)
+	protected String simplifySqlIfNeed(String sql, DatabaseProfile profile)
 	{
 		if (sql == null)
 			sql = "";
@@ -144,11 +144,11 @@ public class InvalidPatternSqlValidator extends AbstractSqlValidator
 		if (!this.ignoreSqlString && !this.ignoreQuoteIdentifier)
 			return sql;
 
-		SqlReplacer sr = new SqlReplacer();
-		sr.setReplaceSqlString(this.ignoreSqlString);
-		sr.setReplaceQuoteIdentifier(this.ignoreQuoteIdentifier);
+		SqlSimplifier sr = new SqlSimplifier(profile.getIdentifierQuote());
+		sr.setHandleString(this.ignoreSqlString);
+		sr.setHandleQuoteIdentifier(this.ignoreQuoteIdentifier);
 
-		return sr.replace(sql, profile.getIdentifierQuote());
+		return sr.simplify(sql);
 	}
 
 	/**

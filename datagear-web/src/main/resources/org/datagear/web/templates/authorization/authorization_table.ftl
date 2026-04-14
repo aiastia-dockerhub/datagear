@@ -1,6 +1,6 @@
 <#--
  *
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -27,14 +27,14 @@
 	<#include "../include/html_app_name_suffix.ftl">
 </title>
 </head>
-<body class="p-card no-border">
+<body class="p-card no-border h-screen m-0">
 <#include "../include/page_obj.ftl">
-<div id="${pid}" class="page page-manager page-table">
-	<div class="page-header grid align-items-center">
+<div id="${pid}" class="page page-manager page-table h-full flex flex-column overflow-auto">
+	<div class="page-header grid grid-nogutter align-items-center p-1 flex-grow-0">
 		<div class="col-12" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-4'">
 			<#include "../include/page_search_form.ftl">
 		</div>
-		<div class="h-opts col-12 text-right" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
+		<div class="operations col-12 flex gap-1 flex-wrap md:justify-content-end" :class="pm.isSelectAction ? 'md:col-6' : 'md:col-8'">
 			<p-button label="<@spring.message code='confirm' />" @click="onSelect" v-if="pm.isSelectAction"></p-button>
 			
 			<p-button label="<@spring.message code='add' />" @click="onAdd" v-if="!pm.isReadonlyAction"></p-button>
@@ -43,11 +43,11 @@
 			<p-button label="<@spring.message code='delete' />" @click="onDelete" class="p-button-danger" v-if="!pm.isReadonlyAction"></p-button>
 		</div>
 	</div>
-	<div class="page-content">
+	<div class="page-content flex-grow-1 overflow-auto">
 		<p-datatable :value="pm.items" :scrollable="true" scroll-height="flex"
 			:loading="pm.loading" :lazy="true"
 			sort-mode="multiple" :multi-sort-meta="pm.multiSortMeta" @sort="onSort($event)"
-			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" dataKey="id" striped-rows>
+			v-model:selection="pm.selectedItems" :selection-mode="pm.selectionMode" data-key="id" striped-rows>
 			<p-column :selection-mode="pm.selectionMode" :frozen="true" class="col-check"></p-column>
 			<p-column field="id" header="<@spring.message code='id' />" :hidden="true"></p-column>
 			<p-column field="principalType" header="<@spring.message code='${resourceMeta.authPrincipalTypeLabel}' />"
@@ -85,6 +85,22 @@
 		return "/authorization/${resourceMeta.resourceType}/" + encodeURIComponent("${resource?js_string?no_esc}") + "/" + action;
 	};
 	
+	po.formatPrincipalType = function(auth)
+	{
+		var pt = auth.principalType;
+		
+		if(pt == "${Authorization.PRINCIPAL_TYPE_USER}")
+			return "<@spring.message code='authorization.principalType.USER' />";
+		else if(pt == "${Authorization.PRINCIPAL_TYPE_ROLE}")
+			return "<@spring.message code='authorization.principalType.ROLE' />";
+		else if(pt == "${Authorization.PRINCIPAL_TYPE_ANONYMOUS}")
+			return "<@spring.message code='authorization.principalType.ANONYMOUS' />";
+		else if(pt == "${Authorization.PRINCIPAL_TYPE_ALL}")
+			return "<@spring.message code='authorization.principalType.ALL' />";
+		else
+			return pt;
+	};
+	
 	po.vuePageModel(
 	{
 		enableSetEnable: po.enableSetEnable,
@@ -100,18 +116,7 @@
 	{
 		formatPrincipalType: function(data)
 		{
-			var pt = data.principalType;
-			
-			if(pt == "${Authorization.PRINCIPAL_TYPE_USER}")
-				return "<@spring.message code='authorization.principalType.USER' />";
-			else if(pt == "${Authorization.PRINCIPAL_TYPE_ROLE}")
-				return "<@spring.message code='authorization.principalType.ROLE' />";
-			else if(pt == "${Authorization.PRINCIPAL_TYPE_ANONYMOUS}")
-				return "<@spring.message code='authorization.principalType.ANONYMOUS' />";
-			else if(pt == "${Authorization.PRINCIPAL_TYPE_ALL}")
-				return "<@spring.message code='authorization.principalType.ALL' />";
-			else
-				return "";
+			return po.formatPrincipalType(data);
 		},
 		formatEnabled: function(data)
 		{
@@ -142,10 +147,9 @@
 			po.handleSelectAction();
 		}
 	});
-	
-	po.vueMount();
 })
 (${pid});
 </script>
+<#include "../include/page_vue_mount.ftl">
 </body>
 </html>

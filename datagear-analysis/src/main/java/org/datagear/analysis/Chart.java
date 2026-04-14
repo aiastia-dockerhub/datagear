@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -25,6 +25,8 @@ package org.datagear.analysis;
  */
 public class Chart extends ChartDefinition
 {
+	private static final long serialVersionUID = 1L;
+
 	private ChartPlugin plugin;
 
 	private RenderContext renderContext;
@@ -34,9 +36,9 @@ public class Chart extends ChartDefinition
 		super();
 	}
 
-	public Chart(String id, String name, ChartDataSet[] chartDataSets, ChartPlugin plugin, RenderContext renderContext)
+	public Chart(String id, String name, DataSetBind[] dataSetBinds, ChartPlugin plugin, RenderContext renderContext)
 	{
-		super(id, name, chartDataSets);
+		super(id, name, dataSetBinds);
 		this.plugin = plugin;
 		this.renderContext = renderContext;
 	}

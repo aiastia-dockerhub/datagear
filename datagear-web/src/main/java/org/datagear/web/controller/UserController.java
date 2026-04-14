@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -31,18 +31,18 @@ import javax.servlet.http.HttpServletResponse;
 import org.datagear.management.domain.Role;
 import org.datagear.management.domain.User;
 import org.datagear.management.service.RoleService;
-import org.datagear.management.service.SchemaService;
 import org.datagear.management.service.UserService;
+import org.datagear.management.util.RoleSpec;
 import org.datagear.persistence.PagingData;
 import org.datagear.persistence.PagingQuery;
 import org.datagear.util.IDUtil;
 import org.datagear.web.config.ApplicationProperties;
 import org.datagear.web.util.OperationMessage;
-import org.datagear.web.util.WebUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -65,10 +65,10 @@ public class UserController extends AbstractController
 	private RoleService roleService;
 
 	@Autowired
-	private SchemaService schemaService;
+	private ApplicationProperties applicationProperties;
 
 	@Autowired
-	private ApplicationProperties applicationProperties;
+	private RoleSpec roleSpec;
 
 	public UserController()
 	{
@@ -95,16 +95,6 @@ public class UserController extends AbstractController
 		this.roleService = roleService;
 	}
 
-	public SchemaService getSchemaService()
-	{
-		return schemaService;
-	}
-
-	public void setSchemaService(SchemaService schemaService)
-	{
-		this.schemaService = schemaService;
-	}
-
 	public ApplicationProperties getApplicationProperties()
 	{
 		return applicationProperties;
@@ -115,58 +105,92 @@ public class UserController extends AbstractController
 		this.applicationProperties = applicationProperties;
 	}
 
-	@RequestMapping("/add")
-	public String add(HttpServletRequest request, org.springframework.ui.Model model)
+	public RoleSpec getRoleSpec()
 	{
-		User user = new User();
+		return roleSpec;
+	}
 
-		Set<Role> dftRoles = RegisterController.buildUserRolesForSave(this.applicationProperties.getDefaultRoleAdd());
+	public void setRoleSpec(RoleSpec roleSpec)
+	{
+		this.roleSpec = roleSpec;
+	}
+
+	@RequestMapping("/add")
+	public String add(HttpServletRequest request, Model model)
+	{
+		setFormAction(model, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
+
+		User entity = createAdd(request, model);
+		setFormPageAttr(request, model, entity);
+		model.addAttribute("enablePassword", true);
+
+		return "/user/user_form";
+	}
+
+	protected User createAdd(HttpServletRequest request, Model model)
+	{
+		User entity = createInstance();
+		setAddUserRoles(request, entity);
+
+		return entity;
+	}
+
+	protected void setAddUserRoles(HttpServletRequest request, User entity)
+	{
+		Set<Role> dftRoles = this.roleSpec.buildRolesByIds(this.applicationProperties.getDefaultRoleAdd(), true);
 		Set<Role> addRoles = new HashSet<Role>(dftRoles.size());
+
 		for (Role r : dftRoles)
 		{
 			Role role = this.roleService.getById(r.getId());
 			if (role != null)
 				addRoles.add(role);
 		}
-		user.setRoles(addRoles);
 
-		setFormModel(model, user, REQUEST_ACTION_ADD, SUBMIT_ACTION_SAVE_ADD);
-
-		return "/user/user_form";
+		entity.setRoles(addRoles);
 	}
 
 	@RequestMapping(value = "/saveAdd", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> saveAdd(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody User user)
+			@RequestBody User entity)
 	{
-		if (isBlank(user.getName()) || isBlank(user.getPassword()))
+		entity.setId(IDUtil.randomIdOnTime20());
+		// 禁用新建管理员账号功能
+		entity.setAdmin(User.isAdminUser(entity));
+		inflateCreateTime(entity);
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+
+		if (isBlank(entity.getPassword()))
 			throw new IllegalInputException();
 
-		User namedUser = this.userService.getByNameNoPassword(user.getName());
+		User namedEntity = this.userService.getByNameNoPassword(entity.getName());
 
-		if (namedUser != null)
-			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", user.getName());
+		if (namedEntity != null)
+			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", entity.getName());
 
-		user.setId(IDUtil.randomIdOnTime20());
-		// 禁用新建管理员账号功能
-		user.setAdmin(User.isAdminUser(user));
+		saveAddUser(entity);
 
-		this.userService.add(user);
+		toFormResponseData(request, entity);
 
-		return optSuccessDataResponseEntity(request, user);
+		return optSuccessDataResponseEntity(request, entity);
+	}
+
+	protected void saveAddUser(User entity)
+	{
+		this.userService.add(entity);
 	}
 
 	@RequestMapping("/edit")
-	public String edit(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+	public String edit(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestParam("id") String id)
 	{
-		User user = this.userService.getByIdNoPassword(id);
+		setFormAction(model, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
 
-		if (user == null)
-			throw new RecordNotFoundException();
-
-		setFormModel(model, user, REQUEST_ACTION_EDIT, SUBMIT_ACTION_SAVE_EDIT);
+		User entity = getByIdForEdit(this.userService, id);
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 
 		return "/user/user_form";
 	}
@@ -174,48 +198,99 @@ public class UserController extends AbstractController
 	@RequestMapping(value = "/saveEdit", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> saveEdit(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody User user)
+			@RequestBody User entity)
 	{
-		if (isBlank(user.getName()))
+		// 禁用新建管理员账号功能
+		entity.setAdmin(User.isAdminUser(entity));
+		inflateSaveEntity(request, entity);
+		checkSaveEntity(request, entity);
+
+		User namedEntity = this.userService.getByNameNoPassword(entity.getName());
+
+		if (namedEntity != null && !namedEntity.getId().equals(entity.getId()))
+			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", entity.getName());
+
+		saveEditUser(entity);
+
+		toFormResponseData(request, entity);
+
+		return optSuccessDataResponseEntity(request, entity);
+	}
+
+	protected void saveEditUser(User entity)
+	{
+		this.userService.update(entity);
+	}
+
+	@RequestMapping("/editPsd")
+	public String editPassword(HttpServletRequest request, HttpServletResponse response,
+			Model model, @RequestParam("id") String id)
+	{
+		setFormAction(model, "editPassword", "saveEditPsd");
+
+		User entity = this.userService.getByIdSimple(id);
+		checkNonNullEntity(entity);
+
+		EditPsdForm form = toEditPsdForm(entity);
+		toFormResponseData(request, form);
+
+		setFormModel(model, form);
+		model.addAttribute("enableOldPassword", false);
+		setUserPasswordStrengthInfo(request, model);
+
+		return "/user/user_psd_form";
+	}
+
+	@RequestMapping(value = "/saveEditPsd", produces = CONTENT_TYPE_JSON)
+	@ResponseBody
+	public ResponseEntity<OperationMessage> saveEditPassword(HttpServletRequest request, HttpServletResponse response,
+			@RequestBody EditPsdForm entity)
+	{
+		if (isEmpty(entity.getId()) || isBlank(entity.getPassword()))
 			throw new IllegalInputException();
 
-		User namedUser = this.userService.getByNameNoPassword(user.getName());
+		this.userService.updatePasswordById(entity.getId(), entity.getPassword(), true);
 
-		if (namedUser != null && !namedUser.getId().equals(user.getId()))
-			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", user.getName());
+		toFormResponseData(request, entity);
 
-		// 禁用新建管理员账号功能
-		user.setAdmin(User.isAdminUser(user));
+		return optSuccessDataResponseEntity(request, entity);
+	}
 
-		this.userService.update(user);
-
-		return optSuccessDataResponseEntity(request, user);
+	protected void toFormResponseData(HttpServletRequest request, EditPsdForm entity)
+	{
+		entity.setPassword("");
 	}
 
 	@RequestMapping("/view")
-	public String view(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+	public String view(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestParam("id") String id)
 	{
-		User user = this.userService.getByIdNoPassword(id);
+		setFormAction(model, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
 
-		if (user == null)
-			throw new RecordNotFoundException();
-
-		setFormModel(model, user, REQUEST_ACTION_VIEW, SUBMIT_ACTION_NONE);
+		User entity = getByIdForView(this.userService, id);
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 
 		return "/user/user_form";
 	}
 
 	@RequestMapping("/delete")
-	public String delete(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model,
+	public String delete(HttpServletRequest request, HttpServletResponse response, Model model,
 			@RequestParam("id") String[] ids)
 	{
 		if (isEmpty(ids))
 			throw new IllegalInputException();
 
+		setFormAction(model, REQUEST_ACTION_DELETE, "deleteDo");
+
 		List<User> users = this.userService.getByIdsSimple(ids, true);
 
-		setFormModel(model, users, REQUEST_ACTION_DELETE, "deleteDo");
+		for (User user : users)
+		{
+			toFormResponseData(request, user);
+		}
+
+		setFormModel(model, users);
 
 		return "/user/user_delete";
 	}
@@ -244,46 +319,55 @@ public class UserController extends AbstractController
 		return optSuccessResponseEntity(request);
 	}
 
-	@RequestMapping("/pagingQuery")
-	public String pagingQuery(HttpServletRequest request, HttpServletResponse response,
-			org.springframework.ui.Model model)
+	@RequestMapping("/manage")
+	public String manage(HttpServletRequest request, HttpServletResponse response,
+			Model model)
 	{
-		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_QUERY);
-		setReadonlyActionByRole(model, WebUtils.getUser());
+		setQueryDataUrl(model, "/user/pagingQueryData");
+		model.addAttribute(KEY_REQUEST_ACTION, REQUEST_ACTION_MANAGE);
+		setReadonlyAction(model);
+
 		return "/user/user_table";
 	}
 
 	@RequestMapping(value = "/select")
-	public String select(HttpServletRequest request, HttpServletResponse response, org.springframework.ui.Model model)
+	public String select(HttpServletRequest request, HttpServletResponse response, Model model)
 	{
+		setQueryDataUrl(model, "/user/pagingQueryData");
 		setSelectAction(request, model);
+
 		return "/user/user_table";
 	}
 
 	@RequestMapping(value = "/pagingQueryData", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public PagingData<User> pagingQueryData(HttpServletRequest request, HttpServletResponse response,
-			final org.springframework.ui.Model springModel, @RequestBody(required = false) PagingQuery pagingQueryParam)
+			final Model springModel, @RequestBody(required = false) PagingQuery pagingQueryParam)
 			throws Exception
 	{
 		PagingQuery pagingQuery = inflatePagingQuery(request, pagingQueryParam);
+
 		PagingData<User> pagingData = this.userService.pagingQuery(pagingQuery);
+		toQueryResponseData(request, pagingData.getItems());
+
 		return pagingData;
 	}
 
 	@RequestMapping("/personalSet")
 	public String personalSet(HttpServletRequest request, HttpServletResponse response,
-			org.springframework.ui.Model model)
+			Model model)
 	{
-		User operator = WebUtils.getUser();
+		User user = getCurrentUser();
+		setFormAction(model, "personalSet", "savePersonalSet");
 
-		User user = this.userService.getByIdNoPassword(operator.getId());
+		User entity = this.userService.getByIdNoPassword(user.getId());
+		checkNonNullEntity(entity);
 
-		if (user == null)
-			throw new RecordNotFoundException();
+		toFormResponseData(request, entity);
+		setFormPageAttr(request, model, entity);
 
 		model.addAttribute("disableRoles", true);
-		setFormModel(model, user, "personalSet", "savePersonalSet");
+		model.addAttribute("disableEditName", getApplicationProperties().isDisablePersonalSetName());
 
 		return "/user/user_form";
 	}
@@ -291,33 +375,135 @@ public class UserController extends AbstractController
 	@RequestMapping(value = "/savePersonalSet", produces = CONTENT_TYPE_JSON)
 	@ResponseBody
 	public ResponseEntity<OperationMessage> savePersonalSet(HttpServletRequest request, HttpServletResponse response,
-			@RequestBody User user)
+			@RequestBody User entity)
 	{
-		if (isBlank(user.getName()))
+		if (isBlank(entity.getName()))
 			throw new IllegalInputException();
 
-		User operator = WebUtils.getUser();
+		User user = getCurrentUser();
 
-		user.setId(operator.getId());
-
-		User namedUser = this.userService.getByNameNoPassword(user.getName());
-
-		if (namedUser != null && !namedUser.getId().equals(user.getId()))
-			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", user.getName());
-
+		entity.setId(user.getId());
 		// 禁用新建管理员账号功能
-		user.setAdmin(User.isAdminUser(user));
+		entity.setAdmin(User.isAdminUser(entity));
+		inflateSaveEntity(request, entity);
 
-		this.userService.updateIgnoreRole(user);
+		if (getApplicationProperties().isDisablePersonalSetName())
+		{
+			User persist = getByIdForView(this.userService, entity.getId());
+			entity.setName(persist.getName());
+		}
+		else
+		{
+			User namedEntity = this.userService.getByNameNoPassword(entity.getName());
+
+			if (namedEntity != null && !namedEntity.getId().equals(entity.getId()))
+				return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "usernameExists", entity.getName());
+		}
+
+		savePersonalSetUser(entity);
+
+		toFormResponseData(request, entity);
+
+		return optSuccessDataResponseEntity(request, entity);
+	}
+
+	protected void savePersonalSetUser(User entity)
+	{
+		this.userService.updateIgnoreRole(entity);
+	}
+
+	@RequestMapping("/personalPsd")
+	public String personalPsd(HttpServletRequest request, HttpServletResponse response,
+			Model model)
+	{
+		User user = getCurrentUser();
+		setFormAction(model, "editPassword", "savePersonalPsd");
+
+		User entity = this.userService.getByIdSimple(user.getId());
+		checkNonNullEntity(entity);
+
+		setFormModel(model, toPersonalEditPsdForm(entity));
+		model.addAttribute("enableOldPassword", true);
+		setUserPasswordStrengthInfo(request, model);
+
+		return "/user/user_psd_form";
+	}
+
+	@RequestMapping(value = "/savePersonalPsd", produces = CONTENT_TYPE_JSON)
+	@ResponseBody
+	public ResponseEntity<OperationMessage> savePersonalPsd(HttpServletRequest request, HttpServletResponse response,
+			@RequestBody PersonalEditPsdForm form)
+	{
+		if (isBlank(form.getOldPassword()) || isBlank(form.getPassword()))
+			throw new IllegalInputException();
+
+		User user = getCurrentUser();
+
+		if (!this.userService.isPasswordMatchById(user.getId(), form.getOldPassword()))
+			return optFailResponseEntity(request, HttpStatus.BAD_REQUEST, "oldPasswordError");
+
+		this.userService.updatePasswordById(user.getId(), form.getPassword(), true);
 
 		return optSuccessResponseEntity(request);
 	}
 
-	protected List<Role> toUserRolesList(User user)
+	protected void checkSaveEntity(HttpServletRequest request, User entity)
+	{
+		if (isEmpty(entity.getId()) || isBlank(entity.getName()))
+			throw new IllegalInputException();
+	}
+
+	protected void setFormPageAttr(HttpServletRequest request, Model model, User entity)
+	{
+		setFormModel(model, entity);
+		setUserPasswordStrengthInfo(request, model);
+	}
+
+	protected void inflateSaveEntity(HttpServletRequest request, User entity)
+	{
+	}
+
+	protected void toFormResponseData(HttpServletRequest request, User entity)
+	{
+		entity.clearPassword();
+	}
+
+	protected void toQueryResponseData(HttpServletRequest request, List<User> items)
+	{
+		for (User item : items)
+			item.clearPassword();
+	}
+
+	protected User createInstance()
+	{
+		return new User();
+	}
+
+	protected void setUserPasswordStrengthInfo(HttpServletRequest request, Model model)
+	{
+		ApplicationProperties properties = getApplicationProperties();
+
+		model.addAttribute("userPasswordStrengthRegex", properties.getUserPasswordStrengthRegex());
+		model.addAttribute("userPasswordStrengthTip", properties.getUserPasswordStrengthTip());
+	}
+
+	protected EditPsdForm toEditPsdForm(User entity)
+	{
+		EditPsdForm fm = new EditPsdForm(entity.getId(), entity.getName());
+		return fm;
+	}
+
+	protected PersonalEditPsdForm toPersonalEditPsdForm(User entity)
+	{
+		PersonalEditPsdForm fm = new PersonalEditPsdForm(entity.getId(), entity.getName());
+		return fm;
+	}
+
+	protected List<Role> toUserRolesList(User entity)
 	{
 		List<Role> list = new ArrayList<Role>();
 
-		Set<Role> roles = (user == null ? null : user.getRoles());
+		Set<Role> roles = (entity == null ? null : entity.getRoles());
 		if (roles != null)
 			list.addAll(roles);
 
@@ -366,6 +552,89 @@ public class UserController extends AbstractController
 		public void setMigrateToId(String migrateToId)
 		{
 			this.migrateToId = migrateToId;
+		}
+	}
+
+	public static class EditPsdForm implements ControllerForm
+	{
+		private static final long serialVersionUID = 1L;
+
+		private String id;
+
+		/** 用户名 */
+		private String name;
+
+		/** 新密码 */
+		private String password;
+
+		public EditPsdForm()
+		{
+			super();
+		}
+
+		public EditPsdForm(String id, String name)
+		{
+			super();
+			this.id = id;
+			this.name = name;
+		}
+
+		public String getId()
+		{
+			return id;
+		}
+
+		public void setId(String id)
+		{
+			this.id = id;
+		}
+
+		public String getName()
+		{
+			return name;
+		}
+
+		public void setName(String name)
+		{
+			this.name = name;
+		}
+
+		public String getPassword()
+		{
+			return password;
+		}
+
+		public void setPassword(String password)
+		{
+			this.password = password;
+		}
+	}
+
+	public static class PersonalEditPsdForm extends EditPsdForm implements ControllerForm
+	{
+		private static final long serialVersionUID = 1L;
+
+		/** 旧密码 */
+		private String oldPassword;
+
+		public PersonalEditPsdForm()
+		{
+			super();
+		}
+
+		public PersonalEditPsdForm(String id, String name)
+		{
+			super(id, name);
+		}
+
+		public String getOldPassword()
+		{
+			return oldPassword;
+		}
+
+		public void setOldPassword(String oldPassword)
+		{
+			this.oldPassword = oldPassword;
 		}
 	}
 }

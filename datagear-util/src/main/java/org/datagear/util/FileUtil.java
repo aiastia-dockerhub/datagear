@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -23,9 +23,11 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 文件工具类。
@@ -79,6 +81,21 @@ public class FileUtil
 			rp = rp.substring(PATH_SEPARATOR.length());
 
 		return rp;
+	}
+
+	/**
+	 * 获取指定名称的同级文件。
+	 * 
+	 * @param file
+	 * @param name
+	 * @return
+	 */
+	public static File getSibling(File file, String name)
+	{
+		Path fp = file.toPath();
+		Path tp = fp.resolveSibling(name);
+
+		return tp.toFile();
 	}
 
 	/**
@@ -319,6 +336,38 @@ public class FileUtil
 	}
 
 	/**
+	 * 删除所有空子目录。
+	 * 
+	 * @param file
+	 * @param deleteSelf
+	 *            如果{@code file}为空，是否删除
+	 */
+	public static void deleteEmptySubDirectory(File file, boolean deleteSelf)
+	{
+		if (!file.exists() || !file.isDirectory())
+			return;
+
+		File[] children = file.listFiles();
+
+		if (children != null)
+		{
+			for (File child : children)
+			{
+				if (child.isDirectory())
+					deleteEmptySubDirectory(child, true);
+			}
+		}
+
+		children = file.listFiles();
+
+		if (children == null || children.length == 0)
+		{
+			if (deleteSelf)
+				file.delete();
+		}
+	}
+
+	/**
 	 * 在指定目录下生成一个文件。
 	 * 
 	 * @param parent
@@ -373,6 +422,48 @@ public class FileUtil
 			return new String[0];
 
 		return directory.list();
+	}
+
+	/**
+	 * 列出给定目录内的所有文件（包含子目录、子目录内文件）。
+	 * 
+	 * @param directory
+	 * @return 如果不是目录或者不存在，将返回空列表；元素按深度优先、名称排列
+	 */
+	public static List<File> listAll(File directory)
+	{
+		if (!directory.exists() || !directory.isDirectory())
+			return Collections.emptyList();
+
+		List<File> files = new ArrayList<>();
+		listAll(directory, files);
+
+		return files;
+	}
+
+	protected static void listAll(File directory, List<File> files)
+	{
+		File[] children = directory.listFiles();
+
+		if (children == null)
+			return;
+
+		Arrays.sort(children, new Comparator<File>()
+		{
+			@Override
+			public int compare(File o1, File o2)
+			{
+				return o1.getName().compareTo(o2.getName());
+			}
+		});
+
+		for (File child : children)
+		{
+			files.add(child);
+
+			if (child.isDirectory())
+				listAll(child, files);
+		}
 	}
 
 	/**
@@ -643,6 +734,57 @@ public class FileUtil
 	}
 
 	/**
+	 * 转换为展示路径。
+	 * <p>
+	 * 分隔符统一采用{@code "/"}，目录末尾统一添加{@code "/"}。
+	 * </p>
+	 * <p>
+	 * 如果{@code path}为{@code null}或{@code ""}，将直接返回它。
+	 * </p>
+	 * 
+	 * @param path
+	 *            允许{@code null}
+	 * @param directory
+	 * @return
+	 */
+	public static String toDisplayPath(String path, boolean directory)
+	{
+		return toDisplayPath(path, directory, false);
+	}
+
+	/**
+	 * 转换为展示路径。
+	 * <p>
+	 * 分隔符统一采用{@code "/"}，目录末尾统一添加{@code "/"}。
+	 * </p>
+	 * <p>
+	 * 如果{@code path}为{@code null}，将直接返回{@code null}；
+	 * 如果{@code path}为{@code ""}，且{@code directory}与{@code addSlashIfEmptyDir}都为{@code true}，将返回{@code "/"}，否则，将直接返回{@code ""}。
+	 * </p>
+	 * 
+	 * @param path
+	 *            允许{@code null}
+	 * @param directory
+	 * @param addSlashIfEmptyDir
+	 * @return
+	 */
+	public static String toDisplayPath(String path, boolean directory, boolean addSlashIfEmptyDir)
+	{
+		if (path == null)
+			return path;
+
+		if (path.isEmpty())
+			return (directory && addSlashIfEmptyDir ? PATH_SEPARATOR_SLASH : "");
+
+		path = trimPath(path, PATH_SEPARATOR_SLASH);
+
+		if (directory && !path.endsWith(PATH_SEPARATOR_SLASH))
+			path += PATH_SEPARATOR_SLASH;
+
+		return path;
+	}
+
+	/**
 	 * 是否包含上行路径（{@code ../}、{@code ..\}）。
 	 * 
 	 * @param path
@@ -764,74 +906,148 @@ public class FileUtil
 	}
 	
 	/**
-	 * 重命名文件路径。
+	 * 获取文件自身的上次修改时间。
 	 * 
-	 * @param path 原文件路径
-	 * @param newPath 新文件路径，可以是原文件路径的上级路径、下级路径
-	 * @return 重命名清单，结构为：<code>新文件 -&gt; 原文件</code>
+	 * @param file
+	 * @return
+	 */
+	public static long lastModified(File file)
+	{
+		return file.lastModified();
+	}
+
+	/**
+	 * 获取上次修改时间。
+	 * <p>
+	 * 如果是目录，则取其中最新文件的上次修改时间。
+	 * </p>
+	 * 
+	 * @param file
+	 * @return
+	 */
+	public static long lastModifiedOfPath(File file)
+	{
+		long lastModified = file.lastModified();
+
+		if (file.isDirectory())
+		{
+			File[] children = file.listFiles();
+
+			if (children != null)
+			{
+				for (File child : children)
+				{
+					long childLastModified = lastModified(child);
+
+					if (childLastModified > lastModified)
+						lastModified = childLastModified;
+				}
+			}
+		}
+
+		return lastModified;
+	}
+
+	/**
+	 * 如果目录不存在，则创建。
+	 * 
+	 * @param directory
+	 */
+	public static void mkdirsIfNot(File directory)
+	{
+		if (!directory.exists())
+			directory.mkdirs();
+	}
+
+	/**
+	 * 重命名文件。
+	 * <p>
+	 * 此方法不支持覆盖已有文件、不支持原子操作（避免底层不支持原子移动而报错）。
+	 * </p>
+	 * 
+	 * @param file
+	 * @param newName
+	 * @return
 	 * @throws IOException
 	 */
-	public static Map<File, File> renameTracked(File path, File newPath) throws IOException
+	public static File rename(File file, String newName) throws IOException
 	{
-		Map<File, File> tracks = new HashMap<File, File>();
-		renameTracked(tracks, path, newPath);
-		
-		return tracks;
+		Path fp = file.toPath();
+		Path tp = fp.resolveSibling(newName);
+
+		Files.move(fp, tp);
+
+		return tp.toFile();
 	}
-	
-	protected static void renameTracked(Map<File, File> handledFiles, File path, File newPath) throws IOException
+
+	/**
+	 * 移动文件至指定目录内。
+	 * <p>
+	 * 此方法不支持覆盖已有文件、不支持原子操作（避免底层不支持原子移动而报错）。
+	 * </p>
+	 * <p>
+	 * 注意：谨慎使用此方法，因为在Windows里，此方法不支持将文件移到不同的磁盘驱动器。
+	 * </p>
+	 * 
+	 * @param file
+	 * @param toDir
+	 *            目标目录，应是已存在的
+	 * @return
+	 * @throws IOException
+	 */
+	public static File moveToDir(File file, File toDir) throws IOException
 	{
-		if(!path.exists() ||  path.equals(newPath))
-			return;
-		
-		if(path.isDirectory())
-		{
-			//在创建newPath前获取子文件，这样当newPath是需新建的path子目录时，可以将其忽略
-			File[] children = path.listFiles();
-			
-			if(!newPath.exists())
-				newPath.mkdirs();
-			
-			if(!newPath.isDirectory())
-				throw new IllegalArgumentException("Target file must be directory");
-			
-			handledFiles.put(newPath, path);
-			
-			for(File child : children)
-			{
-				if(!child.exists() || handledFiles.containsKey(child))
-					continue;
-				
-				File childNewFile = null;
-				
-				if(child.isDirectory())
-				{
-					childNewFile = getDirectory(newPath, child.getName(), true);
-				}
-				else
-				{
-					childNewFile = getFile(newPath, child.getName());
-				}
-				
-				renameTracked(handledFiles, child, childNewFile);
-			}
-			
-			if(path.listFiles().length == 0)
-				deleteFile(path);
-		}
-		else if(newPath.exists() && newPath.isDirectory())
-		{
-			newPath = getFile(newPath, path.getName());
-			renameTracked(handledFiles, path, newPath);
-		}
-		else
-		{
-			createParentIfNone(newPath);
-			
-			handledFiles.put(newPath, path);
-			
-			newPath = IOUtil.copy(path, newPath, false);
-			deleteFile(path);
-		}
+		File toFile = FileUtil.getFile(toDir, file.getName());
+
+		Path fp = file.toPath();
+		Path tp = toFile.toPath();
+
+		Path re = Files.move(fp, tp);
+
+		return re.toFile();
+	}
+
+	/**
+	 * 移动文件。
+	 * <p>
+	 * 此方法不支持覆盖已有文件、不支持原子操作（避免底层不支持原子移动而报错）。
+	 * </p>
+	 * <p>
+	 * 注意：谨慎使用此方法，因为在Windows里，此方法不支持将文件移到不同的磁盘驱动器。
+	 * </p>
+	 * 
+	 * @param from
+	 * @param to
+	 *            不存在的上级目录会自动创建
+	 * @return
+	 * @throws IOException
+	 */
+	public static File move(File from, File to) throws IOException
+	{
+		File toParent = to.getParentFile();
+
+		if (to != null)
+			mkdirsIfNot(toParent);
+
+		Path fp = from.toPath();
+		Path tp = to.toPath();
+
+		Path re = Files.move(fp, tp);
+
+		return re.toFile();
+	}
+
+	/**
+	 * 是否包含路径分隔符。
+	 * 
+	 * @param path
+	 * @return
+	 */
+	public static boolean hasPathSeparator(String path)
+	{
+		if (StringUtil.isEmpty(path))
+			return false;
+
+		return (path.indexOf(PATH_SEPARATOR_SLASH) >= 0 || path.indexOf(PATH_SEPARATOR_BACK_SLASH) >= 0);
 	}
 }

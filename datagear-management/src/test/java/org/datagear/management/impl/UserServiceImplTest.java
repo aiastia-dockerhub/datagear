@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -18,6 +18,7 @@
 package org.datagear.management.impl;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.datagear.management.domain.User;
 import org.datagear.management.service.RoleService;
@@ -43,7 +44,7 @@ public class UserServiceImplTest extends ServiceImplTestSupport
 	}
 
 	@Test
-	public void test()
+	public void addTest()
 	{
 		String id = "id-for-test";
 		String name = "name-for-test";
@@ -61,5 +62,12 @@ public class UserServiceImplTest extends ServiceImplTestSupport
 		{
 			this.userServiceImpl.deleteById(id);
 		}
+	}
+
+	@Test
+	public void getUserCountTest()
+	{
+		int count = this.userServiceImpl.getUserCount();
+		assertTrue(count > 0);
 	}
 }

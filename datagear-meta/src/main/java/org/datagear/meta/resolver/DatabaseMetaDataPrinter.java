@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -256,7 +256,7 @@ public class DatabaseMetaDataPrinter extends AbstractDevotedDBMetaResolver
 
 			DatabaseMetaData metaData = cn.getMetaData();
 
-			String[] tableTypes = getTableTypes(cn, metaData);
+			String[] tableTypes = getTableTypes(cn);
 
 			ResultSet rs = getTableResulSet(cn, metaData, catalog, schema, null, tableTypes);
 
@@ -429,7 +429,7 @@ public class DatabaseMetaDataPrinter extends AbstractDevotedDBMetaResolver
 			if (i > 1)
 				print(", ");
 
-			print(getColumnName(rsMeta, i));
+			print(getColumnLabel(rsMeta, i));
 		}
 		println("");
 		println("------------------------------");
@@ -693,6 +693,12 @@ public class DatabaseMetaDataPrinter extends AbstractDevotedDBMetaResolver
 
 		@Override
 		public long getLastModified() throws DriverEntityManagerException
+		{
+			return 0;
+		}
+
+		@Override
+		public long getLastModified(DriverEntity driverEntity) throws DriverEntityManagerException
 		{
 			return 0;
 		}

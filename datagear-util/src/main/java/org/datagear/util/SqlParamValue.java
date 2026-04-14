@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2023 datagear.tech
+ * Copyright 2018-present datagear.tech
  *
  * This file is part of DataGear.
  *
@@ -28,7 +28,7 @@ public class SqlParamValue
 	/** 参数值 */
 	private Object value;
 
-	/** 类型 */
+	/** JDBC类型 */
 	private int type;
 
 	public SqlParamValue()
