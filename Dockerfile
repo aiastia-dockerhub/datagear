@@ -1,4 +1,4 @@
-FROM openjdk:21-jdk
+FROM openjdk:27-jdk
 
 RUN microdnf install unzip
 
