@@ -1,4 +1,4 @@
-FROM openjdk:27-jdk
+FROM eclipse-temurin:21-jre-jammy
 
 RUN microdnf install unzip
 
